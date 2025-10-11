@@ -1,0 +1,17 @@
+name: Test Build Windows
+
+on:
+  workflow_dispatch:
+
+env:
+  DISABLE_ARM: ${{ vars.DISABLE_ARM }}
+
+# [default commit] build-id: DefaultCommit
+# [specify commit] build-id: 954c17c18a5e6a39c4f7edd80bbb4a1e0507d4e0
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/buildwindows.yml
+    with:
+      build-id: DefaultCommit
+    secrets: inherit

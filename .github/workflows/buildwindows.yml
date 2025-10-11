@@ -1,0 +1,165 @@
+name: Build Windows
+
+on:
+  workflow_call:
+    inputs:
+      build-type:
+        description: 'What build type to use (e.g. RelWithDebInfo, Release)'
+        type: string
+        default: 'Release'
+      devel:
+        description: 'Development mode (disables update checker, adds nightly qualifier)'
+        type: boolean
+        default: true
+      webengine:
+        description: 'Use QtWebEngine. Increases build size by 60-90MB.'
+        type: boolean
+        default: false
+      multimedia:
+        description: 'Use QtMultimedia. Increases build size by 20MB.'
+        type: boolean
+        default: false
+      build-id:
+        description: 'Identifier for workflows and caching'
+        type: string
+        default: 'master'
+
+env:
+  DISABLE_ARM: ${{ vars.DISABLE_ARM }}
+  SCCACHE_GHA_ENABLED: "true"
+  CCACHE: "true"
+  CPM_CACHE_VERSION: ""
+
+jobs:
+  clone:
+    name: "Clone"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse Forgejo payload
+        shell: bash
+        run: |
+          export PAYLOAD_JSON='${{ toJSON(github.event.client_payload) }}'
+          export FORGEJO_TOKEN=${{ secrets.FORGEJO_TOKEN }}
+          ./.ci/parsewindows.sh ${{ inputs.build-id }}
+
+      - name: Clone
+        shell: bash
+        run: |
+          ./.ci/clonewindows.sh ${{ inputs.build-id }}
+
+      - name: Patch
+        run: |
+          ./patchwindows.sh
+
+      - name: Upload cloned repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: eden
+          include-hidden-files: true
+          path: |
+            eden/*
+            eden/.patch
+
+  windows:
+    name: "Windows ${{ matrix.os.arch }} (${{ matrix.compiler }})"
+    needs: [clone]
+    runs-on: ${{ matrix.os.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - runs-on: windows-latest
+            arch: amd64
+          - runs-on: windows-11-arm
+            arch: arm64
+        compiler: [clang, msvc]
+    env:
+      QT_VERSION: 6.9.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install sccache
+        uses: Vee99BR/sccache-action@v0.0.1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4.3.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: 'true'
+
+      - name: Set build variables
+        shell: bash
+        run: |
+          echo "BUILD_TYPE=${{ inputs.build-type }}" >> $GITHUB_ENV
+          echo "DEVEL=${{ inputs.devel }}" >> $GITHUB_ENV
+          echo "USE_WEBENGINE=${{ inputs.webengine }}" >> $GITHUB_ENV
+          echo "USE_MULTIMEDIA=${{ inputs.multimedia }}" >> $GITHUB_ENV
+          echo "COMPILER=${{ matrix.compiler }}" >> $GITHUB_ENV
+          echo "CCACHE=${{ env.CCACHE }}" >> $GITHUB_ENV
+
+      - name: Parse Forgejo payload
+        shell: bash
+        run: |
+          pip install requests
+          export PAYLOAD_JSON='${{ toJSON(github.event.client_payload) }}'
+          export FORGEJO_TOKEN=${{ secrets.FORGEJO_TOKEN }}
+          ./.ci/parsewindows.sh ${{ inputs.build-id }}
+
+      - name: Clone
+        uses: actions/download-artifact@v4
+        with:
+          name: eden
+
+      - name: Set up CPM cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/build/_deps/*-build
+          key: ${{ runner.os }}-${{ matrix.os.arch }}-${{ matrix.compiler }}-cpm-${{ env.CPM_CACHE_VERSION }}
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.os.arch }}
+
+      - name: Force Clang 20
+        if: matrix.compiler == 'clang'
+        shell: bash
+        run: |
+          echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
+          clang-cl --version
+
+      - name: Install Vulkan SDK
+        shell: powershell
+        run: |
+          ./.ci/windows/install-vulkan-sdk.ps1
+
+      - name: Build
+        shell: bash
+        run: |
+          export WINDEPLOYQT=windeployqt
+          git config --global core.autocrlf off
+          dos2unix .patch/boost/*
+
+          ./.ci/windows/build.sh -DCCACHE_PATH=${SCCACHE_PATH}
+
+      - name: Package
+        shell: bash
+        run: |
+          export ARCH=${{ matrix.os.arch }}-${{ matrix.compiler }}
+          ./.ci/windows/packagewindows.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: windows-${{ matrix.os.arch }}-${{ matrix.compiler }}
+          path: artifacts/*
