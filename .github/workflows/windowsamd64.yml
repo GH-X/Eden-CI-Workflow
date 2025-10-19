@@ -83,7 +83,7 @@ jobs:
       - name: Load payload environment
         shell: bash
         run: |
-          ./.ci/forgejomanual.sh --load-payload-env
+          . ./.ci/common/load-env.sh --load-payload-env
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
