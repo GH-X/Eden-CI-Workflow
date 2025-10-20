@@ -16,7 +16,7 @@ env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
   SCCACHE_GHA_ENABLED: "false"
   CCACHE: "false"
-  CPM_CACHE_VERSION: "v7"
+  CPM_CACHE_VERSION: "v8"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
 
@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5.0.0
         with:
           fetch-depth: 0
 
@@ -77,13 +77,13 @@ jobs:
           rm -rf eden/.ci eden/.github
 
       - name: Upload payload environment
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: forgejo-env
           path: forgejo.env
 
       - name: Upload cloned repo
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: eden
           include-hidden-files: true
