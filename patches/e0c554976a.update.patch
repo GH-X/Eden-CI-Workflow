@@ -1,0 +1,71 @@
+diff --git a/CMakeModules/GenerateSCMRev.cmake b/CMakeModules/GenerateSCMRev.cmake
+index 1ae608c085..101f179e90 100644
+--- a/CMakeModules/GenerateSCMRev.cmake
++++ b/CMakeModules/GenerateSCMRev.cmake
+@@ -8,19 +8,50 @@
+ include(GetSCMRev)
+ 
+ function(get_timestamp _var)
+-    string(TIMESTAMP timestamp UTC)
+-    set(${_var} "${timestamp}" PARENT_SCOPE)
++    execute_process(
++        COMMAND "${GIT_EXECUTABLE}" show -s --date=short --format=%ad
++        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
++        RESULT_VARIABLE res
++        OUTPUT_VARIABLE out
++        ERROR_QUIET
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++    )
++
++    if(NOT res EQUAL 0)
++        set(out "${out}-${res}-NOTFOUND")
++    endif()
++
++    set(${_var} "${out}" PARENT_SCOPE)
+ endfunction()
+ 
+ get_timestamp(BUILD_DATE)
+ 
++function(git_count _var)
++    execute_process(
++        COMMAND "${GIT_EXECUTABLE}" rev-list --count HEAD
++        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
++        RESULT_VARIABLE res
++        OUTPUT_VARIABLE out
++        ERROR_QUIET
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++    )
++
++    if(NOT res EQUAL 0)
++        set(out "${out}-${res}-NOTFOUND")
++    endif()
++
++    set(${_var} "${out}" PARENT_SCOPE)
++endfunction()
++
++git_count(GIT_COUNT)
++
+ if (DEFINED GIT_RELEASE)
+   set(BUILD_VERSION "${GIT_TAG}")
+   set(GIT_REFSPEC "${GIT_RELEASE}")
+   set(IS_DEV_BUILD false)
+ else()
+   string(SUBSTRING ${GIT_COMMIT} 0 10 BUILD_VERSION)
+-  set(BUILD_VERSION "${BUILD_VERSION}-${GIT_REFSPEC}")
++  set(BUILD_VERSION "${BUILD_DATE}-${GIT_COUNT}-${BUILD_VERSION}")
+   set(IS_DEV_BUILD true)
+ endif()
+ 
+diff --git a/src/yuzu/about_dialog.cpp b/src/yuzu/about_dialog.cpp
+index 9f7597f471..b73cd41c1e 100644
+--- a/src/yuzu/about_dialog.cpp
++++ b/src/yuzu/about_dialog.cpp
+@@ -34,7 +34,7 @@ AboutDialog::AboutDialog(QWidget* parent)
+     }
+     ui->labelBuildInfo->setText(
+         ui->labelBuildInfo->text().arg(QString::fromStdString(yuzu_build_version),
+-                                       QString::fromUtf8(Common::g_build_date).left(10)));
++                                       QString::fromUtf8(Common::g_build_id)));
+ }
+ 
+ AboutDialog::~AboutDialog() = default;
