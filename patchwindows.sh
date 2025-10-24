@@ -3,10 +3,14 @@
 FORGEJO_LENV="${GITHUB_WORKSPACE}/forgejo.env"
 touch "$FORGEJO_LENV"
 
-upatch="update.patch"
-tpatch="translations_zh_CN.patch"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.update.patch" ] && upatch="${FORGEJO_REF}.update.patch"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.translations_zh_CN.patch" ] && tpatch="${FORGEJO_REF}.translations_zh_CN.patch"
+udname="update.patch"
+tdname="translations_zh_CN.patch"
+upatch="$udname"
+tpatch="$tdname"
+[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.$udname" ] && upatch="${FORGEJO_REF}.$udname"
+[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.$tdname" ] && tpatch="${FORGEJO_REF}.$tdname"
+[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_NREV}.$udname" ] && upatch="${FORGEJO_NREV}.$udname"
+[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_NREV}.$tdname" ] && tpatch="${FORGEJO_NREV}.$tdname"
 
 cd ./eden
 

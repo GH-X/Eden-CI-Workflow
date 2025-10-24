@@ -57,6 +57,11 @@ jobs:
         run: |
           ./.ci/forgejomanual.sh --clone ${{ inputs.build-id }}
 
+      - name: ReLoad payload environment
+        shell: bash
+        run: |
+          . ./.ci/common/load-env.sh --load-payload-env
+
       - name: Apply Temporary Patch
         shell: bash
         run: |

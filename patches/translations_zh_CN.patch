@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index b17167a5eb..164b2587eb 100644
+index b17167a5eb..f249b60120 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -4891,7 +4891,7 @@ index b17167a5eb..164b2587eb 100644
 +    <message>
 +        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="84"/>
 +        <source>Web</source>
-+        <translation>万维网</translation>
++        <translation>网络服务</translation>
 +    </message>
 +</context>
 +<context>
@@ -8480,7 +8480,7 @@ index b17167a5eb..164b2587eb 100644
 -        <translation>核心</translation>
 +        <location filename="../../src/yuzu/configuration/configure_web.ui" line="17"/>
 +        <source>Web</source>
-+        <translation>万维网</translation>
++        <translation>网络服务</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_system.cpp" line="71"/>
@@ -8488,7 +8488,7 @@ index b17167a5eb..164b2587eb 100644
 -        <translation>警告：“ %1 ”并不是“ %2 ”地区的有效语言</translation>
 +        <location filename="../../src/yuzu/configuration/configure_web.ui" line="25"/>
 +        <source>Eden Web Service</source>
-+        <translation>模拟器万维网服务</translation>
++        <translation>模拟器网络服务</translation>
      </message>
 -</context>
 -<context>
@@ -9962,7 +9962,7 @@ index b17167a5eb..164b2587eb 100644
 -        <translation type="unfinished"/>
 +        <location filename="../../src/yuzu/main.cpp" line="3268"/>
 +        <source>In order to submit a game compatibility test case, you must set up your web token and username.&lt;br&gt;&lt;br/&gt;To link your eden account, go to Emulation &amp;gt; Configuration &amp;gt; Web.</source>
-+        <translation>为了提交游戏兼容性测试案例，你必须配置你的万维网令牌和用户名。&lt;br&gt;&lt;br/&gt;要关联你的账户，请转到 模拟-&gt;模拟器配置-&gt;万维网。</translation>
++        <translation>为了提交游戏兼容性测试案例，你必须配置你的网络服务令牌和用户名。&lt;br&gt;&lt;br/&gt;要关联你的账户，请转到 模拟-&gt;模拟器配置-&gt;网络服务。</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.h" line="52"/>
@@ -11251,7 +11251,7 @@ index b17167a5eb..164b2587eb 100644
 +        <location filename="../../src/yuzu/multiplayer/host_room.cpp" line="188"/>
 +        <source>Failed to announce the room to the public lobby. In order to host a room publicly, you must have a valid Eden account configured in Emulation -&gt; Configure -&gt; Web. If you do not want to publish a room in the public lobby, then select Unlisted instead.
 +Debug Message: </source>
-+        <translation>未能将房间公告到公共大厅。为了能够主持房间，你必须在 模拟-&gt;模拟器配置-&gt;万维网 中配置一个有效的帐户。如果你不想在公共大厅发布房间，请选择 [不公开]。
++        <translation>未能将房间公告到公共大厅。为了能够主持房间，你必须在 模拟-&gt;模拟器配置-&gt;网络服务 中配置一个有效的帐户。如果你不想在公共大厅发布房间，请选择 [不公开]。
 +调试消息：</translation>
      </message>
 +</context>
