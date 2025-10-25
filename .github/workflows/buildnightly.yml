@@ -11,6 +11,10 @@ on:
         description: 'Identifier for workflows and caching'
         type: string
         default: 'master'
+      build-commit:
+        description: 'Specify commit'
+        type: string
+        default: 'default'
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
@@ -38,7 +42,7 @@ jobs:
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           cat payload.json
-          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }}
+          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }} ${{ inputs.build-commit }}
 
       - name: Load payload environment
         shell: bash

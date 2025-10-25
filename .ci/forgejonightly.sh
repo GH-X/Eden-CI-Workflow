@@ -12,9 +12,7 @@ touch "$FORGEJO_LENV"
 parse_payload() {
 	DEFAULT_JSON="default.json"
 	PAYLOAD_JSON="payload.json"
-	if [ "$1" = "pushed" ] || [ "$1" = "manual" ]; then
-		PAYLOAD_JSON="custom.json"
-	fi
+	[ "$1" != "pushed" -a "$1" != "manual" ] || PAYLOAD_JSON="custom.json"
 
 	if [ ! -f "$PAYLOAD_JSON" ]; then
 		echo "null" > $PAYLOAD_JSON
@@ -99,6 +97,7 @@ parse_payload() {
 	pushed | manual)
 		[ "$FORGEJO_BRANCH" != "" ] || FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
 		FORGEJO_REF=$(.ci/common/field.py field="sha")
+		[ "$1" = "manual" ] && [ "$2" != "default" ] && FORGEJO_REF="$2"
 		[ "$1" = "manual" ] || [ "$(jq -r '.commit // empty' $PAYLOAD_JSON)" = "" ] || FORGEJO_REF=$(jq -r '.commit' $PAYLOAD_JSON)
 		;;
 	*)
@@ -194,7 +193,7 @@ clone_repository() {
 		git -C eden checkout "$FORGEJO_REF"
 	fi
 
-	[ "$1" != "pushed" ] || git -C eden reset --hard $FORGEJO_REF
+	[ "$1" != "pushed" -a "$1" != "manual" ] || git -C eden reset --hard $FORGEJO_REF
 
 	echo "$FORGEJO_BRANCH" > eden/GIT-REFSPEC
 	git -C eden rev-parse --short=10 HEAD > eden/GIT-COMMIT
@@ -221,7 +220,7 @@ clone_repository() {
 
 case "$1" in
 --parse)
-	parse_payload "$2"
+	parse_payload "$2" "$3"
 	;;
 --summary)
 	generate_summary "$2"

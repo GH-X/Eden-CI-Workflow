@@ -5,6 +5,11 @@ on:
     branches:
       - 'master'
   workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Specify commit (e.g. 311c71146d)'
+        required: false
+        default: 'default'
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
@@ -19,6 +24,7 @@ jobs:
     uses: ./.github/workflows/buildnightly.yml
     with:
       build-id: 'pushed'
+      build-commit: 'default'
     secrets: inherit
 
   manual:
@@ -30,4 +36,5 @@ jobs:
     uses: ./.github/workflows/buildnightly.yml
     with:
       build-id: 'manual'
+      build-commit: ${{ github.event.inputs.commit }}
     secrets: inherit
