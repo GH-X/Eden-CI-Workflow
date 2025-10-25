@@ -14,8 +14,8 @@ on:
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
-  SCCACHE_GHA_ENABLED: "false"
-  CCACHE: "false"
+  SCCACHE_GHA_ENABLED: "true"
+  CCACHE: "true"
   CPM_CACHE_VERSION: "v8"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
@@ -38,7 +38,7 @@ jobs:
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           cat payload.json
-          ./.ci/forgejomanual.sh --parse ${{ inputs.build-id }}
+          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }}
 
       - name: Load payload environment
         shell: bash
@@ -55,7 +55,7 @@ jobs:
       - name: Clone
         shell: bash
         run: |
-          ./.ci/forgejomanual.sh --clone ${{ inputs.build-id }}
+          ./.ci/forgejonightly.sh --clone ${{ inputs.build-id }}
 
       - name: ReLoad payload environment
         shell: bash
@@ -75,7 +75,7 @@ jobs:
       - name: Summary
         shell: bash
         run: |
-          ./.ci/forgejomanual.sh --summary ${{ inputs.build-id }}
+          ./.ci/forgejonightly.sh --summary ${{ inputs.build-id }}
 
       - name: Cleanup
         run: |

@@ -1,0 +1,33 @@
+name: "[-Nightly-]"
+
+on:
+  push:
+    branches:
+      - 'master'
+  workflow_dispatch:
+
+env:
+  DISABLE_ARM: ${{ vars.DISABLE_ARM }}
+
+jobs:
+  pushed:
+    if: ${{ github.event_name == 'push' }}
+    name: Pushed Build
+    concurrency:
+      group: nightly-build
+      cancel-in-progress: false
+    uses: ./.github/workflows/buildnightly.yml
+    with:
+      build-id: 'pushed'
+    secrets: inherit
+
+  manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: Manual Build
+    concurrency:
+      group: nightly-build
+      cancel-in-progress: false
+    uses: ./.github/workflows/buildnightly.yml
+    with:
+      build-id: 'manual'
+    secrets: inherit

@@ -36,7 +36,7 @@ jobs:
           CLANG='{"program": "clang", "target": "standard"}'
           MSVC='{"program": "msvc", "target": "standard"}'
 
-          if [ "${{ inputs.build-id }}" = "manual" ]; then
+          if [ "${{ inputs.build-id }}" = "pushed" ] || [ "${{ inputs.build-id }}" = "manual" ]; then
             COMPILER="[${MSVC},${CLANG},${PGO}]"
           else
             COMPILER="[${MSVC},${CLANG}]"
@@ -115,7 +115,7 @@ jobs:
 
       - name: Package
         shell: bash
-        run: ./.ci/windows/packagemanual.sh
+        run: ./.ci/windows/packagenightly.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4.6.2

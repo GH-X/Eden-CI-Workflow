@@ -12,7 +12,9 @@ touch "$FORGEJO_LENV"
 parse_payload() {
 	DEFAULT_JSON="default.json"
 	PAYLOAD_JSON="payload.json"
-	[ "$1" != "manual" ] || PAYLOAD_JSON="custom.json"
+	if [ "$1" = "pushed" ] || [ "$1" = "manual" ]; then
+		PAYLOAD_JSON="custom.json"
+	fi
 
 	if [ ! -f "$PAYLOAD_JSON" ]; then
 		echo "null" > $PAYLOAD_JSON
@@ -94,10 +96,10 @@ parse_payload() {
 		FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
 		FORGEJO_REF=$(.ci/common/field.py field="sha")
 		;;
-	manual)
+	pushed | manual)
 		[ "$FORGEJO_BRANCH" != "" ] || FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
 		FORGEJO_REF=$(.ci/common/field.py field="sha")
-		[ "$(jq -r '.commit // empty' $PAYLOAD_JSON)" = "" ] || FORGEJO_REF=$(jq -r '.commit' $PAYLOAD_JSON)
+		[ "$1" = "manual" ] || [ "$(jq -r '.commit // empty' $PAYLOAD_JSON)" = "" ] || FORGEJO_REF=$(jq -r '.commit' $PAYLOAD_JSON)
 		;;
 	*)
 		echo "Type: $1"
@@ -147,7 +149,7 @@ generate_summary() {
 		echo "## Continuous Integration Test Build" >> "$GITHUB_STEP_SUMMARY"
 		echo "- This build was triggered for testing purposes." >> "$GITHUB_STEP_SUMMARY"
 		;;
-	manual)
+	pushed | manual)
 		echo "## Continuous Integration Nightly Build" >> "$GITHUB_STEP_SUMMARY"
 		echo "- Nightly REV: $FORGEJO_NREV" >> "$GITHUB_STEP_SUMMARY"
 		[ -n "$FORGEJO_ERROR_UP" ] && echo "- Patch Error: $FORGEJO_ERROR_UP" >> "$GITHUB_STEP_SUMMARY"
@@ -192,13 +194,13 @@ clone_repository() {
 		git -C eden checkout "$FORGEJO_REF"
 	fi
 
-	[ "$1" != "manual" ] || git -C eden reset --hard $FORGEJO_REF
+	[ "$1" != "pushed" ] || git -C eden reset --hard $FORGEJO_REF
 
 	echo "$FORGEJO_BRANCH" > eden/GIT-REFSPEC
 	git -C eden rev-parse --short=10 HEAD > eden/GIT-COMMIT
 	git -C eden describe --tags HEAD --abbrev=0 > eden/GIT-TAG || echo 'v0.0.3' > eden/GIT-TAG
 
-	if [ "$1" = "manual" ]; then
+	if [ "$1" = "pushed" ] || [ "$1" = "manual" ]; then
 		echo "Nightly" > eden/GIT-REFSPEC
 		GITDATE=$(git -C eden show -s --date=short --format='%ad')
 		GITCOUNT=$(git -C eden rev-list --count HEAD)
