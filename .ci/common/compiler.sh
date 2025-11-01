@@ -1,9 +1,12 @@
 #!/bin/bash -e
 
+# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # compiler handling
 if [ "$COMPILER" = "clang" ]; then
 	case "$PLATFORM" in
-		(linux|freebsd)
+		(linux|freebsd|msys)
 			CLANG=clang
 			CLANGPP=clang++
 			;;

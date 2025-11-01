@@ -41,11 +41,6 @@ jobs:
           fi
 
           EXTRA=',{"runs-on": "ubuntu-latest", "arch": "legacy"},{"runs-on": "ubuntu-latest", "arch": "rog-ally"}'
-          ARM=',{"runs-on": "ubuntu-24.04-arm", "arch": "armv9"}'
-
-          if [ "${{ env.DISABLE_ARM }}" != true ]; then
-            EXTRA="${EXTRA}${ARM}"
-          fi
 
           if [ "${{ inputs.build-id }}" = "tag" ]; then
             MATRIX="${BASE}${EXTRA}]"
@@ -73,7 +68,9 @@ jobs:
     name: "AppImage ${{ matrix.os.arch }} ${{ matrix.compiler.program }} ${{ matrix.compiler.target }}"
     needs: [set-matrix]
     runs-on: ${{ matrix.os.runs-on }}
-    container: ghcr.io/pkgforge-dev/archlinux:latest
+    container:
+      image: ghcr.io/pkgforge-dev/archlinux:latest
+      options: --privileged --device /dev/fuse
 
     strategy:
       fail-fast: false
@@ -85,7 +82,6 @@ jobs:
       TARGET: "${{ matrix.os.arch }}"
       COMPILER: "${{ matrix.compiler.program }}"
       PGO_TARGET: "${{ matrix.compiler.target }}"
-      GITHUB_TOKEN: "${{ secrets.CUSTOM_GITHUB_TOKEN }}"
       FULL_ARCH: ${{ matrix.os.arch }}-${{ matrix.compiler.program }}-${{ matrix.compiler.target }}
 
     steps:
@@ -114,6 +110,8 @@ jobs:
       - name: Package
         shell: bash
         run: ./.ci/linux/package.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4.6.2

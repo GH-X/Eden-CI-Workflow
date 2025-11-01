@@ -1,6 +1,6 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
-# SPDX-FileCopyrightText: 2025 Eden Emulator Project
+# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 if [ -n "${ANDROID_KEYSTORE_B64}" ]; then
@@ -27,13 +27,21 @@ EXTRA_ARGS=("$@")
 ANDROID_CMAKE_ARGS=("-DUSE_CCACHE=${CCACHE}" "${EXTRA_ARGS[@]}")
 echo "Android CMake flags: ${ANDROID_CMAKE_ARGS[*]}"
 
-./gradlew assembleMainlineRelease \
+case "$TARGET" in
+	legacy) FLAVOR=Legacy ;;
+	optimized) FLAVOR=GenshinSpoof ;;
+	standard|*) FLAVOR=Mainline ;;
+esac
+
+echo "-- building APK"
+./gradlew assemble${FLAVOR}Release \
     -Dorg.gradle.caching="${CCACHE}" \
     -Dorg.gradle.parallel="${CCACHE}" \
     -Dorg.gradle.workers.max="${NUM_JOBS}" \
     -PYUZU_ANDROID_ARGS="${ANDROID_CMAKE_ARGS[*]}"
 
-./gradlew bundleMainlineRelease \
+echo "-- bundling AAB"
+./gradlew bundle${FLAVOR}Release \
     -Dorg.gradle.caching="${CCACHE}" \
     -Dorg.gradle.workers.max="${NUM_JOBS}" \
     -Dorg.gradle.parallel="${CCACHE}" \

@@ -1,9 +1,12 @@
 #!/bin/bash -e
 
+# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 SDL_FLAGS=(-DYUZU_USE_BUNDLED_SDL2=ON)
 
-# only need targets if on Linux or clang-cl
-if [ "$PLATFORM" = "linux" ] || [ "$COMPILER" = "clang" ]; then
+# only clang and gcc support this
+if [ ! -z "$SUPPORTS_TARGETS" ]; then
 	case "$TARGET" in
 		amd64)
 			echo "Making amd64-v3 optimized build of Eden"
@@ -40,6 +43,8 @@ if [ "$PLATFORM" = "linux" ] || [ "$COMPILER" = "clang" ]; then
 		native)
 			echo "Making native build of Eden"
 			ARCH_FLAGS="-march=native -mtune=native"
+			FFMPEG=OFF
+			OPENSSL=OFF
 			;;
 		# Special target: package-{amd64,aarch64}
 		# In the "package" target we WANT standalone executables
@@ -81,7 +86,7 @@ if [ "$PLATFORM" = "linux" ] || [ "$COMPILER" = "clang" ]; then
 
 		PROFDATA="$PWD/eden.profdata"
 		[ -f "$PROFDATA" ] && rm -f "$PROFDATA"
-		curl -L https://github.com/Eden-CI/PGO/releases/latest/download/eden.profdata > "$PROFDATA"
+		curl -L https://$RELEASE_PGO_HOST/$RELEASE_PGO_REPO/releases/latest/download/eden.profdata > "$PROFDATA"
 		[ ! -f "$PROFDATA" ] && (echo "PGO data failed to download" ; exit 1)
 		command -v cygpath >/dev/null 2>&1 && PROFDATA="$(cygpath -m "$PROFDATA")"
 		ARCH_FLAGS="${ARCH_FLAGS} -fprofile-use=$PROFDATA -Wno-backend-plugin -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date"

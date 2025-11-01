@@ -1,23 +1,30 @@
 #!/bin/bash -e
 
+# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # shellcheck disable=SC1091
 
 case "$1" in
 master)
 	TAG="v${TIMESTAMP}.${FORGEJO_REF}"
 	REF="${FORGEJO_REF}"
+	BASE_DOWNLOAD_URL="https://$RELEASE_MASTER_HOST/$RELEASE_MASTER_REPO/releases/download"
 	;;
 pull_request)
 	TAG="${FORGEJO_PR_NUMBER}-${FORGEJO_REF}"
 	REF="${FORGEJO_PR_NUMBER}-${FORGEJO_REF}"
+	BASE_DOWNLOAD_URL="https://$RELEASE_PR_HOST/$RELEASE_PR_REPO/releases/download"
 	;;
 tag)
 	TAG="${FORGEJO_REF}"
 	REF="${FORGEJO_REF}"
+	BASE_DOWNLOAD_URL="https://$RELEASE_TAG_HOST/$RELEASE_TAG_REPO/releases/download"
 	;;
 push | test)
 	TAG="v${TIMESTAMP}.${FORGEJO_REF}"
 	REF="${FORGEJO_REF}"
+	BASE_DOWNLOAD_URL="https://$RELEASE_MASTER_HOST/$RELEASE_MASTER_REPO/releases/download"
 	;;
 *)
 	echo "Type: $1"
@@ -26,7 +33,7 @@ push | test)
 	;;
 esac
 
-BASE_DOWNLOAD_URL="https://github.com/$REPO/releases/download"
+COMPARE_RELEASE_URL="https://$RELEASE_MASTER_HOST/$RELEASE_MASTER_REPO/releases"
 
 linux() {
 	ARCH="$1"
@@ -54,7 +61,6 @@ linux_builds() {
 	if [ "$DEVEL" != "true" ]; then
 		linux legacy "amd64 (legacy)" "For CPUs older than 2013 or so"
 		linux rog-ally "ROG Ally X" "For ROG Ally X and other >= Zen 4 AMD CPUs"
-		[ "$DISABLE_ARM" != "true" ] && linux armv9 "armv9-a" "For ARM CPUs made in late 2021 or later"
 	fi
 
 }
@@ -84,11 +90,11 @@ win() {
 
 android() {
 	TYPE="$1"
-	SUFFIX="$2"
+	FLAVOR="$2"
 	DESCRIPTION="$3"
 
 	echo -n "| "
-	echo -n "[Android $TYPE](${BASE_DOWNLOAD_URL}/${TAG}/Eden-Android-${REF}${SUFFIX}.apk) |"
+	echo -n "[Android $TYPE](${BASE_DOWNLOAD_URL}/${TAG}/Eden-Android-${REF}-${FLAVOR}.apk) |"
 	echo -n "$DESCRIPTION |"
 	echo
 }
@@ -120,7 +126,7 @@ pull_request)
 	echo "- [\`$FORGEJO_PR_MERGE_BASE\`](https://$FORGEJO_HOST/$FORGEJO_REPO/commit/$FORGEJO_PR_MERGE_BASE)"
 	echo
 	echo "Corresponding 'master' build for reference:"
-	echo "- [\`$FORGEJO_REF\`](https://github.com/Eden-CI/Master/releases?q=$FORGEJO_PR_MERGE_BASE&expanded=true)"
+	echo "- [\`$FORGEJO_REF\`]($COMPARE_RELEASE_URL?q=$FORGEJO_PR_MERGE_BASE&expanded=true)"
 	echo
 	echo "## Changelog"
 	.ci/common/field.py field="body" default_msg="No changelog provided" pull_request_number="$FORGEJO_PR_NUMBER"
@@ -228,10 +234,10 @@ echo "### Android"
 echo
 echo "| Build  | Description |"
 echo "|--------|-------------|"
-android Standard "" "Single APK for all supported Android devices (most users should use this)"
+android Standard "standard" "Single APK for all supported Android devices (most users should use this)"
 if [ "$DEVEL" != true ]; then
-	android Optimized "-Optimized" "For any Android device that has Frame Generation or any other per-device feature"
-	android Legacy "-Legacy" "For A6xx. Fixes any games that work on newer devices but don't on Adreno 6xx"
+	android Optimized "optimized" "For any Android device that has Frame Generation or any other per-device feature"
+	android Legacy "legacy" "For Adreno A6xx and other older GPUs"
 fi
 echo
 

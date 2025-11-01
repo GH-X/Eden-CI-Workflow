@@ -1,5 +1,8 @@
 #!/bin/sh -x
 
+# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 mkdir -p artifacts
 
 ARCHES="amd64 steamdeck"
@@ -8,7 +11,6 @@ ARCHES="amd64 steamdeck"
 COMPILERS="gcc"
 if [ "$DEVEL" = "false" ]; then
 	ARCHES="$ARCHES legacy rog-ally"
-	[ "$DISABLE_ARM" != "true" ] && ARCHES="$ARCHES armv9"
 	COMPILERS="$COMPILERS clang"
 fi
 
@@ -30,7 +32,14 @@ for arch in $ARCHES; do
 	fi
 done
 
-cp android/*.apk "artifacts/Eden-Android-${ID}.apk"
+FLAVORS=standard
+if [ "$DEVEL" = "false" ]; then
+	FLAVORS="standard legacy optimized"
+fi
+
+for flavor in $FLAVORS; do
+	cp android-"$flavor"/*.apk "artifacts/Eden-Android-${ID}-${flavor}.apk"
+done
 
 for arch in amd64 arm64; do
 	for compiler in clang msvc; do
