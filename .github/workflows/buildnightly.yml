@@ -42,12 +42,13 @@ jobs:
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           cat payload.json
-          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }} ${{ inputs.build-commit }}
+          commit=$(echo "${{ inputs.build-commit }}" | awk -F- '{print $NF}' | grep -E "^([A-Za-z0-9]{10,40})$")
+          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }} $commit
 
       - name: Load payload environment
         shell: bash
         run: |
-          . ./.ci/common/load-env.sh --load-payload-env
+          . ./.ci/fj/load-env.sh
 
       # for some amazing reason you can't pass env vars to reusable workflows
       - name: Setup Outputs
@@ -64,7 +65,7 @@ jobs:
       - name: ReLoad payload environment
         shell: bash
         run: |
-          . ./.ci/common/load-env.sh --load-payload-env
+          . ./.ci/fj/load-env.sh
 
       - name: Apply Temporary Patch
         shell: bash
@@ -74,12 +75,12 @@ jobs:
       - name: ReLoad payload environment
         shell: bash
         run: |
-          . ./.ci/common/load-env.sh --load-payload-env
+          . ./.ci/fj/load-env.sh
 
       - name: Summary
         shell: bash
         run: |
-          ./.ci/forgejonightly.sh --summary ${{ inputs.build-id }}
+          ./.ci/fj/summarynightly.sh ${{ inputs.build-id }}
 
       - name: Cleanup
         run: |

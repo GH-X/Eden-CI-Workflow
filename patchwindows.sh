@@ -3,26 +3,25 @@
 FORGEJO_LENV="${GITHUB_WORKSPACE}/forgejo.env"
 touch "$FORGEJO_LENV"
 
-udname="update.patch"
-tdname="translations_zh_CN.patch"
-upatch="$udname"
-tpatch="$tdname"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.$udname" ] && upatch="${FORGEJO_REF}.$udname"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_REF}.$tdname" ] && tpatch="${FORGEJO_REF}.$tdname"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_NREV}.$udname" ] && upatch="${FORGEJO_NREV}.$udname"
-[ -e "${GITHUB_WORKSPACE}/patches/${FORGEJO_NREV}.$tdname" ] && tpatch="${FORGEJO_NREV}.$tdname"
-
 cd ./eden
 
-# eden-nightly patch
-if ! patch -p1 < ../patches/$upatch; then
-	echo "FORGEJO_ERROR_UP=!!! $upatch mismatch !!!" >> "$FORGEJO_LENV"
-else
-	echo "FORGEJO_ERROR_UP=" >> "$FORGEJO_LENV"
-fi
+# eden nightly
+ndname="nightly.patch"
+npatchok="0"
+for npatch in $(ls -A ../patches/*$ndname | sort -n -r); do
+    if patch -p1 < $npatch; then
+        npatchok="1"
+        break
+    fi
+done
+[ "$npatchok" == "1" ] && echo "FORGEJO_ERROR_UP=" >> "$FORGEJO_LENV" || echo "FORGEJO_ERROR_UP=- Patch Error: !!! *$ndname mismatch !!!" >> "$FORGEJO_LENV"
 # translations zh_CN
-if ! patch -p1 < ../patches/$tpatch; then
-	echo "FORGEJO_ERROR_TP=!!! $tpatch mismatch !!!" >> "$FORGEJO_LENV"
-else
-	echo "FORGEJO_ERROR_TP=" >> "$FORGEJO_LENV"
-fi
+tdname="translations_zh_CN.patch"
+tpatchok="0"
+for tpatch in $(ls -A ../patches/*$tdname | sort -n -r); do
+    if patch -p1 < $tpatch; then
+        tpatchok="1"
+        break
+    fi
+done
+[ "$tpatchok" == "1" ] && echo "FORGEJO_ERROR_TP=" >> "$FORGEJO_LENV" || echo "FORGEJO_ERROR_TP=- Patch Error: !!! *$tdname mismatch !!!" >> "$FORGEJO_LENV"

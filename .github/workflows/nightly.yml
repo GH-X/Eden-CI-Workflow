@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/buildnightly.yml
     with:
       build-id: 'pushed'
-      build-commit: 'default'
+      build-commit: ${{ github.event.head_commit.message }}
     secrets: inherit
 
   manual:
