@@ -1,4 +1,4 @@
-name: "[Internal CI] Windows"
+name: "Windows"
 
 on:
   workflow_call:
@@ -13,6 +13,10 @@ on:
         required: true
       devel:
         description: 'development build'
+        type: string
+        required: true
+      force_pgo:
+        description: 'test PGO builds'
         type: string
         required: true
 
@@ -36,10 +40,10 @@ jobs:
           CLANG='{"program": "clang", "target": "standard"}'
           MSVC='{"program": "msvc", "target": "standard"}'
 
-          if [ "${{ inputs.build-id }}" = "tag" ]; then
-            COMPILER="[${MSVC},${CLANG},${PGO}]"
+          if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
+            COMPILER="[${MSVC},${PGO}]"
           else
-            COMPILER="[${MSVC},${CLANG}]"
+            COMPILER="[${MSVC}]"
           fi
 
           echo $COMPILER
@@ -92,12 +96,19 @@ jobs:
         with:
           arch: ${{ matrix.os.arch }}
 
-      - name: Force Clang 20
+      - name: Install LLVM/Clang
+        if: matrix.compiler.program == 'clang'
+        uses: Eden-CI/install-llvm-action@v1
+        with:
+          version: "21.1.4"
+          env: true
+
+      - name: Check LLVM/Clang
         if: matrix.compiler.program == 'clang'
         shell: bash
         run: |
           echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
-          clang-cl --version
+          "C:/Program Files/LLVM/bin/clang-cl" --version
 
       - name: Install Vulkan SDK
         shell: powershell
