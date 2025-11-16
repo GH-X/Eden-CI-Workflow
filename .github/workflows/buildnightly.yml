@@ -1,4 +1,4 @@
-name: "[Internal CI][Nightly] Build Workflow"
+name: " Nightly Build Workflow "
 
 on:
   workflow_call:
@@ -20,14 +20,16 @@ env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
   SCCACHE_GHA_ENABLED: "true"
   CCACHE: "true"
-  CPM_CACHE_VERSION: "v8"
+  CPM_CACHE_VERSION: "v15"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
+  FORCE_PGO: "true"
 
 jobs:
   clone:
     outputs:
       cachever: ${{ steps.out.outputs.cachever }}
+      pgo: ${{ steps.out.outputs.pgo }}
     name: "Parse and Clone"
     runs-on: ubuntu-latest
 
@@ -38,7 +40,7 @@ jobs:
           fetch-depth: 0
 
       - name: Parse Forgejo payload
-        shell: bash
+        shell: bash {0}
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           cat payload.json
@@ -56,6 +58,7 @@ jobs:
         shell: bash
         run: |
           echo "cachever=${CPM_CACHE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "pgo=${FORCE_PGO}" >> "$GITHUB_OUTPUT"
 
       - name: Clone
         shell: bash
@@ -101,7 +104,6 @@ jobs:
             eden/*
             eden/.patch
 
-
   windows:
     name: "Windows"
     needs: [clone]
@@ -110,4 +112,16 @@ jobs:
       build-id: '${{ inputs.build-id }}'
       cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
       devel: ${{ inputs.devel }}
+      force_pgo: ${{ needs.clone.outputs.pgo }}
+    secrets: inherit
+
+  msys:
+    name: "MinGW"
+    needs: [clone]
+    uses: ./.github/workflows/msysamd64.yml
+    with:
+      build-id: '${{ inputs.build-id }}'
+      cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
+      devel: ${{ inputs.devel }}
+      force_pgo: ${{ needs.clone.outputs.pgo }}
     secrets: inherit

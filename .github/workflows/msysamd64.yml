@@ -1,0 +1,139 @@
+name: " Nightly MSYS2 Amd64 "
+
+on:
+  workflow_call:
+    inputs:
+      build-id:
+        description: "build id"
+        type: string
+        required: true
+      cpm-cache-version:
+        description: "CPM cache version (e.g. v7)"
+        type: string
+        required: true
+      devel:
+        description: 'development build'
+        type: string
+        required: true
+      force_pgo:
+        description: 'test PGO builds'
+        type: string
+        required: true
+
+env:
+  DISABLE_ARM: ${{ vars.DISABLE_ARM }}
+  SCCACHE_GHA_ENABLED: "true"
+  CCACHE: "true"
+  FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+  DEVEL: ${{ inputs.devel }}
+
+jobs:
+  msys-matrix:
+    name: "Generate MSYS Matrix"
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - id: set
+        run: |
+          AMD64='"runs-on": "windows-latest", "arch": "amd64", "msystem": "mingw64"'
+
+          PGO='"program": "clang", "target": "pgo"'
+          CLANG='"program": "clang", "target": "standard"'
+          GCC='"program": "gcc", "target": "standard"'
+
+          target() {
+            arch="$1"
+            compiler="$2"
+
+            echo "{${arch}, ${compiler}}"
+          }
+
+          amd_gcc="$(target "$AMD64" "$GCC")"
+          amd_pgo="$(target "$AMD64" "$PGO")"
+
+          if [ "${{ inputs.devel }}" = "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
+            INCLUDE="[${amd_gcc}, ${amd_pgo}]"
+          else
+            INCLUDE="[${amd_gcc}]"
+          fi
+
+          echo $INCLUDE
+          echo "include=${INCLUDE}" >> $GITHUB_OUTPUT
+
+  # TODO: setup
+  # TODO: can we combine this with windows.yml?
+  msys:
+    name: "MSYS2 ${{ matrix.os.arch }} ${{ matrix.os.program }} ${{ matrix.os.target }}"
+    needs: [msys-matrix]
+    runs-on: ${{ matrix.os.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(needs.msys-matrix.outputs.include) }}
+
+    env:
+      QT_VERSION: 6.9.1
+      TARGET: ${{ matrix.os.arch }}
+      COMPILER: "${{ matrix.os.program }}"
+      PGO_TARGET: "${{ matrix.os.target }}"
+      ARCH: ${{ matrix.os.arch }}-${{ matrix.os.program }}-${{ matrix.os.target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+
+      - name: Setup
+        uses: ./.github/workflows/setup
+        with:
+          key: MSYS2-${{ matrix.os.msystem }}-${{ matrix.os.arch }}-${{ matrix.os.program }}
+          version: ${{ inputs.cpm-cache-version }}
+
+      - name: Load payload environment
+        shell: bash
+        run: |
+          . ./.ci/fj/load-env.sh
+
+      - name: Setup MSYS2
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.os.msystem }}
+          update: true
+          install: >-
+            git make autoconf libtool automake-wrapper patch jq
+            pactoys ninja
+          pacboy: >-
+            qt6-static:p qt6-tools:p qt6-translations:p qt6-svg:p
+
+            7zip:p sccache:p cmake:p toolchain:p clang:p python-pip:p lld:p
+            openssl:p boost:p fmt:p lz4:p nlohmann-json:p zlib:p zstd:p
+            vulkan-memory-allocator:p vulkan-devel:p glslang:p
+            enet:p opus:p mbedtls:p libusb:p unordered_dense:p
+
+            jbigkit:p xz:p libdeflate:p bzip2:p lerc:p graphite2:p crt-git:p
+            libwebp:p libtiff:p brotli:p
+
+      - name: Configure
+        shell: msys2 {0}
+        run: |
+          .ci/common/configure.sh -DCCACHE_PATH=sccache -DYUZU_STATIC_BUILD=ON -DQt6_DIR="${{ steps.msys2.outputs.msys2-location }}/${{ matrix.os.msystem }}/qt6-static/lib/cmake/Qt6"
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build
+
+      - name: Package
+        shell: msys2 {0}
+        run: ./.ci/windows/package.sh
+        env:
+          MSYS_TOOLCHAIN: ${{ matrix.os.msystem }}
+          ARCH: ${{ env.ARCH }}-${{ env.FORGEJO_NREV }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: mingw-${{ env.ARCH }}-eden-${{ env.FORGEJO_NREV }}
+          path: artifacts/*

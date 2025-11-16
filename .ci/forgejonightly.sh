@@ -190,11 +190,12 @@ clone_repository() {
 	git -C eden describe --tags HEAD --abbrev=0 > eden/GIT-TAG || echo 'v0.0.3' > eden/GIT-TAG
 
 	if [ "$1" = "pushed" ] || [ "$1" = "manual" ]; then
-		echo "Nightly" > eden/GIT-REFSPEC
 		GITDATE=$(git -C eden show -s --date=short --format='%ad')
 		GITCOUNT=$(git -C eden rev-list --count HEAD)
-		GITREV=$(git -C eden show -s --format='%h')
-		echo "FORGEJO_NREV=$GITDATE-$GITCOUNT-$GITREV" >> "$FORGEJO_LENV"
+		GITCOMMIT=$(git -C eden show -s --format='%h')
+		echo "$GITDATE" > eden/GIT-COMMIT
+		echo "$GITCOUNT-$GITCOMMIT" > eden/GIT-REFSPEC
+		echo "FORGEJO_NREV=$GITDATE-$GITCOUNT-$GITCOMMIT" >> "$FORGEJO_LENV"
 	fi
 
 	# slight hack: also add the merge base

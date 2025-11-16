@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index bfebf8ab9e..8c4612f66a 100644
+index bfebf8ab9e..5e93b8e190 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -3,23 +3,15 @@
@@ -2700,7 +2700,7 @@ index bfebf8ab9e..8c4612f66a 100644
 +    </message>
 +    <message>
 +        <location filename="../../src/qt_common/shared_translation.cpp" line="406"/>
-+        <source>启动时提示选择用户配置</source>
++        <source>启动时提示选择用户帐号</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -2949,17 +2949,17 @@ index bfebf8ab9e..8c4612f66a 100644
 +    </message>
 +    <message>
 +        <location filename="../../src/qt_common/shared_translation.cpp" line="558"/>
-+        <source>Spline-1 (样条-1)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../../src/qt_common/shared_translation.cpp" line="559"/>
 +        <source>Gaussian (高斯模糊)</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/qt_common/shared_translation.cpp" line="560"/>
++        <location filename="../../src/qt_common/shared_translation.cpp" line="559"/>
 +        <source>Lanczos (兰佐斯)</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
++        <location filename="../../src/qt_common/shared_translation.cpp" line="560"/>
++        <source>ScaleForce (强制缩放)</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -2967,7 +2967,7 @@ index bfebf8ab9e..8c4612f66a 100644
 -        <source>Taiwanese</source>
 -        <translation>台湾中文</translation>
 +        <location filename="../../src/qt_common/shared_translation.cpp" line="561"/>
-+        <source>ScaleForce (强制缩放)</source>
++        <source>FSR (AMD 超级分辨率锐画技术)</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -2975,7 +2975,7 @@ index bfebf8ab9e..8c4612f66a 100644
 -        <source>British English</source>
 -        <translation>英式英语</translation>
 +        <location filename="../../src/qt_common/shared_translation.cpp" line="562"/>
-+        <source>FSR (AMD 超级分辨率锐画技术)</source>
++        <source>Area (区域)</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -2983,7 +2983,7 @@ index bfebf8ab9e..8c4612f66a 100644
 -        <source>Canadian French</source>
 -        <translation>加拿大法语</translation>
 +        <location filename="../../src/qt_common/shared_translation.cpp" line="563"/>
-+        <source>Area (区域)</source>
++        <source>Spline-1 (样条-1)</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -8574,6 +8574,19 @@ index bfebf8ab9e..8c4612f66a 100644
  <context>
      <name>WaitTreeCallstack</name>
      <message>
+diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
+index 6644bc01cc..cbfee93074 100644
+--- a/src/common/settings_enums.h
++++ b/src/common/settings_enums.h
+@@ -143,7 +143,7 @@ ENUM(ConfirmStop, Ask_Always, Ask_Based_On_Game, Ask_Never);
+ ENUM(FullscreenMode, Borderless, Exclusive);
+ ENUM(NvdecEmulation, Off, Cpu, Gpu);
+ ENUM(ResolutionSetup, Res1_4X, Res1_2X, Res3_4X, Res1X, Res5_4X, Res3_2X, Res2X, Res3X, Res4X, Res5X, Res6X, Res7X, Res8X);
+-ENUM(ScalingFilter, NearestNeighbor, Bilinear, Bicubic, Spline1, Gaussian, Lanczos, ScaleForce, Fsr, Area, MaxEnum);
++ENUM(ScalingFilter, NearestNeighbor, Bilinear, Bicubic, Gaussian, Lanczos, ScaleForce, Fsr, Area, Spline1, MaxEnum);
+ ENUM(AntiAliasing, None, Fxaa, Smaa, MaxEnum);
+ ENUM(AspectRatio, R16_9, R4_3, R21_9, R16_10, Stretch);
+ ENUM(ConsoleMode, Handheld, Docked);
 diff --git a/src/hid_core/resources/npad/npad_vibration.cpp b/src/hid_core/resources/npad/npad_vibration.cpp
 index f70876360f..330c21ea9d 100644
 --- a/src/hid_core/resources/npad/npad_vibration.cpp
@@ -8588,7 +8601,7 @@ index f70876360f..330c21ea9d 100644
      }
  
 diff --git a/src/qt_common/shared_translation.cpp b/src/qt_common/shared_translation.cpp
-index 5b8622e00a..05bc65902a 100644
+index 5b8622e00a..1bb63ebeef 100644
 --- a/src/qt_common/shared_translation.cpp
 +++ b/src/qt_common/shared_translation.cpp
 @@ -6,10 +6,9 @@
@@ -9111,7 +9124,7 @@ index 5b8622e00a..05bc65902a 100644
             select_user_on_boot,
 -           tr("Prompt for user profile on boot"),
 -           tr("Useful if multiple people use the same PC."));
-+           tr("启动时提示选择用户配置"),
++           tr("启动时提示选择用户帐号"),
 +           tr("如果多人使用同一电脑，则非常有用。"));
      INSERT(UISettings,
             pause_when_in_background,
@@ -9303,12 +9316,12 @@ index 5b8622e00a..05bc65902a 100644
 +                              PAIR(ScalingFilter, NearestNeighbor, tr("Nearest (近邻取样)")),
 +                              PAIR(ScalingFilter, Bilinear, tr("Bilinear (双线性过滤)")),
 +                              PAIR(ScalingFilter, Bicubic, tr("Bicubic (双三线过滤)")),
-+                              PAIR(ScalingFilter, Spline1, tr("Spline-1 (样条-1)")),
 +                              PAIR(ScalingFilter, Gaussian, tr("Gaussian (高斯模糊)")),
 +                              PAIR(ScalingFilter, Lanczos, tr("Lanczos (兰佐斯)")),
 +                              PAIR(ScalingFilter, ScaleForce, tr("ScaleForce (强制缩放)")),
 +                              PAIR(ScalingFilter, Fsr, tr("FSR (AMD 超级分辨率锐画技术)")),
 +                              PAIR(ScalingFilter, Area, tr("Area (区域)")),
++                              PAIR(ScalingFilter, Spline1, tr("Spline-1 (样条-1)")),
                            }});
      translations->insert({Settings::EnumMetadata<Settings::AntiAliasing>::Index(),
                            {
