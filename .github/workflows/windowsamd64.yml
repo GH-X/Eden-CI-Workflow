@@ -40,7 +40,7 @@ jobs:
           CLANG='{"program": "clang", "target": "standard"}'
           MSVC='{"program": "msvc", "target": "standard"}'
 
-          if [ "${{ inputs.devel }}" = "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
+          if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
             COMPILER="[${MSVC},${PGO}]"
           else
             COMPILER="[${MSVC}]"

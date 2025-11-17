@@ -52,7 +52,7 @@ jobs:
           amd_gcc="$(target "$AMD64" "$GCC")"
           amd_pgo="$(target "$AMD64" "$PGO")"
 
-          if [ "${{ inputs.devel }}" = "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
+          if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
             INCLUDE="[${amd_gcc}, ${amd_pgo}]"
           else
             INCLUDE="[${amd_gcc}]"

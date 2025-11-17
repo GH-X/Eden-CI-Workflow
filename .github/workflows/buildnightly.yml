@@ -23,7 +23,7 @@ env:
   CPM_CACHE_VERSION: "v15"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
-  FORCE_PGO: "true"
+  FORCE_PGO: "false"
 
 jobs:
   clone:
