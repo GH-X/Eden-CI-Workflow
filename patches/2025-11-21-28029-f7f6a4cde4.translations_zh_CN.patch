@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index cf92f0cd00..e22d177e02 100644
+index cf92f0cd00..7136c81af3 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -976,7 +976,7 @@ index cf92f0cd00..e22d177e02 100644
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="329"/>
          <source>Extended Dynamic State</source>
 -        <translation>扩展动态状态</translation>
-+        <translation type="vanished">动态状态扩展</translation>
++        <translation type="vanished">动态状态</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="330"/>
@@ -985,23 +985,23 @@ index cf92f0cd00..e22d177e02 100644
  The default value is per-system.</source>
 -        <translation>控制在扩展动态状态中可使用的函数数量。
 -数字越大,可用函数越多并且可能提高性能,但也可能导致问题。
-+        <translation type="vanished">控制动态状态扩展可使用的功能数量。
++        <translation type="vanished">控制扩展动态状态可使用的功能数量。
 +数值越高，功能越多，性能越好，但可能会导致出现问题。
  默认值因系统而异。</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="334"/>
 +        <source>Vertex Input Dynamic State</source>
-+        <translation type="vanished">顶点输入</translation>
++        <translation type="vanished">动态状态—顶点输入</translation>
 +    </message>
 +    <message>
 +        <source>Enables vertex input dynamic state feature for better quality and performance.</source>
-+        <translation type="vanished">启用顶点输入动态状态扩展功能以获得更好的质量和性能。</translation>
++        <translation type="vanished">启用顶点输入动态状态功能以获得更好的质量和性能。</translation>
 +    </message>
 +    <message>
          <source>Provoking Vertex</source>
 -        <translation>激活顶点</translation>
-+        <translation type="vanished">引发顶点</translation>
++        <translation type="vanished">激发顶点</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="335"/>
@@ -2886,7 +2886,7 @@ index cf92f0cd00..e22d177e02 100644
 -&lt;div style=&quot;white-space: nowrap&quot;&gt;启用此选项将减少内存访问的开销，并且对不访问无效内存的程序没有影响。&lt;/div&gt;
 -           </translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="329"/>
-+        <source>动态状态扩展</source>
++        <source>动态状态</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -2894,7 +2894,7 @@ index cf92f0cd00..e22d177e02 100644
 -        <source>Enable fallbacks for invalid memory accesses</source>
 -        <translation>启用无效内存的访问回退</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="330"/>
-+        <source>控制动态状态扩展可使用的功能数量。
++        <source>控制扩展动态状态可使用的功能数量。
 +数值越高，功能越多，性能越好，但可能会导致出现问题。
 +默认值因系统而异。</source>
 +        <translation type="unfinished"></translation>
@@ -2904,7 +2904,7 @@ index cf92f0cd00..e22d177e02 100644
 -        <source>CPU settings are available only when game is not running.</source>
 -        <translation>只有当游戏不在运行时，CPU 设置才可用。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="334"/>
-+        <source>顶点输入</source>
++        <source>动态状态—顶点输入</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -2915,7 +2915,7 @@ index cf92f0cd00..e22d177e02 100644
 -        <source>Debugger</source>
 -        <translation>调试器</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="335"/>
-+        <source>启用顶点输入动态状态扩展功能以获得更好的质量和性能。</source>
++        <source>启用顶点输入动态状态功能以获得更好的质量和性能。</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -2923,7 +2923,7 @@ index cf92f0cd00..e22d177e02 100644
 -        <source>Enable GDB Stub</source>
 -        <translation>开启 GDB 调试</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="339"/>
-+        <source>引发顶点</source>
++        <source>激发顶点</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -16281,7 +16281,7 @@ index cf92f0cd00..e22d177e02 100644
 \ No newline at end of file
 +</TS>
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index f8295e61c0..415407258c 100644
+index f8295e61c0..e28e0002af 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -6,10 +6,9 @@
@@ -16771,22 +16771,22 @@ index f8295e61c0..415407258c 100644
             dyna_state,
 -           tr("Extended Dynamic State"),
 -           tr("Controls the number of features that can be used in Extended Dynamic State.\nHigher numbers allow for more features and can increase performance, but may cause issues.\nThe default value is per-system."));
-+           tr("动态状态扩展"),
-+           tr("控制动态状态扩展可使用的功能数量。\n数值越高，功能越多，性能越好，但可能会导致出现问题。\n默认值因系统而异。"));
++           tr("动态状态"),
++           tr("控制扩展动态状态可使用的功能数量。\n数值越高，功能越多，性能越好，但可能会导致出现问题。\n默认值因系统而异。"));
  
      INSERT(Settings,
             vertex_input_dynamic_state,
 -           tr("Vertex Input Dynamic State"),
 -           tr("Enables vertex input dynamic state feature for better quality and performance."));
-+           tr("顶点输入"),
-+           tr("启用顶点输入动态状态扩展功能以获得更好的质量和性能。"));
++           tr("动态状态—顶点输入"),
++           tr("启用顶点输入动态状态功能以获得更好的质量和性能。"));
  
      INSERT(Settings,
             provoking_vertex,
 -           tr("Provoking Vertex"),
 -           tr("Improves lighting and vertex handling in some games.\n"
 -              "Only Vulkan 1.0+ devices support this extension."));
-+           tr("引发顶点"),
++           tr("激发顶点"),
 +           tr("改善某些游戏中的光照和顶点处理。\n"
 +              "仅支持 Vulkan 1.0+。"));
  
