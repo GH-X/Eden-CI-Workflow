@@ -41,7 +41,7 @@ jobs:
           MSVC='{"program": "msvc", "target": "standard"}'
 
           if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
-            COMPILER="[${MSVC},${PGO}]"
+            COMPILER="[${MSVC}]"
           else
             COMPILER="[${MSVC}]"
           fi
@@ -59,8 +59,6 @@ jobs:
         os:
           - runs-on: windows-latest
             arch: amd64
-          - runs-on: windows-11-arm
-            arch: arm64
         compiler: ${{ fromJson(needs.win-matrix.outputs.compiler) }}
 
     env:

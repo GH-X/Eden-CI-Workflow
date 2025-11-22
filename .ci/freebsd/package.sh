@@ -5,27 +5,33 @@
 
 # This script assumes you're in the source directory
 
-VERSION=$(cat GIT-TAG)
-PKG_NAME="Eden-${VERSION}-${ARCH}"
-PKG_DIR="install/usr"
+ROOTDIR="$PWD"
 BUILDDIR="${BUILDDIR:-build}"
+ARTIFACTS_DIR="artifacts"
+
+# shellcheck disable=SC1091
+. "$ROOTDIR"/.ci/common/project.sh
+
+VERSION=$(cat "$ROOTDIR/GIT-TAG" 2>/dev/null || echo 'v0.0.4-Workflow')
+PKG_NAME="${PROJECT_PRETTYNAME}-${VERSION}-${ARCH}"
+PKG_DIR="install/usr"
 
 echo "Making \"$VERSION\" build"
 
 mkdir -p "${PKG_DIR}/lib/qt6"
 
 # Copy all linked libs
-ldd "${PKG_DIR}/bin/eden" | awk '/=>/ {print $3}' | while read -r lib; do
-  case "$lib" in
-    /lib*|/usr/lib*) ;;  # Skip system libs
-    *)
-      if echo "$lib" | grep -q '^/usr/local/lib/qt6/'; then
-        cp -v "$lib" "${PKG_DIR}/lib/qt6/"
-      else
-        cp -v "$lib" "${PKG_DIR}/lib/"
-      fi
-      ;;
-  esac
+ldd "${PKG_DIR}/bin/${PROJECT_REPO}" | awk '/=>/ {print $3}' | while read -r lib; do
+	case "$lib" in
+		/lib*|/usr/lib*) ;;  # Skip system libs
+		*)
+			if echo "$lib" | grep -q '^/usr/local/lib/qt6/'; then
+				cp -v "$lib" "${PKG_DIR}/lib/qt6/"
+			else
+				cp -v "$lib" "${PKG_DIR}/lib/"
+			fi
+			;;
+	esac
 done
 
 # Copy Qt6 plugins
@@ -45,27 +51,27 @@ wayland-shell-integration
 "
 
 for sub in $QT6_PLUGIN_SUBDIRS; do
-  if [ -d "${QT6_PLUGINS}/${sub}" ]; then
-    mkdir -p "${PKG_DIR}/lib/qt6/plugins/${sub}"
-    cp -rv "${QT6_PLUGINS}/${sub}"/* "${PKG_DIR}/lib/qt6/plugins/${sub}/"
-  fi
+	if [ -d "${QT6_PLUGINS}/${sub}" ]; then
+		mkdir -p "${PKG_DIR}/lib/qt6/plugins/${sub}"
+		cp -rv "${QT6_PLUGINS}/${sub}"/* "${PKG_DIR}/lib/qt6/plugins/${sub}/"
+	fi
 done
 
 # Copy Qt6 translations
 mkdir -p "${PKG_DIR}/share/translations"
-cp -v "${BUILDDIR}/src/yuzu"/*.qm "${PKG_DIR}/share/translations/"
+cp -v "$BUILDDIR/src/yuzu"/*.qm "${PKG_DIR}/share/translations/"
 
 # Strip binaries
-strip "${PKG_DIR}/bin/eden"
+strip "${PKG_DIR}/bin/${PROJECT_REPO}"
 find "${PKG_DIR}/lib" -type f -name '*.so*' -exec strip {} \;
 
-# Create a laucher for the pack
+# Create a launcher for the pack
 cp .ci/freebsd/launch.sh "${PKG_NAME}"
 chmod +x "${PKG_NAME}/launch.sh"
 
 # Pack for upload
 XZ_OPT="-9e -T0" tar -cavf "${PKG_NAME}.tar.xz" "${PKG_NAME}"
-mkdir -p artifacts
-mv -v "${PKG_NAME}.tar.xz" artifacts
+mkdir -p "$ARTIFACTS_DIR"
+mv -v "${PKG_NAME}.tar.xz" "$ARTIFACTS_DIR"
 
-echo "All Done!"
+echo "FreeBSD package created at: $ARTIFACTS_DIR/${PKG_NAME}.tar.xz"

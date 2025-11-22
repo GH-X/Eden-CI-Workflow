@@ -13,10 +13,12 @@ else
     fi
 fi
 
+ROOTDIR="$PWD"
+
 SHA1SUM=$(keytool -list -v -storepass "${ANDROID_KEYSTORE_PASS}" -keystore "${ANDROID_KEYSTORE_FILE}" | grep SHA1 | cut -d " " -f3)
 echo "Keystore SHA1 is ${SHA1SUM}"
 
-cd src/android
+cd "$ROOTDIR/src/android"
 chmod +x ./gradlew
 
 CCACHE="${CCACHE:-false}"
@@ -25,6 +27,7 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${NUM_JOBS}"
 
 EXTRA_ARGS=("$@")
 ANDROID_CMAKE_ARGS=("-DUSE_CCACHE=${CCACHE}" "${EXTRA_ARGS[@]}")
+[ "$DEVEL" != "true" ] && ANDROID_CMAKE_ARGS+=(-DENABLE_UPDATE_CHECKER=ON)
 echo "Android CMake flags: ${ANDROID_CMAKE_ARGS[*]}"
 
 case "$TARGET" in
