@@ -2,11 +2,13 @@
 
 This workflow setup *requires* at least three things:
 <!-- TOC -->
-- [Repositories](#repositories)
-- [Tokens](#tokens)
+- [Setup](#setup)
+  - [Repositories](#repositories)
+  - [Tokens](#tokens)
     - [GitHub](#github)
     - [Forgejo](#forgejo)
-- [Webhook](#webhook)
+  - [Webhook](#webhook)
+  - [Forgejo Release Mirroring](#forgejo-release-mirroring)
 <!-- /TOC -->
 
 ## Repositories
@@ -15,7 +17,7 @@ To start, you must have repositories to store builds. Right now, these MUST be G
 
 You're recommended to create an organization specifically for this workflow, *plus* individual repositories for each type: PR, Master, and Release. In the future, Nightly and Continuous test builds will be separate as well.
 
-Once done, edit the corresponding entries in `.ci/release.json`.
+Once done, edit the corresponding entries in `.ci/release.json`. Additionally, edit `.ci/default.json` to include your Forgejo source code repository and any other mirrors.
 
 ## Tokens
 
@@ -38,17 +40,20 @@ From here, save it as a secret in your organization or workflow repo as `CUSTOM_
 ### Forgejo
 
 The workflow is currently defined to work *exclusively* with Forgejo. Technically, it can work with GitLab or even GitHub itself, but this is strongly discouraged for many reasons:
+
 - Its scripts assume the use of Forgejo
 - GitHub is proprietary and run by Microsoft
 - GitLab has terrible UX for this type of automation
 - fj2ghook is, well, for Forgejo only
 
 Because of this, some of the scripts in here send requests to your configured Forgejo instance. Forgejo's API generally prefers to work with API tokens, and this is needed regardless if you wish to sync status with your instance. To do so:
+
 - Go to `Settings -> Applications` in your instance
 - Give your token a descriptive name
 - Set `issue` and `repository` to `Read and write`
+  - You may also want `user:read`.
 
-![forge with a cuppa joe](img/fjtoken.png)
+![forge with a cuppa jo](img/fjtoken.png)
 
 Like GitHub, generate your token and store it SECURELY. This will be stored under `FORGEJO_TOKEN`.
 
@@ -58,4 +63,6 @@ The user of the token must also have access to the target repository or reposito
 
 The workflow interacts with Forgejo via a webhook. See [fj2ghook](https://git.crueter.xyz/crueter/fj2ghook) for info on setup and such.
 
-Note that fj2ghook is a security nightmare because I whipped it up in a grand total of 5 minutes using esoteric knowledge of Flask from when I was 12 years old and thus had 0 desire to implement even the slightest bit of security. Check the repo occasionally for updates to see if I fix it or not, or if I decide to rewrite it in a different language for no good reason.
+## Forgejo Release Mirroring
+
+If `FORGEJO_TOKEN` is provided properly, tagged releases will be automatically mirrored to your Forgejo repository, with all assets uploaded and your changelog's URLs modified to reflect your Forgejo repository. You may disable this by commenting out the corresponding step in `.github/workflows/tag.yml`.

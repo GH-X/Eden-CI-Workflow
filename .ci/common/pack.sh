@@ -54,7 +54,7 @@ done
 
 ## Android ##
 if falsy "$DISABLE_ANDROID"; then
-	FLAVORS=standard
+	FLAVORS="standard chromeos"
 	opts && tagged && FLAVORS="$FLAVORS legacy optimized"
 
 	for flavor in $FLAVORS; do
