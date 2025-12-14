@@ -1,0 +1,13 @@
+diff --git a/src/video_core/host1x/ffmpeg/ffmpeg.cpp b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+index 011e6d45a0..ac2d83729c 100644
+--- a/src/video_core/host1x/ffmpeg/ffmpeg.cpp
++++ b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+@@ -32,7 +32,7 @@ constexpr std::array PreferredGpuDecoders = {
+     AV_HWDEVICE_TYPE_CUDA,
+     AV_HWDEVICE_TYPE_D3D11VA,
+     AV_HWDEVICE_TYPE_DXVA2,
+-    AV_HWDEVICE_TYPE_D3D12VA,
++//    AV_HWDEVICE_TYPE_D3D12VA,
+ #elif defined(__FreeBSD__)
+     AV_HWDEVICE_TYPE_VDPAU,
+ #elif defined(__APPLE__)
