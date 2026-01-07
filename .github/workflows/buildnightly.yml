@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@v6.0.1
         with:
           fetch-depth: 0
 
@@ -90,13 +90,13 @@ jobs:
           rm -rf eden/.ci eden/.github
 
       - name: Upload payload environment
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: forgejo-env
           path: forgejo.env
 
       - name: Upload cloned repo
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: eden
           include-hidden-files: true
