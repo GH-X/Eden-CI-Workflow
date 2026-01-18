@@ -62,7 +62,7 @@ jobs:
 
       - name: Build (FreeBSD)
         if: matrix.os.platform == 'freebsd'
-        uses: vmactions/freebsd-vm@v1.3.6
+        uses: vmactions/freebsd-vm@v1.3.7
         with:
           arch: ${{ matrix.os.vm-arch }}
           usesh: true
