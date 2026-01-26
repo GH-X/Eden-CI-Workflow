@@ -62,7 +62,8 @@ pushed() {
 ## Continuous Integration Nightly Build
 
 - Nightly REV: $FORGEJO_NREV
-$FORGEJO_ERROR_TP
+$FORGEJO_ERROR_TEMP
+$FORGEJO_ERROR_ZHCN
 EOF
 }
 
@@ -71,7 +72,8 @@ manual() {
 ## Continuous Integration Nightly Build
 
 - Nightly REV: $FORGEJO_NREV
-$FORGEJO_ERROR_TP
+$FORGEJO_ERROR_TEMP
+$FORGEJO_ERROR_ZHCN
 EOF
 }
 
