@@ -1,0 +1,37 @@
+diff --git a/src/common/settings.h b/src/common/settings.h
+index b523fb673b..b690a95ba1 100644
+--- a/src/common/settings.h
++++ b/src/common/settings.h
+@@ -240,7 +240,6 @@ struct Values {
+                                                     Category::Cpu};
+     SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Auto,
+                                                       "cpu_accuracy", Category::Cpu};
+-    SwitchableSetting<bool> vtable_bouncing{linkage, true, "vtable_bouncing", Category::Cpu};
+     SwitchableSetting<CpuClock> fast_cpu_time{linkage,
+                                               CpuClock::Off,
+                                               "fast_cpu_time",
+@@ -267,6 +266,7 @@ struct Values {
+                                            true,
+                                            true,
+                                            &use_custom_cpu_ticks};
++    SwitchableSetting<bool> vtable_bouncing{linkage, true, "vtable_bouncing", Category::Cpu};
+     Setting<bool> cpuopt_page_tables{linkage, true, "cpuopt_page_tables", Category::CpuDebug};
+     Setting<bool> cpuopt_block_linking{linkage, true, "cpuopt_block_linking", Category::CpuDebug};
+     Setting<bool> cpuopt_return_stack_buffer{linkage, true, "cpuopt_return_stack_buffer",
+diff --git a/src/yuzu/configuration/configure_cpu.cpp b/src/yuzu/configuration/configure_cpu.cpp
+index 6407efbb26..bc1140d835 100644
+--- a/src/yuzu/configuration/configure_cpu.cpp
++++ b/src/yuzu/configuration/configure_cpu.cpp
+@@ -76,9 +76,9 @@ void ConfigureCpu::Setup(const ConfigurationShared::Builder& builder) {
+         } else if (setting->Id() == Settings::values.cpu_backend.Id()) {
+             backend_layout->addWidget(widget);
+             backend_combobox = widget->combobox;
+-        } else if (setting->Id() == Settings::values.fast_cpu_time.Id()) {
+-            ui->general_layout->addWidget(widget);
+-        } else if (setting->Id() == Settings::values.cpu_ticks.Id()) {
++        } else if (setting->Id() == Settings::values.fast_cpu_time.Id()
++            || setting->Id() == Settings::values.vtable_bouncing.Id()
++            || setting->Id() == Settings::values.cpu_ticks.Id()) {
+             ui->general_layout->addWidget(widget);
+         } else {
+             // Presently, all other settings here are unsafe checkboxes

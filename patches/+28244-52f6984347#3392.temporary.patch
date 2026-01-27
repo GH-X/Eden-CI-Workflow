@@ -1,0 +1,121 @@
+diff --git a/src/core/hle/service/am/applet_manager.cpp b/src/core/hle/service/am/applet_manager.cpp
+index cab56f9f7d..c2920f91ae 100644
+--- a/src/core/hle/service/am/applet_manager.cpp
++++ b/src/core/hle/service/am/applet_manager.cpp
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+@@ -266,7 +266,7 @@ void AppletManager::SetWindowSystem(WindowSystem* window_system) {
+ 
+     m_cv.wait(lk, [&] { return m_pending_process != nullptr; });
+ 
+-    if (Settings::values.enable_overlay) {
++    if (Settings::values.enable_overlay && m_window_system->GetOverlayDisplayApplet() == nullptr) {
+         if (auto overlay_process = CreateProcess(m_system, static_cast<u64>(AppletProgramId::OverlayDisplay), 0, 0)) {
+             auto overlay_applet = std::make_shared<Applet>(m_system, std::move(overlay_process), false);
+             overlay_applet->program_id = static_cast<u64>(AppletProgramId::OverlayDisplay);
+diff --git a/src/core/hle/service/am/service/application_functions.cpp b/src/core/hle/service/am/service/application_functions.cpp
+index ab548fdead..9ab343e59e 100644
+--- a/src/core/hle/service/am/service/application_functions.cpp
++++ b/src/core/hle/service/am/service/application_functions.cpp
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+@@ -32,7 +32,7 @@ IApplicationFunctions::IApplicationFunctions(Core::System& system_, std::shared_
+         {1, D<&IApplicationFunctions::PopLaunchParameter>, "PopLaunchParameter"},
+         {10, nullptr, "CreateApplicationAndPushAndRequestToStart"},
+         {11, nullptr, "CreateApplicationAndPushAndRequestToStartForQuest"},
+-        {12, nullptr, "CreateApplicationAndRequestToStart"},
++        {12, D<&IApplicationFunctions::CreateApplicationAndRequestToStart>, "CreateApplicationAndRequestToStart"},
+         {13, nullptr, "CreateApplicationAndRequestToStartForQuest"},
+         {14, nullptr, "CreateApplicationWithAttributeAndPushAndRequestToStartForQuest"},
+         {15, nullptr, "CreateApplicationWithAttributeAndRequestToStartForQuest"},
+@@ -431,6 +431,19 @@ Result IApplicationFunctions::ExecuteProgram(ProgramSpecifyKind kind, u64 value)
+     R_SUCCEED();
+ }
+ 
++// https://switchbrew.org/wiki/Applet_Manager_services#CreateApplicationAndRequestToStart
++Result IApplicationFunctions::CreateApplicationAndRequestToStart(u64 application_id) {
++    LOG_INFO(Service_AM, "called, application_id={:016X}", application_id);
++
++    // If application_id is 0, relaunch the current application
++    const u64 target_application_id =
++        (application_id == 0) ? m_applet->program_id : application_id;
++
++    system.GetUserChannel() = m_applet->user_channel_launch_parameter;
++    system.ExecuteProgram(target_application_id);
++    R_SUCCEED();
++}
++
+ Result IApplicationFunctions::ClearUserChannel() {
+     LOG_DEBUG(Service_AM, "called");
+     m_applet->user_channel_launch_parameter.clear();
+diff --git a/src/core/hle/service/am/service/application_functions.h b/src/core/hle/service/am/service/application_functions.h
+index 459f71496c..abee2f9d47 100644
+--- a/src/core/hle/service/am/service/application_functions.h
++++ b/src/core/hle/service/am/service/application_functions.h
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+@@ -79,6 +79,7 @@ private:
+     Result TryPopFromFriendInvitationStorageChannel(Out<SharedPointer<IStorage>> out_storage);
+     Result GetNotificationStorageChannelEvent(OutCopyHandle<Kernel::KReadableEvent> out_event);
+     Result GetHealthWarningDisappearedSystemEvent(OutCopyHandle<Kernel::KReadableEvent> out_event);
++    Result CreateApplicationAndRequestToStart(u64 application_id);
+     Result GetUnknownEvent210(OutCopyHandle<Kernel::KReadableEvent> out_event);
+     Result Unknown330(Out<u8> out);
+     Result PrepareForJit();
+diff --git a/src/core/hle/service/am/window_system.cpp b/src/core/hle/service/am/window_system.cpp
+index 77ca5a76f5..5f20a98322 100644
+--- a/src/core/hle/service/am/window_system.cpp
++++ b/src/core/hle/service/am/window_system.cpp
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+@@ -94,6 +94,16 @@ std::shared_ptr<Applet> WindowSystem::GetMainApplet() {
+     return nullptr;
+ }
+ 
++std::shared_ptr<Applet> WindowSystem::GetOverlayDisplayApplet() {
++    std::scoped_lock lk{m_lock};
++
++    if (m_overlay_display) {
++        return m_applets.at(m_overlay_display->aruid.pid);
++    }
++
++    return nullptr;
++}
++
+ void WindowSystem::RequestHomeMenuToGetForeground() {
+     {
+         std::scoped_lock lk{m_lock};
+diff --git a/src/core/hle/service/am/window_system.h b/src/core/hle/service/am/window_system.h
+index 7cd47d81b5..c331d10c92 100644
+--- a/src/core/hle/service/am/window_system.h
++++ b/src/core/hle/service/am/window_system.h
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+@@ -42,6 +42,7 @@ public:
+     void TrackApplet(std::shared_ptr<Applet> applet, bool is_application);
+     std::shared_ptr<Applet> GetByAppletResourceUserId(u64 aruid);
+     std::shared_ptr<Applet> GetMainApplet();
++    std::shared_ptr<Applet> GetOverlayDisplayApplet();
+ 
+ public:
+     void RequestHomeMenuToGetForeground();

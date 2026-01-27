@@ -1,0 +1,195 @@
+diff --git a/src/video_core/control/scheduler.cpp b/src/video_core/control/scheduler.cpp
+index 441466beb2..bd3b8b860e 100644
+--- a/src/video_core/control/scheduler.cpp
++++ b/src/video_core/control/scheduler.cpp
+@@ -17,11 +17,16 @@ Scheduler::Scheduler(GPU& gpu_) : gpu{gpu_} {}
+ Scheduler::~Scheduler() = default;
+ 
+ void Scheduler::Push(s32 channel, CommandList&& entries) {
+-    std::unique_lock lk(scheduling_guard);
+-    auto it = channels.find(channel);
+-    ASSERT(it != channels.end());
+-    auto& channel_state = it->second;
+-    gpu.BindChannel(channel_state->bind_id);
++    std::shared_ptr<ChannelState> channel_state;
++    {
++        std::unique_lock lk(scheduling_guard);
++        auto it = channels.find(channel);
++        ASSERT(it != channels.end());
++        channel_state = it->second;
++        gpu.BindChannel(channel_state->bind_id);
++    }
++    // Process commands outside the lock to reduce contention.
++    // Multiple channels can prepare their commands in parallel.
+     channel_state->dma_pusher->Push(std::move(entries));
+     channel_state->dma_pusher->DispatchCalls();
+ }
+diff --git a/src/video_core/dirty_flags.h b/src/video_core/dirty_flags.h
+index 736082d837..bf90db83e6 100644
+--- a/src/video_core/dirty_flags.h
++++ b/src/video_core/dirty_flags.h
+@@ -1,3 +1,6 @@
++// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
++// SPDX-License-Identifier: GPL-3.0-or-later
++
+ // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -45,6 +48,71 @@ enum : u8 {
+     LastCommonEntry,
+ };
+ 
++constexpr std::pair<u8, u8> GetDirtyFlagsForMethod(u32 method) {
++    const u32 OFF_VERTEX_STREAMS = 0x2C0;
++    const u32 OFF_VERTEX_STREAM_LIMITS = 0x2F8;
++    const u32 OFF_INDEX_BUFFER = 0x460;
++    const u32 OFF_TEX_HEADER = 0x800;
++    const u32 OFF_TEX_SAMPLER = 0xA00;
++    const u32 OFF_RT = 0xE00;
++    const u32 OFF_SURFACE_CLIP = 0xE38;
++    const u32 OFF_RT_CONTROL = 0xE40;
++    const u32 OFF_ZETA_ENABLE = 0xE4C;
++    const u32 OFF_ZETA_SIZE_WIDTH = 0xE50;
++    const u32 OFF_ZETA_SIZE_HEIGHT = 0xE54;
++    const u32 OFF_ZETA = 0xE60;
++    const u32 OFF_PIPELINES = 0x1D00;
++
++    if (method >= OFF_VERTEX_STREAMS && method < OFF_VERTEX_STREAMS + 96) {
++        const u32 buffer_idx = (method - OFF_VERTEX_STREAMS) / 3;
++        return {static_cast<u8>(VertexBuffer0 + buffer_idx), VertexBuffers};
++    }
++
++    if (method >= OFF_VERTEX_STREAM_LIMITS && method < OFF_VERTEX_STREAM_LIMITS + 32) {
++        const u32 buffer_idx = method - OFF_VERTEX_STREAM_LIMITS;
++        return {static_cast<u8>(VertexBuffer0 + buffer_idx), VertexBuffers};
++    }
++
++    if (method == OFF_INDEX_BUFFER || (method > OFF_INDEX_BUFFER && method < OFF_INDEX_BUFFER + 3)) {
++        return {IndexBuffer, NullEntry};
++    }
++
++    if (method >= OFF_TEX_HEADER && method < OFF_TEX_HEADER + 256) {
++        return {Descriptors, NullEntry};
++    }
++
++    if (method >= OFF_TEX_SAMPLER && method < OFF_TEX_SAMPLER + 256) {
++        return {Descriptors, NullEntry};
++    }
++
++    if (method >= OFF_RT && method < OFF_RT + 64) {
++        const u32 rt_idx = (method - OFF_RT) / 8;
++        return {static_cast<u8>(ColorBuffer0 + rt_idx), RenderTargets};
++    }
++
++    if (method == OFF_SURFACE_CLIP || (method > OFF_SURFACE_CLIP && method < OFF_SURFACE_CLIP + 4)) {
++        return {RenderTargets, NullEntry};
++    }
++
++    if (method == OFF_RT_CONTROL) {
++        return {RenderTargets, RenderTargetControl};
++    }
++
++    if (method == OFF_ZETA_ENABLE || method == OFF_ZETA_SIZE_WIDTH || method == OFF_ZETA_SIZE_HEIGHT) {
++        return {ZetaBuffer, RenderTargets};
++    }
++
++    if (method >= OFF_ZETA && method < OFF_ZETA + 8) {
++        return {ZetaBuffer, RenderTargets};
++    }
++
++    if (method >= OFF_PIPELINES && method < OFF_PIPELINES + 1024) {
++        return {Shaders, NullEntry};
++    }
++
++    return {NullEntry, NullEntry};
++}
++
+ template <typename Integer>
+ void FillBlock(Tegra::Engines::Maxwell3D::DirtyState::Table& table, std::size_t begin,
+                std::size_t num, Integer dirty_index) {
+diff --git a/src/video_core/dma_pusher.cpp b/src/video_core/dma_pusher.cpp
+index a67b35453b..ab772e020a 100644
+--- a/src/video_core/dma_pusher.cpp
++++ b/src/video_core/dma_pusher.cpp
+@@ -14,6 +14,10 @@
+ #include "video_core/rasterizer_interface.h"
+ #include "video_core/texture_cache/util.h"
+ 
++#ifdef _MSC_VER
++#include <intrin.h>
++#endif
++
+ namespace Tegra {
+ 
+ constexpr u32 MacroRegistersStart = 0xE00;
+diff --git a/src/video_core/engines/maxwell_3d.cpp b/src/video_core/engines/maxwell_3d.cpp
+index 77729fd5b6..c2261f5986 100644
+--- a/src/video_core/engines/maxwell_3d.cpp
++++ b/src/video_core/engines/maxwell_3d.cpp
+@@ -33,9 +33,8 @@ Maxwell3D::Maxwell3D(Core::System& system_, MemoryManager& memory_manager_)
+     dirty.flags.flip();
+     InitializeRegisterDefaults();
+     execution_mask.reset();
+-    for (size_t i = 0; i < execution_mask.size(); i++) {
+-        execution_mask[i] = IsMethodExecutable(static_cast<u32>(i));
+-    }
++    for (size_t i = 0; i < execution_mask.size(); i++)
++        execution_mask[i] = IsMethodExecutable(u32(i));
+ }
+ 
+ Maxwell3D::~Maxwell3D() = default;
+@@ -294,38 +293,32 @@ u32 Maxwell3D::ProcessShadowRam(u32 method, u32 argument) {
+ }
+ 
+ void Maxwell3D::ConsumeSinkImpl() {
+-    SCOPE_EXIT {
+-        method_sink.clear();
+-    };
+     const auto control = shadow_state.shadow_ram_control;
+-    if (control == Regs::ShadowRamControl::Track ||
+-        control == Regs::ShadowRamControl::TrackWithFilter) {
+-
++    if (control == Regs::ShadowRamControl::Track || control == Regs::ShadowRamControl::TrackWithFilter) {
+         for (auto [method, value] : method_sink) {
+             shadow_state.reg_array[method] = value;
+             ProcessDirtyRegisters(method, value);
+         }
+-        return;
+-    }
+-    if (control == Regs::ShadowRamControl::Replay) {
+-        for (auto [method, value] : method_sink) {
++    } else if (control == Regs::ShadowRamControl::Replay) {
++        for (auto [method, value] : method_sink)
+             ProcessDirtyRegisters(method, shadow_state.reg_array[method]);
+-        }
+-        return;
+-    }
+-    for (auto [method, value] : method_sink) {
+-        ProcessDirtyRegisters(method, value);
++    } else {
++        for (auto [method, value] : method_sink)
++            ProcessDirtyRegisters(method, value);
+     }
++    method_sink.clear();
+ }
+ 
+ void Maxwell3D::ProcessDirtyRegisters(u32 method, u32 argument) {
+-    if (regs.reg_array[method] == argument) {
+-        return;
+-    }
+-    regs.reg_array[method] = argument;
+-
+-    for (const auto& table : dirty.tables) {
+-        dirty.flags[table[method]] = true;
++    if (regs.reg_array[method] != argument) {
++        regs.reg_array[method] = argument;
++        auto const& table0 = dirty.tables[0];
++        auto const& table1 = dirty.tables[1];
++        u8 const flag0 = table0[method];
++        u8 const flag1 = table1[method];
++        dirty.flags[flag0] = true;
++        if (flag1 != flag0)
++            dirty.flags[flag1] = true;
+     }
+ }
+ 

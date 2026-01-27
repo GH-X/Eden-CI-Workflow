@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: 'Specify commit (e.g. 311c71146d)'
+        description: 'Specify commit (e.g. 5768600c8b)'
         required: false
-        default: 'default'
+        default: '5768600c8b'
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
