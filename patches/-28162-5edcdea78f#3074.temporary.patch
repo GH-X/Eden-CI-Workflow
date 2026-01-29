@@ -1,0 +1,2307 @@
+diff --git a/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp b/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
+index 38d1e075a1..1b4968a3fd 100644
+--- a/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
++++ b/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
+@@ -1432,9 +1432,6 @@ void EmitContext::DefineInputs(const IR::Program& program) {
+     }
+     if (info.uses_sample_id) {
+         sample_id = DefineInput(*this, U32[1], false, spv::BuiltIn::SampleId);
+-        if (stage == Stage::Fragment) {
+-            Decorate(sample_id, spv::Decoration::Flat);
+-        }
+     }
+     if (info.uses_is_helper_invocation) {
+         is_helper_invocation = DefineInput(*this, U1, false, spv::BuiltIn::HelperInvocation);
+@@ -1445,13 +1442,6 @@ void EmitContext::DefineInputs(const IR::Program& program) {
+         subgroup_mask_le = DefineInput(*this, U32[4], false, spv::BuiltIn::SubgroupLeMaskKHR);
+         subgroup_mask_gt = DefineInput(*this, U32[4], false, spv::BuiltIn::SubgroupGtMaskKHR);
+         subgroup_mask_ge = DefineInput(*this, U32[4], false, spv::BuiltIn::SubgroupGeMaskKHR);
+-        if (stage == Stage::Fragment) {
+-            Decorate(subgroup_mask_eq, spv::Decoration::Flat);
+-            Decorate(subgroup_mask_lt, spv::Decoration::Flat);
+-            Decorate(subgroup_mask_le, spv::Decoration::Flat);
+-            Decorate(subgroup_mask_gt, spv::Decoration::Flat);
+-            Decorate(subgroup_mask_ge, spv::Decoration::Flat);
+-        }
+     }
+     if (info.uses_fswzadd || info.uses_subgroup_invocation_id || info.uses_subgroup_shuffles ||
+         (profile.warp_size_potentially_larger_than_guest &&
+@@ -1459,9 +1449,7 @@ void EmitContext::DefineInputs(const IR::Program& program) {
+         AddCapability(spv::Capability::GroupNonUniform);
+         subgroup_local_invocation_id =
+             DefineInput(*this, U32[1], false, spv::BuiltIn::SubgroupLocalInvocationId);
+-        if (stage == Stage::Fragment) {
+-            Decorate(subgroup_local_invocation_id, spv::Decoration::Flat);
+-        }
++        Decorate(subgroup_local_invocation_id, spv::Decoration::Flat);
+     }
+     if (info.uses_fswzadd) {
+         const Id f32_one{Const(1.0f)};
+@@ -1473,9 +1461,6 @@ void EmitContext::DefineInputs(const IR::Program& program) {
+     }
+     if (loads[IR::Attribute::PrimitiveId]) {
+         primitive_id = DefineInput(*this, U32[1], false, spv::BuiltIn::PrimitiveId);
+-        if (stage == Stage::Fragment) {
+-            Decorate(primitive_id, spv::Decoration::Flat);
+-        }
+     }
+     if (loads[IR::Attribute::Layer]) {
+         AddCapability(spv::Capability::Geometry);
+@@ -1567,21 +1552,17 @@ void EmitContext::DefineInputs(const IR::Program& program) {
+         if (stage != Stage::Fragment) {
+             continue;
+         }
+-        const bool is_integer = input_type == AttributeType::SignedInt ||
+-                                input_type == AttributeType::UnsignedInt;
+-        if (is_integer) {
++        switch (info.interpolation[index]) {
++        case Interpolation::Smooth:
++            // Default
++            // Decorate(id, spv::Decoration::Smooth);
++            break;
++        case Interpolation::NoPerspective:
++            Decorate(id, spv::Decoration::NoPerspective);
++            break;
++        case Interpolation::Flat:
+             Decorate(id, spv::Decoration::Flat);
+-        } else {
+-            switch (info.interpolation[index]) {
+-            case Interpolation::Smooth:
+-                break;
+-            case Interpolation::NoPerspective:
+-                Decorate(id, spv::Decoration::NoPerspective);
+-                break;
+-            case Interpolation::Flat:
+-                Decorate(id, spv::Decoration::Flat);
+-                break;
+-            }
++            break;
+         }
+     }
+     if (stage == Stage::TessellationEval) {
+diff --git a/src/video_core/renderer_vulkan/blit_image.cpp b/src/video_core/renderer_vulkan/blit_image.cpp
+index 5b4b44db53..68543bdd48 100644
+--- a/src/video_core/renderer_vulkan/blit_image.cpp
++++ b/src/video_core/renderer_vulkan/blit_image.cpp
+@@ -46,7 +46,7 @@ namespace Vulkan {
+ using VideoCommon::ImageViewType;
+ 
+ namespace {
+-
++    
+ [[nodiscard]] VkImageAspectFlags AspectMaskFromFormat(VideoCore::Surface::PixelFormat format) {
+     using VideoCore::Surface::SurfaceType;
+     switch (VideoCore::Surface::GetFormatType(format)) {
+@@ -525,24 +525,18 @@ BlitImageHelper::BlitImageHelper(const Device& device_, Scheduler& scheduler_,
+           nullptr, PUSH_CONSTANT_RANGE<VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(float) * 4>))),
+       full_screen_vert(BuildShader(device, FULL_SCREEN_TRIANGLE_VERT_SPV)),
+       blit_color_to_color_frag(BuildShader(device, BLIT_COLOR_FLOAT_FRAG_SPV)),
+-      blit_depth_stencil_frag(device.IsExtShaderStencilExportSupported()
+-                             ? BuildShader(device, VULKAN_BLIT_DEPTH_STENCIL_FRAG_SPV)
+-                             : vk::ShaderModule{}),
++      blit_depth_stencil_frag(BuildShader(device, VULKAN_BLIT_DEPTH_STENCIL_FRAG_SPV)),
+       clear_color_vert(BuildShader(device, VULKAN_COLOR_CLEAR_VERT_SPV)),
+       clear_color_frag(BuildShader(device, VULKAN_COLOR_CLEAR_FRAG_SPV)),
+       clear_stencil_frag(BuildShader(device, VULKAN_DEPTHSTENCIL_CLEAR_FRAG_SPV)),
+       convert_depth_to_float_frag(BuildShader(device, CONVERT_DEPTH_TO_FLOAT_FRAG_SPV)),
+       convert_float_to_depth_frag(BuildShader(device, CONVERT_FLOAT_TO_DEPTH_FRAG_SPV)),
+-      convert_abgr8_to_d24s8_frag(device.IsExtShaderStencilExportSupported()
+-                                 ? BuildShader(device, CONVERT_ABGR8_TO_D24S8_FRAG_SPV)
+-                                 : vk::ShaderModule{}),
++      convert_abgr8_to_d24s8_frag(BuildShader(device, CONVERT_ABGR8_TO_D24S8_FRAG_SPV)),
+       convert_abgr8_to_d32f_frag(BuildShader(device, CONVERT_ABGR8_TO_D32F_FRAG_SPV)),
+       convert_d32f_to_abgr8_frag(BuildShader(device, CONVERT_D32F_TO_ABGR8_FRAG_SPV)),
+       convert_d24s8_to_abgr8_frag(BuildShader(device, CONVERT_D24S8_TO_ABGR8_FRAG_SPV)),
+       convert_s8d24_to_abgr8_frag(BuildShader(device, CONVERT_S8D24_TO_ABGR8_FRAG_SPV)),
+-      convert_abgr8_srgb_to_d24s8_frag(device.IsExtShaderStencilExportSupported()
+-                                      ? BuildShader(device, CONVERT_ABGR8_SRGB_TO_D24S8_FRAG_SPV)
+-                                      : vk::ShaderModule{}),
++      convert_abgr8_srgb_to_d24s8_frag(BuildShader(device, CONVERT_ABGR8_SRGB_TO_D24S8_FRAG_SPV)),
+       convert_rgba_to_bgra_frag(BuildShader(device, CONVERT_RGBA8_TO_BGRA8_FRAG_SPV)),
+       convert_yuv420_to_rgb_comp(BuildShader(device, CONVERT_YUV420_TO_RGB_COMP_SPV)),
+       convert_rgb_to_yuv420_comp(BuildShader(device, CONVERT_RGB_TO_YUV420_COMP_SPV)),
+@@ -673,11 +667,6 @@ void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
+ 
+ void BlitImageHelper::ConvertABGR8ToD24S8(const Framebuffer* dst_framebuffer,
+                                           const ImageView& src_image_view) {
+-    if (!device.IsExtShaderStencilExportSupported()) {
+-        // Shader requires VK_EXT_shader_stencil_export which is not available
+-        LOG_WARNING(Render_Vulkan, "ConvertABGR8ToD24S8 requires shader_stencil_export, skipping");
+-        return;
+-    }
+     ConvertPipelineDepthTargetEx(convert_abgr8_to_d24s8_pipeline, dst_framebuffer->RenderPass(),
+                                  convert_abgr8_to_d24s8_frag);
+     Convert(*convert_abgr8_to_d24s8_pipeline, dst_framebuffer, src_image_view);
+@@ -713,11 +702,6 @@ void BlitImageHelper::ConvertS8D24ToABGR8(const Framebuffer* dst_framebuffer,
+ 
+ void BlitImageHelper::ConvertABGR8SRGBToD24S8(const Framebuffer* dst_framebuffer,
+                                              const ImageView& src_image_view) {
+-    if (!device.IsExtShaderStencilExportSupported()) {
+-        // Shader requires VK_EXT_shader_stencil_export which is not available
+-        LOG_WARNING(Render_Vulkan, "ConvertABGR8SRGBToD24S8 requires shader_stencil_export, skipping");
+-        return;
+-    }
+     ConvertPipelineDepthTargetEx(convert_abgr8_srgb_to_d24s8_pipeline,
+                                 dst_framebuffer->RenderPass(),
+                                 convert_abgr8_srgb_to_d24s8_frag);
+diff --git a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp b/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
+index 06cbd9e6da..d8f832ae57 100644
+--- a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
++++ b/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
+@@ -59,7 +59,7 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
+     raw1 = 0;
+     extended_dynamic_state.Assign(features.has_extended_dynamic_state ? 1 : 0);
+     extended_dynamic_state_2.Assign(features.has_extended_dynamic_state_2 ? 1 : 0);
+-    extended_dynamic_state_2_logic_op.Assign(features.has_extended_dynamic_state_2_logic_op ? 1 : 0);
++    extended_dynamic_state_2_extra.Assign(features.has_extended_dynamic_state_2_extra ? 1 : 0);
+     extended_dynamic_state_3_blend.Assign(features.has_extended_dynamic_state_3_blend ? 1 : 0);
+     extended_dynamic_state_3_enables.Assign(features.has_extended_dynamic_state_3_enables ? 1 : 0);
+     dynamic_vertex_input.Assign(features.has_dynamic_vertex_input ? 1 : 0);
+@@ -157,7 +157,7 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
+             return static_cast<u16>(array.stride.Value());
+         });
+     }
+-    if (!extended_dynamic_state_2_logic_op) {
++    if (!extended_dynamic_state_2_extra) {
+         dynamic_state.Refresh2(regs, topology_, extended_dynamic_state_2);
+     }
+     if (!extended_dynamic_state_3_blend) {
+diff --git a/src/video_core/renderer_vulkan/fixed_pipeline_state.h b/src/video_core/renderer_vulkan/fixed_pipeline_state.h
+index c5bc14f448..f0b021ca08 100644
+--- a/src/video_core/renderer_vulkan/fixed_pipeline_state.h
++++ b/src/video_core/renderer_vulkan/fixed_pipeline_state.h
+@@ -1,6 +1,3 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+ // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -23,8 +20,7 @@ using Maxwell = Tegra::Engines::Maxwell3D::Regs;
+ struct DynamicFeatures {
+     bool has_extended_dynamic_state;
+     bool has_extended_dynamic_state_2;
+-    bool has_extended_dynamic_state_2_logic_op;
+-    bool has_extended_dynamic_state_2_patch_control_points;
++    bool has_extended_dynamic_state_2_extra;
+     bool has_extended_dynamic_state_3_blend;
+     bool has_extended_dynamic_state_3_enables;
+     bool has_dynamic_vertex_input;
+@@ -190,7 +186,7 @@ struct FixedPipelineState {
+         u32 raw1;
+         BitField<0, 1, u32> extended_dynamic_state;
+         BitField<1, 1, u32> extended_dynamic_state_2;
+-        BitField<2, 1, u32> extended_dynamic_state_2_logic_op;
++        BitField<2, 1, u32> extended_dynamic_state_2_extra;
+         BitField<3, 1, u32> extended_dynamic_state_3_blend;
+         BitField<4, 1, u32> extended_dynamic_state_3_enables;
+         BitField<5, 1, u32> dynamic_vertex_input;
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+index 0ae81af0fb..c2d9ad8020 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+@@ -419,9 +419,6 @@ ConditionalRenderingResolvePass::ConditionalRenderingResolvePass(
+ 
+ void ConditionalRenderingResolvePass::Resolve(VkBuffer dst_buffer, VkBuffer src_buffer,
+                                               u32 src_offset, bool compare_to_zero) {
+-    if (!device.IsExtConditionalRendering()) {
+-        return;
+-    }
+     const size_t compare_size = compare_to_zero ? 8 : 24;
+ 
+     compute_pass_descriptor_queue.Acquire();
+@@ -452,7 +449,7 @@ void ConditionalRenderingResolvePass::Resolve(VkBuffer dst_buffer, VkBuffer src_
+         cmdbuf.BindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *layout, 0, set, {});
+         cmdbuf.Dispatch(1, 1, 1);
+         cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, write_barrier);
++                               VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, write_barrier);
+     });
+ }
+ 
+@@ -474,14 +471,6 @@ QueriesPrefixScanPass::QueriesPrefixScanPass(
+ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffer,
+                                 VkBuffer src_buffer, size_t number_of_sums,
+                                 size_t min_accumulation_limit, size_t max_accumulation_limit) {
+-    constexpr VkAccessFlags BASE_DST_ACCESS = VK_ACCESS_SHADER_READ_BIT |
+-                                              VK_ACCESS_TRANSFER_READ_BIT |
+-                                              VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+-                                              VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
+-                                              VK_ACCESS_INDEX_READ_BIT |
+-                                              VK_ACCESS_UNIFORM_READ_BIT;
+-    const VkAccessFlags conditional_access =
+-        device.IsExtConditionalRendering() ? VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT : 0;
+     size_t current_runs = number_of_sums;
+     size_t offset = 0;
+     while (current_runs != 0) {
+@@ -498,18 +487,22 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
+ 
+         scheduler.RequestOutsideRenderPassOperationContext();
+         scheduler.Record([this, descriptor_data, min_accumulation_limit, max_accumulation_limit,
+-                          runs_to_do, used_offset, conditional_access](vk::CommandBuffer cmdbuf) {
++                          runs_to_do, used_offset](vk::CommandBuffer cmdbuf) {
+             static constexpr VkMemoryBarrier read_barrier{
+                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                 .pNext = nullptr,
+                 .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                 .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+             };
+-            const VkMemoryBarrier write_barrier{
++            static constexpr VkMemoryBarrier write_barrier{
+                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                 .pNext = nullptr,
+                 .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+-                .dstAccessMask = BASE_DST_ACCESS | conditional_access,
++                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT |
++                                 VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
++                                 VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
++                                 VK_ACCESS_UNIFORM_READ_BIT |
++                                 VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+             };
+             const QueriesPrefixScanPushConstants uniforms{
+                 .min_accumulation_base = static_cast<u32>(min_accumulation_limit),
+@@ -527,7 +520,8 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
+             cmdbuf.PushConstants(*layout, VK_SHADER_STAGE_COMPUTE_BIT, uniforms);
+             cmdbuf.Dispatch(1, 1, 1);
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, write_barrier);
++                                   VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0,
++                                   write_barrier);
+         });
+     }
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+index fca235b58e..f0d20b137d 100644
+--- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+@@ -263,7 +263,6 @@ GraphicsPipeline::GraphicsPipeline(
+         std::ranges::copy(info->constant_buffer_used_sizes, uniform_buffer_sizes[stage].begin());
+         num_textures += Shader::NumDescriptors(info->texture_descriptors);
+     }
+-    fragment_has_color0_output = stage_infos[NUM_STAGES - 1].stores_frag_color[0];
+     auto func{[this, shader_notify, &render_pass_cache, &descriptor_pool, pipeline_statistics] {
+         DescriptorLayoutBuilder builder{MakeBuilder(device, stage_infos)};
+         uses_push_descriptor = builder.CanUsePushDescriptor();
+@@ -703,18 +702,13 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         .lineWidth = 1.0f,
+         // TODO(alekpop): Transfer from regs
+     };
+-    const bool smooth_lines_supported =
+-        device.IsExtLineRasterizationSupported() && device.SupportsSmoothLines();
+-    const bool stippled_lines_supported =
+-        device.IsExtLineRasterizationSupported() && device.SupportsStippledRectangularLines();
+     VkPipelineRasterizationLineStateCreateInfoEXT line_state{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT,
+         .pNext = nullptr,
+-        .lineRasterizationMode = key.state.smooth_lines != 0 && smooth_lines_supported
++        .lineRasterizationMode = key.state.smooth_lines != 0
+                                      ? VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT
+                                      : VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT,
+-        .stippledLineEnable =
+-            (dynamic.line_stipple_enable && stippled_lines_supported) ? VK_TRUE : VK_FALSE,
++        .stippledLineEnable = dynamic.line_stipple_enable ? VK_TRUE : VK_FALSE,
+         .lineStippleFactor = key.state.line_stipple_factor,
+         .lineStipplePattern = static_cast<uint16_t>(key.state.line_stipple_pattern),
+     };
+@@ -745,8 +739,6 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         provoking_vertex.pNext = std::exchange(rasterization_ci.pNext, &provoking_vertex);
+     }
+ 
+-    const bool supports_alpha_output = fragment_has_color0_output;
+-    const bool alpha_to_one_supported = device.SupportsAlphaToOne();
+     const VkPipelineMultisampleStateCreateInfo multisample_ci{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+         .pNext = nullptr,
+@@ -755,10 +747,8 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         .sampleShadingEnable = Settings::values.sample_shading.GetValue() > 0 ? VK_TRUE : VK_FALSE,
+         .minSampleShading = f32(Settings::values.sample_shading.GetValue()) / 100.0f,
+         .pSampleMask = nullptr,
+-        .alphaToCoverageEnable =
+-            supports_alpha_output && key.state.alpha_to_coverage_enabled != 0 ? VK_TRUE : VK_FALSE,
+-        .alphaToOneEnable = supports_alpha_output && alpha_to_one_supported &&
+-                           key.state.alpha_to_one_enabled != 0 ? VK_TRUE : VK_FALSE,
++        .alphaToCoverageEnable = key.state.alpha_to_coverage_enabled != 0 ? VK_TRUE : VK_FALSE,
++        .alphaToOneEnable = key.state.alpha_to_one_enabled != 0 ? VK_TRUE : VK_FALSE,
+     };
+     const VkPipelineDepthStencilStateCreateInfo depth_stencil_ci{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+@@ -823,7 +813,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         VK_DYNAMIC_STATE_LINE_WIDTH,
+     };
+     if (key.state.extended_dynamic_state) {
+-        static constexpr std::array extended{
++        std::vector<VkDynamicState> extended{
+             VK_DYNAMIC_STATE_CULL_MODE_EXT,
+             VK_DYNAMIC_STATE_FRONT_FACE_EXT,
+             VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT,
+@@ -833,68 +823,51 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+             VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT,
+             VK_DYNAMIC_STATE_STENCIL_OP_EXT,
+         };
+-        dynamic_states.insert(dynamic_states.end(), extended.begin(), extended.end());
+-
+-        // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT is part of EDS1
+-        // Only use it if VIDS is not active (VIDS replaces it with full vertex input control)
+-        if (!key.state.dynamic_vertex_input) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT);
+-        }
+-    }
+-
+-    // VK_DYNAMIC_STATE_VERTEX_INPUT_EXT (VIDS) - Independent from EDS
+-    // Provides full dynamic vertex input control, replaces VERTEX_INPUT_BINDING_STRIDE
+-    if (key.state.dynamic_vertex_input) {
+-        dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+-    }
+-
+-    // EDS2 - Core (3 states)
+-    if (key.state.extended_dynamic_state_2) {
+-        static constexpr std::array extended2{
+-            VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT,
+-        };
+-        dynamic_states.insert(dynamic_states.end(), extended2.begin(), extended2.end());
+-    }
+-
+-    // EDS2 - LogicOp (granular)
+-    if (key.state.extended_dynamic_state_2_logic_op) {
+-        dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_EXT);
+-    }
+-
+-    // EDS3 - Blending (composite: 3 states)
+-    if (key.state.extended_dynamic_state_3_blend) {
+-        static constexpr std::array extended3{
+-            VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
+-            VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
+-        };
+-        dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
+-    }
+-
+-    // EDS3 - Enables (composite: per-feature)
+-    if (key.state.extended_dynamic_state_3_enables) {
+-        if (device.SupportsDynamicState3DepthClampEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT);
++        if (!device.IsExtVertexInputDynamicStateSupported()) {
++            extended.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT);
+         }
+-        if (device.SupportsDynamicState3LogicOpEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT);
++        if (key.state.dynamic_vertex_input) {
++            dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+         }
+-        if (device.SupportsDynamicState3LineRasterizationMode()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT);
+-        }
+-        if (device.SupportsDynamicState3ConservativeRasterizationMode()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT);
+-        }
+-        if (device.SupportsDynamicState3LineStippleEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT);
+-        }
+-        if (device.SupportsDynamicState3AlphaToCoverageEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT);
+-        }
+-        if (device.SupportsDynamicState3AlphaToOneEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT);
++        dynamic_states.insert(dynamic_states.end(), extended.begin(), extended.end());
++        if (key.state.extended_dynamic_state_2) {
++            static constexpr std::array extended2{
++                VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT,
++                VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT,
++                VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended2.begin(), extended2.end());
++        }
++        if (key.state.extended_dynamic_state_2_extra) {
++            dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_EXT);
++        }
++        if (key.state.extended_dynamic_state_3_blend) {
++            static constexpr std::array extended3{
++                VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
++                VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
++                VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
++
++                // VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
++        }
++        if (key.state.extended_dynamic_state_3_enables) {
++            static constexpr std::array extended3{
++                VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT,
++                VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT,
++
++                // additional state3 extensions
++                VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT,
++
++                VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT,
++
++                VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_DEPTH_CLIP_ENABLE_EXT,
++                VK_DYNAMIC_STATE_PROVOKING_VERTEX_MODE_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
+         }
+     }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.h b/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
+index 34941d6e8d..c8e89d60a4 100644
+--- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
++++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
+@@ -82,17 +82,6 @@ public:
+         const std::array<const Shader::Info*, NUM_STAGES>& infos);
+ 
+     bool HasDynamicVertexInput() const noexcept { return key.state.dynamic_vertex_input; }
+-    bool SupportsAlphaToCoverage() const noexcept {
+-        return fragment_has_color0_output;
+-    }
+-
+-    bool SupportsAlphaToOne() const noexcept {
+-        return fragment_has_color0_output;
+-    }
+-
+-    bool UsesExtendedDynamicState() const noexcept {
+-        return key.state.extended_dynamic_state != 0;
+-    }
+     GraphicsPipeline& operator=(GraphicsPipeline&&) noexcept = delete;
+     GraphicsPipeline(GraphicsPipeline&&) noexcept = delete;
+ 
+@@ -160,7 +149,6 @@ private:
+     std::array<u32, 5> enabled_uniform_buffer_masks{};
+     VideoCommon::UniformBufferSizes uniform_buffer_sizes{};
+     u32 num_textures{};
+-    bool fragment_has_color0_output{};
+ 
+     vk::DescriptorSetLayout descriptor_set_layout;
+     DescriptorAllocator descriptor_allocator;
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 9f2d16a328..f755818f25 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -146,8 +146,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
+ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> programs,
+                                     const GraphicsPipelineCacheKey& key,
+                                     const Shader::IR::Program& program,
+-                                    const Shader::IR::Program* previous_program,
+-                                    const Vulkan::Device& device) {
++                                    const Shader::IR::Program* previous_program) {
+     Shader::RuntimeInfo info;
+     if (previous_program) {
+         info.previous_stage_stores = previous_program->info.stores;
+@@ -169,14 +168,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+                 info.fixed_state_point_size = point_size;
+             }
+             if (key.state.xfb_enabled) {
+-                if (device.IsExtTransformFeedbackSupported()) {
+-                    auto [varyings, count] =
+-                        VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
+-                    info.xfb_varyings = varyings;
+-                    info.xfb_count = count;
+-                } else {
+-                    LOG_WARNING(Render_Vulkan, "XFB requested in pipeline key but device lacks VK_EXT_transform_feedback; ignoring XFB decorations");
+-                }
++                auto [varyings, count] =
++                    VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
++                info.xfb_varyings = varyings;
++                info.xfb_count = count;
+             }
+             info.convert_depth_mode = gl_ndc;
+         }
+@@ -223,14 +218,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+             info.fixed_state_point_size = point_size;
+         }
+         if (key.state.xfb_enabled != 0) {
+-            if (device.IsExtTransformFeedbackSupported()) {
+-                auto [varyings, count] =
+-                    VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
+-                info.xfb_varyings = varyings;
+-                info.xfb_count = count;
+-            } else {
+-                LOG_WARNING(Render_Vulkan, "XFB requested in pipeline key but device lacks VK_EXT_transform_feedback; ignoring XFB decorations");
+-            }
++            auto [varyings, count] =
++                VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
++            info.xfb_varyings = varyings;
++            info.xfb_count = count;
+         }
+         info.convert_depth_mode = gl_ndc;
+         break;
+@@ -414,35 +405,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+                     device.GetMaxVertexInputBindings(), Maxwell::NumVertexArrays);
+     }
+ 
+-    LOG_INFO(Render_Vulkan, "DynamicState setting value: {}", u32(Settings::values.dyna_state.GetValue()));
+-
+-    dynamic_features = {};
+-
+-    // User granularity enforced in vulkan_device.cpp switch statement:
+-    //   Level 0: Core Dynamic States only
+-    //   Level 1: Core + EDS1
+-    //   Level 2: Core + EDS1 + EDS2 (accumulative)
+-    //   Level 3: Core + EDS1 + EDS2 + EDS3 (accumulative)
+-    // Here we only verify if extensions were successfully loaded by the device
+-
+-    dynamic_features.has_extended_dynamic_state =
+-        device.IsExtExtendedDynamicStateSupported();
+-
+-    dynamic_features.has_extended_dynamic_state_2 =
+-        device.IsExtExtendedDynamicState2Supported();
+-    dynamic_features.has_extended_dynamic_state_2_logic_op =
+-        device.IsExtExtendedDynamicState2ExtrasSupported();
+-    dynamic_features.has_extended_dynamic_state_2_patch_control_points = false;
+-
+-    dynamic_features.has_extended_dynamic_state_3_blend =
+-        device.IsExtExtendedDynamicState3BlendingSupported();
+-    dynamic_features.has_extended_dynamic_state_3_enables =
+-        device.IsExtExtendedDynamicState3EnablesSupported();
+-
+-    // VIDS: Independent toggle (not affected by dyna_state levels)
+-    dynamic_features.has_dynamic_vertex_input =
+-        device.IsExtVertexInputDynamicStateSupported() &&
+-        Settings::values.vertex_input_dynamic_state.GetValue();
++    dynamic_features = DynamicFeatures{
++        .has_extended_dynamic_state = device.IsExtExtendedDynamicStateSupported(),
++        .has_extended_dynamic_state_2 = device.IsExtExtendedDynamicState2Supported(),
++        .has_extended_dynamic_state_2_extra = device.IsExtExtendedDynamicState2ExtrasSupported(),
++        .has_extended_dynamic_state_3_blend = device.IsExtExtendedDynamicState3BlendingSupported(),
++        .has_extended_dynamic_state_3_enables = device.IsExtExtendedDynamicState3EnablesSupported(),
++        .has_dynamic_vertex_input = device.IsExtVertexInputDynamicStateSupported(),
++    };
+ }
+ 
+ PipelineCache::~PipelineCache() {
+@@ -547,8 +517,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+                 dynamic_features.has_extended_dynamic_state ||
+             (key.state.extended_dynamic_state_2 != 0) !=
+                 dynamic_features.has_extended_dynamic_state_2 ||
+-            (key.state.extended_dynamic_state_2_logic_op != 0) !=
+-                dynamic_features.has_extended_dynamic_state_2_logic_op ||
++            (key.state.extended_dynamic_state_2_extra != 0) !=
++                dynamic_features.has_extended_dynamic_state_2_extra ||
+             (key.state.extended_dynamic_state_3_blend != 0) !=
+                 dynamic_features.has_extended_dynamic_state_3_blend ||
+             (key.state.extended_dynamic_state_3_enables != 0) !=
+@@ -702,7 +672,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+         const size_t stage_index{index - 1};
+         infos[stage_index] = &program.info;
+ 
+-        const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
++        const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage)};
+         ConvertLegacyToGeneric(program, runtime_info);
+         const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
+         device.SaveShader(code);
+diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+index 414c270c8e..a05fb48a9d 100644
+--- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+@@ -859,18 +859,17 @@ private:
+             return;
+         }
+         has_flushed_end_pending = true;
+-        // Refresh buffers state before beginning transform feedback so counters are up-to-date
+-        UpdateBuffers();
+         if (!has_started || buffers_count == 0) {
+-            // No counter buffers available: begin without counters
+             scheduler.Record([](vk::CommandBuffer cmdbuf) {
+                 cmdbuf.BeginTransformFeedbackEXT(0, 0, nullptr, nullptr);
+             });
++            UpdateBuffers();
+             return;
+         }
+         scheduler.Record([this, total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
+             cmdbuf.BeginTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
+         });
++        UpdateBuffers();
+     }
+ 
+     void FlushEndTFB() {
+@@ -880,15 +879,11 @@ private:
+         }
+         has_flushed_end_pending = false;
+ 
+-        // Refresh buffer state before ending transform feedback to ensure counters_count is up-to-date.
+-        UpdateBuffers();
+         if (buffers_count == 0) {
+-            LOG_DEBUG(Render_Vulkan, "EndTransformFeedbackEXT called with no counters (buffers_count=0)");
+             scheduler.Record([](vk::CommandBuffer cmdbuf) {
+                 cmdbuf.EndTransformFeedbackEXT(0, 0, nullptr, nullptr);
+             });
+         } else {
+-            LOG_DEBUG(Render_Vulkan, "EndTransformFeedbackEXT called with counters (buffers_count={})", buffers_count);
+             scheduler.Record([this,
+                               total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
+                 cmdbuf.EndTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
+@@ -899,7 +894,6 @@ private:
+     void UpdateBuffers() {
+         last_queries.fill(0);
+         last_queries_stride.fill(1);
+-        streams_mask = 0; // reset previously recorded streams
+         runtime.View3DRegs([this](Maxwell3D& maxwell3d) {
+             buffers_count = 0;
+             out_topology = maxwell3d.draw_manager->GetDrawState().topology;
+@@ -909,10 +903,6 @@ private:
+                     continue;
+                 }
+                 const size_t stream = tf.controls[i].stream;
+-                if (stream >= last_queries_stride.size()) {
+-                    LOG_WARNING(Render_Vulkan, "TransformFeedback stream {} out of range", stream);
+-                    continue;
+-                }
+                 last_queries_stride[stream] = tf.controls[i].stride;
+                 streams_mask |= 1ULL << stream;
+                 buffers_count = std::max<size_t>(buffers_count, stream + 1);
+@@ -1113,21 +1103,16 @@ public:
+ 
+             query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
+             u64 num_vertices = 0;
+-            // Protect against stride == 0 (avoid divide-by-zero). Use fallback stride=1 and warn.
+-            u64 safe_stride = query->stride == 0 ? 1 : query->stride;
+-            if (query->stride == 0) {
+-                LOG_WARNING(Render_Vulkan, "TransformFeedback query has stride 0; using 1 to avoid div-by-zero (addr=0x{:x})", query->dependant_address);
+-            }
+             if (query->dependant_manage) {
+                 auto* dependant_query = tfb_streamer.GetQuery(query->dependant_index);
+-                num_vertices = dependant_query->value / safe_stride;
++                num_vertices = dependant_query->value / query->stride;
+                 tfb_streamer.Free(query->dependant_index);
+             } else {
+                 u8* pointer = device_memory.GetPointer<u8>(query->dependant_address);
+                 if (pointer != nullptr) {
+                     u32 result;
+                     std::memcpy(&result, pointer, sizeof(u32));
+-                    num_vertices = static_cast<u64>(result) / safe_stride;
++                    num_vertices = static_cast<u64>(result) / query->stride;
+                 }
+             }
+             query->value = [&]() -> u64 {
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+index c3a5ed391b..2413009649 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+@@ -197,11 +197,6 @@ RasterizerVulkan::RasterizerVulkan(Core::Frontend::EmuWindow& emu_window_, Tegra
+       fence_manager(*this, gpu, texture_cache, buffer_cache, query_cache, device, scheduler),
+       wfi_event(device.GetLogical().CreateEvent()) {
+     scheduler.SetQueryCache(query_cache);
+-
+-    // Log multi-draw support
+-    if (device.IsExtMultiDrawSupported()) {
+-        LOG_INFO(Render_Vulkan, "VK_EXT_multi_draw is enabled for optimized draw calls");
+-    }
+ }
+ 
+ RasterizerVulkan::~RasterizerVulkan() = default;
+@@ -239,44 +234,16 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
+         const auto& draw_state = maxwell3d->draw_manager->GetDrawState();
+         const u32 num_instances{instance_count};
+         const DrawParams draw_params{MakeDrawParams(draw_state, num_instances, is_indexed)};
+-
+-        // Use VK_EXT_multi_draw if available (single draw becomes multi-draw with count=1)
+-        if (device.IsExtMultiDrawSupported()) {
+-            scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
+-                if (draw_params.is_indexed) {
+-                    // Use multi-draw indexed with single draw
+-                    const VkMultiDrawIndexedInfoEXT multi_draw_info{
+-                        .firstIndex = draw_params.first_index,
+-                        .indexCount = draw_params.num_vertices,
+-                    };
+-                    const int32_t vertex_offset = static_cast<int32_t>(draw_params.base_vertex);
+-                    cmdbuf.DrawMultiIndexedEXT(1, &multi_draw_info, draw_params.num_instances,
+-                                               draw_params.base_instance,
+-                                               sizeof(VkMultiDrawIndexedInfoEXT), &vertex_offset);
+-                } else {
+-                    // Use multi-draw with single draw
+-                    const VkMultiDrawInfoEXT multi_draw_info{
+-                        .firstVertex = draw_params.base_vertex,
+-                        .vertexCount = draw_params.num_vertices,
+-                    };
+-                    cmdbuf.DrawMultiEXT(1, &multi_draw_info, draw_params.num_instances,
+-                                        draw_params.base_instance,
+-                                        sizeof(VkMultiDrawInfoEXT));
+-                }
+-            });
+-        } else {
+-            // Fallback to standard draw calls
+-            scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
+-                if (draw_params.is_indexed) {
+-                    cmdbuf.DrawIndexed(draw_params.num_vertices, draw_params.num_instances,
+-                                       draw_params.first_index, draw_params.base_vertex,
+-                                       draw_params.base_instance);
+-                } else {
+-                    cmdbuf.Draw(draw_params.num_vertices, draw_params.num_instances,
+-                                draw_params.base_vertex, draw_params.base_instance);
+-                }
+-            });
+-        }
++        scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
++            if (draw_params.is_indexed) {
++                cmdbuf.DrawIndexed(draw_params.num_vertices, draw_params.num_instances,
++                                   draw_params.first_index, draw_params.base_vertex,
++                                   draw_params.base_instance);
++            } else {
++                cmdbuf.Draw(draw_params.num_vertices, draw_params.num_instances,
++                            draw_params.base_vertex, draw_params.base_instance);
++            }
++        });
+     });
+ }
+ 
+@@ -416,48 +383,13 @@ void RasterizerVulkan::Clear(u32 layer_count) {
+         .baseArrayLayer = regs.clear_surface.layer,
+         .layerCount = layer_count,
+     };
+-    const auto clamp_rect_to_render_area = [render_area](VkRect2D& rect) -> bool {
+-        const auto clamp_axis = [](s32& offset, u32& extent, u32 limit) {
+-            auto clamp_offset = [&offset, limit]() {
+-                if (limit == 0) {
+-                    offset = 0;
+-                    return;
+-                }
+-                offset = std::clamp(offset, 0, static_cast<s32>(limit));
+-            };
+-
+-            if (extent == 0) {
+-                clamp_offset();
+-                return;
+-            }
+-            if (offset < 0) {
+-                const u32 shrink = (std::min)(extent, static_cast<u32>(-offset));
+-                extent -= shrink;
+-                offset = 0;
+-            }
+-            if (limit == 0) {
+-                extent = 0;
+-                offset = 0;
+-                return;
+-            }
+-            if (offset >= s32(limit)) {
+-                offset = s32(limit);
+-                extent = 0;
+-                return;
+-            }
+-            const u64 end_coord = u64(offset) + extent;
+-            if (end_coord > limit) {
+-                extent = limit - u32(offset);
+-            }
+-        };
+-
+-        clamp_axis(rect.offset.x, rect.extent.width, render_area.width);
+-        clamp_axis(rect.offset.y, rect.extent.height, render_area.height);
+-        return rect.extent.width != 0 && rect.extent.height != 0;
+-    };
+-    if (!clamp_rect_to_render_area(clear_rect.rect)) {
++    if (clear_rect.rect.extent.width == 0 || clear_rect.rect.extent.height == 0) {
+         return;
+     }
++    clear_rect.rect.extent = VkExtent2D{
++        .width = (std::min)(clear_rect.rect.extent.width, render_area.width),
++        .height = (std::min)(clear_rect.rect.extent.height, render_area.height),
++    };
+ 
+     const u32 color_attachment = regs.clear_surface.RT;
+     if (use_color && framebuffer->HasAspectColorBit(color_attachment)) {
+@@ -892,21 +824,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
+ 
+ void RasterizerVulkan::FlushWork() {
+ #ifdef ANDROID
+-    static constexpr u32 DRAWS_TO_DISPATCH = 512;
+-    static constexpr u32 CHECK_MASK = 3;
++    static constexpr u32 DRAWS_TO_DISPATCH = 1024;
+ #else
+     static constexpr u32 DRAWS_TO_DISPATCH = 4096;
+-    static constexpr u32 CHECK_MASK = 7;
+ #endif // ANDROID
+ 
+-    static_assert(DRAWS_TO_DISPATCH % (CHECK_MASK + 1) == 0);
+-    if ((++draw_counter & CHECK_MASK) != CHECK_MASK) {
++    // Only check multiples of 8 draws
++    static_assert(DRAWS_TO_DISPATCH % 8 == 0);
++    if ((++draw_counter & 7) != 7) {
+         return;
+     }
+     if (draw_counter < DRAWS_TO_DISPATCH) {
++        // Send recorded tasks to the worker thread
+         scheduler.DispatchWork();
+         return;
+     }
++    // Otherwise (every certain number of draws) flush execution.
++    // This submits commands to the Vulkan driver.
+     scheduler.Flush();
+     draw_counter = 0;
+ }
+@@ -972,8 +906,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
+ 
+ void RasterizerVulkan::UpdateDynamicStates() {
+     auto& regs = maxwell3d->regs;
+-
+-    // Core Dynamic States (Vulkan 1.0) - Always active regardless of dyna_state setting
+     UpdateViewportsState(regs);
+     UpdateScissorsState(regs);
+     UpdateDepthBias(regs);
+@@ -981,8 +913,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
+     UpdateDepthBounds(regs);
+     UpdateStencilFaces(regs);
+     UpdateLineWidth(regs);
+-
+-    // EDS1: CullMode, DepthCompare, FrontFace, StencilOp, DepthBoundsTest, DepthTest, DepthWrite, StencilTest
+     if (device.IsExtExtendedDynamicStateSupported()) {
+         UpdateCullMode(regs);
+         UpdateDepthCompareOp(regs);
+@@ -993,52 +923,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
+             UpdateDepthTestEnable(regs);
+             UpdateDepthWriteEnable(regs);
+             UpdateStencilTestEnable(regs);
+-        }
+-    }
+-
+-    // EDS2: PrimitiveRestart, RasterizerDiscard, DepthBias enable/disable
+-    if (device.IsExtExtendedDynamicState2Supported()) {
+-        UpdatePrimitiveRestartEnable(regs);
+-        UpdateRasterizerDiscardEnable(regs);
+-        UpdateDepthBiasEnable(regs);
+-    }
+-
+-    // EDS2 Extras: LogicOp operation selection
+-    if (device.IsExtExtendedDynamicState2ExtrasSupported()) {
+-        UpdateLogicOp(regs);
+-    }
+-
+-    // EDS3 Enables: LogicOpEnable, DepthClamp, LineStipple, ConservativeRaster
+-    if (device.IsExtExtendedDynamicState3EnablesSupported()) {
+-        using namespace Tegra::Engines;
+-        // AMD Workaround: LogicOp incompatible with float render targets
+-        if (device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_OPEN_SOURCE ||
+-            device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_PROPRIETARY) {
+-            const auto has_float = std::any_of(
+-                regs.vertex_attrib_format.begin(), regs.vertex_attrib_format.end(),
+-                [](const auto& attrib) {
+-                    return attrib.type == Maxwell3D::Regs::VertexAttribute::Type::Float;
++            if (device.IsExtExtendedDynamicState2Supported()) {
++                UpdatePrimitiveRestartEnable(regs);
++                UpdateRasterizerDiscardEnable(regs);
++                UpdateDepthBiasEnable(regs);
++            }
++            if (device.IsExtExtendedDynamicState3EnablesSupported()) {
++                using namespace Tegra::Engines;
++                if (device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_OPEN_SOURCE || device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_PROPRIETARY) {
++                    const auto has_float = std::any_of(
++                        regs.vertex_attrib_format.begin(),
++                        regs.vertex_attrib_format.end(),
++                        [](const auto& attrib) {
++                            return attrib.type == Maxwell3D::Regs::VertexAttribute::Type::Float;
++                        }
++                    );
++                    if (regs.logic_op.enable) {
++                        regs.logic_op.enable = static_cast<u32>(!has_float);
++                    }
+                 }
+-            );
+-            if (regs.logic_op.enable) {
+-                regs.logic_op.enable = static_cast<u32>(!has_float);
++                UpdateLogicOpEnable(regs);
++                UpdateDepthClampEnable(regs);
+             }
+         }
+-        UpdateLogicOpEnable(regs);
+-        UpdateDepthClampEnable(regs);
+-        UpdateLineRasterizationMode(regs);
+-        UpdateLineStippleEnable(regs);
+-        UpdateConservativeRasterizationMode(regs);
+-        UpdateAlphaToCoverageEnable(regs);
+-        UpdateAlphaToOneEnable(regs);
+-    }
+-
+-    // EDS3 Blending: ColorBlendEnable, ColorBlendEquation, ColorWriteMask
+-    if (device.IsExtExtendedDynamicState3BlendingSupported()) {
+-        UpdateBlending(regs);
++        if (device.IsExtExtendedDynamicState2ExtrasSupported()) {
++            UpdateLogicOp(regs);
++        }
++        if (device.IsExtExtendedDynamicState3BlendingSupported()) {
++            UpdateBlending(regs);
++        }
++        if (device.IsExtExtendedDynamicState3EnablesSupported()) {
++            UpdateLineStippleEnable(regs);
++            UpdateConservativeRasterizationMode(regs);
++        }
+     }
+-
+-    // Vertex Input Dynamic State: Independent from EDS levels
+     if (device.IsExtVertexInputDynamicStateSupported()) {
+         if (auto* gp = pipeline_cache.CurrentGraphicsPipeline(); gp && gp->HasDynamicVertexInput()) {
+             UpdateVertexInput(regs);
+@@ -1051,16 +969,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
+ 
+     const auto& regs = maxwell3d->regs;
+     if (!device.IsExtTransformFeedbackSupported()) {
+-        // If the guest enabled transform feedback, warn once that the device lacks support.
+-        if (regs.transform_feedback_enabled != 0) {
+-            std::call_once(warn_unsupported, [&] {
+-                LOG_WARNING(Render_Vulkan, "Transform feedback requested by guest but VK_EXT_transform_feedback is unavailable; queries disabled");
+-            });
+-        } else {
+-            std::call_once(warn_unsupported, [&] {
+-                LOG_INFO(Render_Vulkan, "VK_EXT_transform_feedback not available on device");
+-            });
+-        }
++        std::call_once(warn_unsupported, [&] {
++            LOG_ERROR(Render_Vulkan, "Transform feedbacks used but not supported");
++        });
+         return;
+     }
+     query_cache.CounterEnable(VideoCommon::QueryType::StreamingByteCount,
+@@ -1398,10 +1309,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
+         return;
+     }
+ 
+-    if (!device.SupportsDynamicState3ConservativeRasterizationMode()) {
+-        return;
+-    }
+-
+     scheduler.Record([enable = regs.conservative_raster_enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetConservativeRasterizationModeEXT(
+             enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT
+@@ -1414,50 +1321,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
+         return;
+     }
+ 
+-    if (!device.SupportsDynamicState3LineStippleEnable()) {
+-        return;
+-    }
+-
+     scheduler.Record([enable = regs.line_stipple_enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetLineStippleEnableEXT(enable);
+     });
+ }
+ 
+ void RasterizerVulkan::UpdateLineRasterizationMode(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!device.IsExtLineRasterizationSupported()) {
+-        return;
+-    }
+-    if (!state_tracker.TouchLineRasterizationMode()) {
+-        return;
+-    }
++    // if (!state_tracker.TouchLi()) {
++    //     return;
++    // }
+ 
+-    if (!device.SupportsDynamicState3LineRasterizationMode()) {
+-        static std::once_flag warn_missing_rect;
+-        std::call_once(warn_missing_rect, [] {
+-            LOG_WARNING(Render_Vulkan,
+-                        "Driver lacks rectangular line rasterization support; skipping dynamic "
+-                        "line state updates");
+-        });
+-        return;
+-    }
++    // TODO: The maxwell emulator does not capture line rasters
+ 
+-    const bool wants_smooth = regs.line_anti_alias_enable != 0;
+-    VkLineRasterizationModeEXT mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
+-    if (wants_smooth) {
+-        if (device.SupportsSmoothLines()) {
+-            mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
+-        } else {
+-            static std::once_flag warn_missing_smooth;
+-            std::call_once(warn_missing_smooth, [] {
+-                LOG_WARNING(Render_Vulkan,
+-                            "Line anti-aliasing requested but smoothLines feature unavailable; "
+-                            "using rectangular rasterization");
+-            });
+-        }
+-    }
+-    scheduler.Record([mode](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetLineRasterizationModeEXT(mode);
+-    });
++    // scheduler.Record([enable = regs.line](vk::CommandBuffer cmdbuf) {
++    //     cmdbuf.SetConservativeRasterizationModeEXT(
++    //         enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT
++    //                : VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT);
++    // });
+ }
+ 
+ void RasterizerVulkan::UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+@@ -1499,9 +1379,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
+     if (!state_tracker.TouchLogicOpEnable()) {
+         return;
+     }
+-    if (!device.SupportsDynamicState3LogicOpEnable()) {
+-        return;
+-    }
+     scheduler.Record([enable = regs.logic_op.enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetLogicOpEnableEXT(enable != 0);
+     });
+@@ -1511,9 +1388,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+     if (!state_tracker.TouchDepthClampEnable()) {
+         return;
+     }
+-    if (!device.SupportsDynamicState3DepthClampEnable()) {
+-        return;
+-    }
+     bool is_enabled = !(regs.viewport_clip_control.geometry_clip ==
+                             Maxwell::ViewportClipControl::GeometryClip::Passthrough ||
+                         regs.viewport_clip_control.geometry_clip ==
+@@ -1524,41 +1398,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+         [is_enabled](vk::CommandBuffer cmdbuf) { cmdbuf.SetDepthClampEnableEXT(is_enabled); });
+ }
+ 
+-void RasterizerVulkan::UpdateAlphaToCoverageEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!state_tracker.TouchAlphaToCoverageEnable()) {
+-        return;
+-    }
+-    if (!device.SupportsDynamicState3AlphaToCoverageEnable()) {
+-        return;
+-    }
+-    GraphicsPipeline* const pipeline = pipeline_cache.CurrentGraphicsPipeline();
+-    const bool enable = pipeline != nullptr && pipeline->SupportsAlphaToCoverage() &&
+-                        regs.anti_alias_alpha_control.alpha_to_coverage != 0;
+-    scheduler.Record([enable](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetAlphaToCoverageEnableEXT(enable ? VK_TRUE : VK_FALSE);
+-    });
+-}
+-
+-void RasterizerVulkan::UpdateAlphaToOneEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!state_tracker.TouchAlphaToOneEnable()) {
+-        return;
+-    }
+-    if (!device.SupportsDynamicState3AlphaToOneEnable()) {
+-        static std::once_flag warn_alpha_to_one;
+-        std::call_once(warn_alpha_to_one, [] {
+-            LOG_WARNING(Render_Vulkan,
+-                        "Alpha-to-one is not supported on this device; forcing it disabled");
+-        });
+-        return;
+-    }
+-    GraphicsPipeline* const pipeline = pipeline_cache.CurrentGraphicsPipeline();
+-    const bool enable = pipeline != nullptr && pipeline->SupportsAlphaToOne() &&
+-                        regs.anti_alias_alpha_control.alpha_to_one != 0;
+-    scheduler.Record([enable](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetAlphaToOneEnableEXT(enable ? VK_TRUE : VK_FALSE);
+-    });
+-}
+-
+ void RasterizerVulkan::UpdateDepthCompareOp(Tegra::Engines::Maxwell3D::Regs& regs) {
+     if (!state_tracker.TouchDepthCompareOp()) {
+         return;
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.h b/src/video_core/renderer_vulkan/vk_rasterizer.h
+index b689c6b660..30780b9cbd 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.h
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.h
+@@ -183,8 +183,6 @@ private:
+     void UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+-    void UpdateAlphaToCoverageEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+-    void UpdateAlphaToOneEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateFrontFace(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateStencilOp(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateStencilTestEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+index e19029812b..f4b9696ec1 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
++++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+@@ -13,7 +13,6 @@
+ 
+ #include "common/thread.h"
+ #include "video_core/renderer_vulkan/vk_command_pool.h"
+-#include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
+ #include "video_core/renderer_vulkan/vk_master_semaphore.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "video_core/renderer_vulkan/vk_state_tracker.h"
+@@ -141,27 +140,9 @@ void Scheduler::RequestOutsideRenderPassOperationContext() {
+ 
+ bool Scheduler::UpdateGraphicsPipeline(GraphicsPipeline* pipeline) {
+     if (state.graphics_pipeline == pipeline) {
+-        if (pipeline && pipeline->UsesExtendedDynamicState() &&
+-            state.needs_state_enable_refresh) {
+-            state_tracker.InvalidateStateEnableFlag();
+-            state.needs_state_enable_refresh = false;
+-        }
+         return false;
+     }
+-
+     state.graphics_pipeline = pipeline;
+-
+-    if (!pipeline) {
+-        return true;
+-    }
+-
+-    if (!pipeline->UsesExtendedDynamicState()) {
+-        state.needs_state_enable_refresh = true;
+-    } else if (state.needs_state_enable_refresh) {
+-        state_tracker.InvalidateStateEnableFlag();
+-        state.needs_state_enable_refresh = false;
+-    }
+-
+     return true;
+ }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
+index 5216a436c8..54ab8ba52b 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.h
++++ b/src/video_core/renderer_vulkan/vk_scheduler.h
+@@ -1,6 +1,3 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+ // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -217,7 +214,6 @@ private:
+         GraphicsPipeline* graphics_pipeline = nullptr;
+         bool is_rescaling = false;
+         bool rescaling_defined = false;
+-        bool needs_state_enable_refresh = false;
+     };
+ 
+     void WorkerThread(std::stop_token stop_token);
+diff --git a/src/video_core/renderer_vulkan/vk_state_tracker.cpp b/src/video_core/renderer_vulkan/vk_state_tracker.cpp
+index 79967d540a..242d03cf24 100644
+--- a/src/video_core/renderer_vulkan/vk_state_tracker.cpp
++++ b/src/video_core/renderer_vulkan/vk_state_tracker.cpp
+@@ -48,7 +48,6 @@ Flags MakeInvalidationFlags() {
+         FrontFace,
+         StencilOp,
+         StencilTestEnable,
+-        RasterizerDiscardEnable,
+         VertexBuffers,
+         VertexInput,
+         StateEnable,
+@@ -56,9 +55,6 @@ Flags MakeInvalidationFlags() {
+         DepthBiasEnable,
+         LogicOpEnable,
+         DepthClampEnable,
+-        AlphaToCoverageEnable,
+-        AlphaToOneEnable,
+-        LineRasterizationMode,
+         LogicOp,
+         Blending,
+         ColorMask,
+@@ -152,8 +148,6 @@ void SetupDirtyStateEnable(Tables& tables) {
+     setup(OFF(logic_op.enable), LogicOpEnable);
+     setup(OFF(viewport_clip_control.geometry_clip), DepthClampEnable);
+     setup(OFF(line_stipple_enable), LineStippleEnable);
+-    setup(OFF(anti_alias_alpha_control.alpha_to_coverage), AlphaToCoverageEnable);
+-    setup(OFF(anti_alias_alpha_control.alpha_to_one), AlphaToOneEnable);
+ }
+ 
+ void SetupDirtyDepthCompareOp(Tables& tables) {
+@@ -232,7 +226,6 @@ void SetupRasterModes(Tables &tables) {
+ 
+     table[OFF(line_stipple_params)] = LineStippleParams;
+     table[OFF(conservative_raster_enable)] = ConservativeRasterizationMode;
+-    table[OFF(line_anti_alias_enable)] = LineRasterizationMode;
+ }
+ } // Anonymous namespace
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_state_tracker.h b/src/video_core/renderer_vulkan/vk_state_tracker.h
+index 74bae9e181..aef726658a 100644
+--- a/src/video_core/renderer_vulkan/vk_state_tracker.h
++++ b/src/video_core/renderer_vulkan/vk_state_tracker.h
+@@ -54,7 +54,6 @@ enum : u8 {
+     PrimitiveRestartEnable,
+     RasterizerDiscardEnable,
+     ConservativeRasterizationMode,
+-    LineRasterizationMode,
+     LineStippleEnable,
+     LineStippleParams,
+     DepthBiasEnable,
+@@ -62,8 +61,6 @@ enum : u8 {
+     LogicOp,
+     LogicOpEnable,
+     DepthClampEnable,
+-    AlphaToCoverageEnable,
+-    AlphaToOneEnable,
+ 
+     Blending,
+     BlendEnable,
+@@ -97,10 +94,6 @@ public:
+         (*flags)[Dirty::Scissors] = true;
+     }
+ 
+-    void InvalidateStateEnableFlag() {
+-        (*flags)[Dirty::StateEnable] = true;
+-    }
+-
+     bool TouchViewports() {
+         const bool dirty_viewports = Exchange(Dirty::Viewports, false);
+         const bool rescale_viewports = Exchange(VideoCommon::Dirty::RescaleViewports, false);
+@@ -232,14 +225,6 @@ public:
+         return Exchange(Dirty::DepthClampEnable, false);
+     }
+ 
+-    bool TouchAlphaToCoverageEnable() {
+-        return Exchange(Dirty::AlphaToCoverageEnable, false);
+-    }
+-
+-    bool TouchAlphaToOneEnable() {
+-        return Exchange(Dirty::AlphaToOneEnable, false);
+-    }
+-
+     bool TouchDepthCompareOp() {
+         return Exchange(Dirty::DepthCompareOp, false);
+     }
+@@ -276,10 +261,6 @@ public:
+         return Exchange(Dirty::LogicOp, false);
+     }
+ 
+-    bool TouchLineRasterizationMode() {
+-        return Exchange(Dirty::LineRasterizationMode, false);
+-    }
+-
+     bool ChangePrimitiveTopology(Maxwell::PrimitiveTopology new_topology) {
+         const bool has_changed = current_topology != new_topology;
+         current_topology = new_topology;
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index 7418ad934e..fdd2de2379 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -306,17 +306,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+         swapchain_ci.queueFamilyIndexCount = static_cast<u32>(queue_indices.size());
+         swapchain_ci.pQueueFamilyIndices = queue_indices.data();
+     }
+-    // According to Vulkan spec, when using VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR,
+-    // the base format (imageFormat) MUST be included in pViewFormats
+-    const std::array view_formats{
+-        swapchain_ci.imageFormat,  // Base format MUST be first
+-        VK_FORMAT_B8G8R8A8_UNORM,
+-        VK_FORMAT_B8G8R8A8_SRGB,
+-#ifdef ANDROID
+-        VK_FORMAT_R8G8B8A8_UNORM,  // Android may use RGBA
+-        VK_FORMAT_R8G8B8A8_SRGB,
+-#endif
+-    };
++    static constexpr std::array view_formats{VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB};
+     VkImageFormatListCreateInfo format_list{
+         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR,
+         .pNext = nullptr,
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.h b/src/video_core/renderer_vulkan/vk_swapchain.h
+index 7e99bf8fa7..b3e1c4f025 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.h
++++ b/src/video_core/renderer_vulkan/vk_swapchain.h
+@@ -1,6 +1,3 @@
+-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+ // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -104,7 +101,7 @@ public:
+     }
+ 
+     VkSemaphore CurrentRenderSemaphore() const {
+-        return *render_semaphores[image_index];
++        return *render_semaphores[frame_index];
+     }
+ 
+     u32 GetWidth() const {
+diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+index eb50f36d25..0a41b4c02a 100644
+--- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+@@ -1137,8 +1137,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+                 UNREACHABLE();
+             }
+         }();
+-        // Use shader-based depth/stencil blits if hardware doesn't support the format
+-        // Note: MSAA resolves (MSAA->single) use vkCmdResolveImage which works fine
+         if (!can_blit_depth_stencil) {
+             UNIMPLEMENTED_IF(is_src_msaa || is_dst_msaa);
+             blit_image_helper.BlitDepthStencil(dst_framebuffer, src, dst_region, src_region,
+@@ -1153,15 +1151,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+     const VkImage src_image = src.ImageHandle();
+     const VkImageSubresourceLayers dst_layers = MakeSubresourceLayers(&dst);
+     const VkImageSubresourceLayers src_layers = MakeSubresourceLayers(&src);
+-    const bool is_msaa_to_msaa = is_src_msaa && is_dst_msaa;
+-
+-    // NVIDIA 510+ and Intel crash on MSAA->MSAA blits (scaling operations)
+-    // Fall back to 3D helpers for MSAA scaling
+-    if (is_msaa_to_msaa && device.CantBlitMSAA()) {
+-        // This should be handled by NeedsScaleHelper() and use 3D helpers instead
+-        UNIMPLEMENTED_MSG("MSAA to MSAA blit not supported on this driver");
+-        return;
+-    }
+     const bool is_resolve = is_src_msaa && !is_dst_msaa;
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
+@@ -2295,26 +2284,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
+ 
+ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& tsc) {
+     const auto& device = runtime.device;
+-    // Check if custom border colors are supported
+-    const bool has_custom_border_colors = runtime.device.IsCustomBorderColorsSupported();
+-    const bool has_format_undefined = runtime.device.IsCustomBorderColorWithoutFormatSupported();
++    const bool arbitrary_borders = runtime.device.IsExtCustomBorderColorSupported();
+     const auto color = tsc.BorderColor();
+ 
+-    // Determine border format based on available features:
+-    // - If customBorderColorWithoutFormat is available: use VK_FORMAT_UNDEFINED (most flexible)
+-    // - If only customBorderColors is available: use concrete format (R8G8B8A8_UNORM)
+-    // - If neither is available: use standard border colors (handled by ConvertBorderColor)
+-    const VkFormat border_format = has_format_undefined ? VK_FORMAT_UNDEFINED
+-                                                        : VK_FORMAT_R8G8B8A8_UNORM;
+-
+     const VkSamplerCustomBorderColorCreateInfoEXT border_ci{
+         .sType = VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT,
+         .pNext = nullptr,
++        // TODO: Make use of std::bit_cast once libc++ supports it.
+         .customBorderColor = std::bit_cast<VkClearColorValue>(color),
+-        .format = border_format,
++        .format = VK_FORMAT_UNDEFINED,
+     };
+     const void* pnext = nullptr;
+-    if (has_custom_border_colors) {
++    if (arbitrary_borders) {
+         pnext = &border_ci;
+     }
+     const VkSamplerReductionModeCreateInfoEXT reduction_ci{
+@@ -2348,8 +2329,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
+             .compareOp = MaxwellToVK::Sampler::DepthCompareFunction(tsc.depth_compare_func),
+             .minLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.0f : tsc.MinLod(),
+             .maxLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.25f : tsc.MaxLod(),
+-            .borderColor = has_custom_border_colors ? VK_BORDER_COLOR_FLOAT_CUSTOM_EXT
+-                                                    : ConvertBorderColor(color),
++            .borderColor =
++                arbitrary_borders ? VK_BORDER_COLOR_FLOAT_CUSTOM_EXT : ConvertBorderColor(color),
+             .unnormalizedCoordinates = VK_FALSE,
+         });
+     };
+diff --git a/src/video_core/vulkan_common/vulkan.h b/src/video_core/vulkan_common/vulkan.h
+index 8d2e8e2a37..13f679ff54 100644
+--- a/src/video_core/vulkan_common/vulkan.h
++++ b/src/video_core/vulkan_common/vulkan.h
+@@ -22,17 +22,6 @@
+ 
+ #include <vulkan/vulkan.h>
+ 
+-// Define maintenance 7-9 extension names (not yet in official Vulkan headers)
+-#ifndef VK_KHR_MAINTENANCE_7_EXTENSION_NAME
+-#define VK_KHR_MAINTENANCE_7_EXTENSION_NAME "VK_KHR_maintenance7"
+-#endif
+-#ifndef VK_KHR_MAINTENANCE_8_EXTENSION_NAME
+-#define VK_KHR_MAINTENANCE_8_EXTENSION_NAME "VK_KHR_maintenance8"
+-#endif
+-#ifndef VK_KHR_MAINTENANCE_9_EXTENSION_NAME
+-#define VK_KHR_MAINTENANCE_9_EXTENSION_NAME "VK_KHR_maintenance9"
+-#endif
+-
+ // Sanitize macros
+ #undef CreateEvent
+ #undef CreateSemaphore
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 8c596fe347..45497e7b5a 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -294,10 +294,9 @@ std::unordered_map<VkFormat, VkFormatProperties> GetFormatProperties(vk::Physica
+ #if defined(ANDROID) && defined(ARCHITECTURE_arm64)
+ void OverrideBcnFormats(std::unordered_map<VkFormat, VkFormatProperties>& format_properties) {
+     // These properties are extracted from Adreno driver 512.687.0
+-    constexpr VkFormatFeatureFlags tiling_features{VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+-                                                   VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+-                                                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+-                                                   VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
++    constexpr VkFormatFeatureFlags tiling_features{
++                                                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT |
++                                                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                                    VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
+ 
+     constexpr VkFormatFeatureFlags buffer_features{VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT};
+@@ -485,6 +484,8 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+     is_non_gpu = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_OTHER ||
+                  properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+ 
++    const bool is_intel_igpu = is_integrated && (is_intel_anv || is_intel_windows);
++
+     supports_d24_depth =
+         IsFormatSupported(VK_FORMAT_D24_UNORM_S8_UINT,
+                           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, FormatType::Optimal);
+@@ -495,11 +496,6 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+     CollectToolingInfo();
+ 
+     if (is_qualcomm) {
+-        // Qualcomm Adreno GPUs doesn't handle scaled vertex attributes; keep emulation enabled
+-        must_emulate_scaled_formats = true;
+-        LOG_WARNING(Render_Vulkan,
+-                    "Qualcomm drivers require scaled vertex format emulation; forcing fallback");
+-
+         LOG_WARNING(Render_Vulkan,
+                     "Disabling shader float controls and 64-bit integer features on Qualcomm proprietary drivers");
+         RemoveExtension(extensions.shader_float_controls, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+@@ -562,31 +558,35 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+         }
+ 
+         if (nv_major_version >= 510) {
+-            LOG_WARNING(Render_Vulkan,
+-                        "NVIDIA Drivers >= 510 do not support MSAA->MSAA image blits. "
+-                        "MSAA scaling will use 3D helpers. MSAA resolves work normally.");
++            LOG_WARNING(Render_Vulkan, "NVIDIA Drivers >= 510 do not support MSAA image blits");
+             cant_blit_msaa = true;
+         }
++    }
+ 
+-        // Mali/ NVIDIA proprietary drivers: Shader stencil export not supported
+-        // Use hardware depth/stencil blits instead when available
+-        if (!extensions.shader_stencil_export) {
+-            LOG_INFO(Render_Vulkan,
+-                     "NVIDIA: VK_EXT_shader_stencil_export not supported, using hardware blits "
+-                     "for depth/stencil operations");
+-            LOG_INFO(Render_Vulkan, "  D24S8 hardware blit support: {}",
+-                     is_blit_depth24_stencil8_supported);
+-            LOG_INFO(Render_Vulkan, "  D32S8 hardware blit support: {}",
+-                     is_blit_depth32_stencil8_supported);
+-
+-            if (!is_blit_depth24_stencil8_supported && !is_blit_depth32_stencil8_supported) {
+-                LOG_WARNING(Render_Vulkan,
+-                            "NVIDIA: Neither shader export nor hardware blits available for "
+-                            "depth/stencil. Performance may be degraded.");
+-            }
++    if (extensions.extended_dynamic_state3 && is_radv) {
++        LOG_WARNING(Render_Vulkan, "RADV has broken extendedDynamicState3ColorBlendEquation");
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable = false;
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation = false;
++        dynamic_state3_blending = false;
++
++        const u32 version = (properties.properties.driverVersion << 3) >> 3;
++        if (version < VK_MAKE_API_VERSION(0, 23, 1, 0)) {
++            LOG_WARNING(Render_Vulkan,
++                        "RADV versions older than 23.1.0 have broken depth clamp dynamic state");
++            features.extended_dynamic_state3.extendedDynamicState3DepthClampEnable = false;
++            dynamic_state3_enables = false;
+         }
+     }
+ 
++    if (extensions.extended_dynamic_state3 && (is_amd_driver || driver_id == VK_DRIVER_ID_SAMSUNG_PROPRIETARY)) {
++        // AMD and Samsung drivers have broken extendedDynamicState3ColorBlendEquation
++        LOG_WARNING(Render_Vulkan,
++                    "AMD and Samsung drivers have broken extendedDynamicState3ColorBlendEquation");
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable = false;
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation = false;
++        dynamic_state3_blending = false;
++    }
++
+     sets_per_pool = 64;
+     if (is_amd_driver) {
+         // AMD drivers need a higher amount of Sets per Pool in certain circumstances like in XC2.
+@@ -631,9 +631,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+     }
+ 
+     if (is_intel_windows) {
+-        LOG_WARNING(Render_Vulkan,
+-                    "Intel proprietary drivers do not support MSAA->MSAA image blits. "
+-                    "MSAA scaling will use 3D helpers. MSAA resolves work normally.");
++        LOG_WARNING(Render_Vulkan, "Intel proprietary drivers do not support MSAA image blits");
+         cant_blit_msaa = true;
+     }
+ 
+@@ -650,57 +648,53 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+             (std::min)(properties.properties.limits.maxVertexInputBindings, 16U);
+     }
+ 
+-    if (is_turnip || is_qualcomm) {
+-        LOG_WARNING(Render_Vulkan, "Driver requires higher-than-reported binding limits");
++    if (is_turnip) {
++        LOG_WARNING(Render_Vulkan, "Turnip requires higher-than-reported binding limits");
+         properties.properties.limits.maxVertexInputBindings = 32;
+     }
+ 
+-    const auto dyna_state = Settings::values.dyna_state.GetValue();
+-
+-    // Base dynamic states (VIEWPORT, SCISSOR, DEPTH_BIAS, etc.) are ALWAYS active in vk_graphics_pipeline.cpp
+-    // This slider controls EXTENDED dynamic states with accumulative levels per Vulkan specs:
+-    //   Level 0 = Core Dynamic States only (Vulkan 1.0)
+-    //   Level 1 = Core + VK_EXT_extended_dynamic_state
+-    //   Level 2 = Core + VK_EXT_extended_dynamic_state + VK_EXT_extended_dynamic_state2
+-    //   Level 3 = Core + VK_EXT_extended_dynamic_state + VK_EXT_extended_dynamic_state2 + VK_EXT_extended_dynamic_state3
+-
+-    switch (dyna_state) {
+-    case Settings::ExtendedDynamicState::Disabled:
+-        // Level 0: Disable all extended dynamic state extensions
+-        RemoveExtensionFeature(extensions.extended_dynamic_state, features.extended_dynamic_state,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
++    if (!extensions.extended_dynamic_state && extensions.extended_dynamic_state2) {
++        LOG_INFO(Render_Vulkan,
++                 "Removing extendedDynamicState2 due to missing extendedDynamicState");
+         RemoveExtensionFeature(extensions.extended_dynamic_state2, features.extended_dynamic_state2,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+-        RemoveExtensionFeature(extensions.extended_dynamic_state3, features.extended_dynamic_state3,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+-        dynamic_state3_blending = false;
+-        dynamic_state3_enables = false;
+-        break;
+-    case Settings::ExtendedDynamicState::EDS1:
+-        // Level 1: Enable EDS1, disable EDS2 and EDS3
+-        RemoveExtensionFeature(extensions.extended_dynamic_state2, features.extended_dynamic_state2,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
++                               VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
++    }
++
++    if (!extensions.extended_dynamic_state2 && extensions.extended_dynamic_state3) {
++        LOG_INFO(Render_Vulkan,
++                 "Removing extendedDynamicState3 due to missing extendedDynamicState2");
+         RemoveExtensionFeature(extensions.extended_dynamic_state3, features.extended_dynamic_state3,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
++                               VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+         dynamic_state3_blending = false;
+         dynamic_state3_enables = false;
+-        break;
+-    case Settings::ExtendedDynamicState::EDS2:
+-        // Level 2: Enable EDS1 + EDS2, disable EDS3
+-        RemoveExtensionFeature(extensions.extended_dynamic_state3, features.extended_dynamic_state3,
+-                              VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
++    }
++
++    const auto dyna_state = u32(Settings::values.dyna_state.GetValue());
++
++    // Mesa Intel drivers on UHD 620 have broken EDS causing extreme flickering - unknown if it affects other iGPUs
++    // ALSO affects ALL versions of UHD drivers on Windows 10+, seems to cause even worse issues like straight up crashing
++    // So... Yeah, UHD drivers fucking suck -- maybe one day we can work past this, maybe; some driver hacking?
++    // And then we can rest in peace by doing `< VK_MAKE_API_VERSION(26, 0, 0)` for our beloved mesa drivers... one day
++    if ((is_mvk || is_intel_igpu) && dyna_state != 0) {
++        LOG_WARNING(Render_Vulkan, "Driver has broken dynamic state, forcing to 0 to prevent graphical issues");
++        Settings::values.dyna_state.SetValue(Settings::ExtendedDynamicState::Disabled);
++    }
++
++    switch (dyna_state) {
++    case 0:
++        RemoveExtensionFeature(extensions.extended_dynamic_state, features.extended_dynamic_state, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
++        [[fallthrough]];
++    case 1:
++        RemoveExtensionFeature(extensions.extended_dynamic_state2, features.extended_dynamic_state2, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
++        [[fallthrough]];
++    case 2:
++        RemoveExtensionFeature(extensions.extended_dynamic_state3, features.extended_dynamic_state3, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+         dynamic_state3_blending = false;
+         dynamic_state3_enables = false;
+         break;
+-    case Settings::ExtendedDynamicState::EDS3:
+-    default:
+-        // Level 3: Enable all (EDS1 + EDS2 + EDS3)
+-        break;
+     }
+ 
+-    // VK_EXT_vertex_input_dynamic_state is independent from EDS
+-    // It can be enabled even without extended_dynamic_state
+-    if (!Settings::values.vertex_input_dynamic_state.GetValue()) {
++    if (!Settings::values.vertex_input_dynamic_state.GetValue() || !extensions.extended_dynamic_state) {
+         RemoveExtensionFeature(extensions.vertex_input_dynamic_state, features.vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+     }
+ 
+@@ -788,8 +782,8 @@ void Device::SaveShader(std::span<const u32> spirv) const {
+ }
+ 
+ bool Device::ComputeIsOptimalAstcSupported() const {
+-    // Verify hardware supports all ASTC formats with optimal tiling to avoid software conversion
+-    static constexpr std::array<VkFormat, 28> astc_formats = {
++    // Disable for now to avoid converting ASTC twice.
++    static constexpr std::array astc_formats = {
+         VK_FORMAT_ASTC_4x4_UNORM_BLOCK,   VK_FORMAT_ASTC_4x4_SRGB_BLOCK,
+         VK_FORMAT_ASTC_5x4_UNORM_BLOCK,   VK_FORMAT_ASTC_5x4_SRGB_BLOCK,
+         VK_FORMAT_ASTC_5x5_UNORM_BLOCK,   VK_FORMAT_ASTC_5x5_SRGB_BLOCK,
+@@ -808,10 +802,9 @@ bool Device::ComputeIsOptimalAstcSupported() const {
+     if (!features.features.textureCompressionASTC_LDR) {
+         return false;
+     }
+-    const auto format_feature_usage{VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+-                                    VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+-                                    VK_FORMAT_FEATURE_BLIT_DST_BIT |
+-                                    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
++    const auto format_feature_usage{
++                                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT |
++                                    VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
+     for (const auto format : astc_formats) {
+         const auto physical_format_properties{physical.GetFormatProperties(format)};
+@@ -1004,7 +997,7 @@ bool Device::GetSuitability(bool requires_swapchain) {
+     // Set next pointer.
+     void** next = &features2.pNext;
+ 
+-    // Vulkan 1.2 and 1.3 features
++    // Vulkan 1.2, 1.3 and 1.4 features
+     if (instance_version >= VK_API_VERSION_1_2) {
+         features_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+         features_1_3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+@@ -1115,16 +1108,6 @@ bool Device::GetSuitability(bool requires_swapchain) {
+             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT;
+         SetNext(next, properties.transform_feedback);
+     }
+-    if (extensions.maintenance5) {
+-        properties.maintenance5.sType =
+-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES_KHR;
+-        SetNext(next, properties.maintenance5);
+-    }
+-    if (extensions.multi_draw) {
+-        properties.multi_draw.sType =
+-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT;
+-        SetNext(next, properties.multi_draw);
+-    }
+ 
+     // Perform the property fetch.
+     physical.GetProperties2(properties2);
+@@ -1157,70 +1140,14 @@ bool Device::GetSuitability(bool requires_swapchain) {
+         }
+     }
+ 
+-    // VK_DYNAMIC_STATE
+-
+-    // Driver detection variables for workarounds in GetSuitability
+-    const VkDriverId driver_id = properties.driver.driverID;
+-    const bool is_intel_windows = driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS;
+-
+-    // VK_EXT_extended_dynamic_state2 below this will appear drivers that need workarounds.
+-
+-    // VK_EXT_extended_dynamic_state3 below this will appear drivers that need workarounds.
+-
+-    // Samsung: Broken extendedDynamicState3ColorBlendEquation
+-    // Disable blend equation dynamic state, force static pipeline state
+-    if (extensions.extended_dynamic_state3 &&
+-        (driver_id == VK_DRIVER_ID_SAMSUNG_PROPRIETARY)) {
+-        LOG_WARNING(Render_Vulkan,
+-                    "Samsung: Disabling broken extendedDynamicState3ColorBlendEquation");
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable = false;
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation = false;
+-    }
+-
+-    // Intel Windows < 27.20.100.0: Broken VertexInputDynamicState
+-    // Disable VertexInputDynamicState on old Intel Windows drivers
+-    if (extensions.vertex_input_dynamic_state && is_intel_windows) {
+-        const u32 version = (properties.properties.driverVersion << 3) >> 3;
+-        if (version < VK_MAKE_API_VERSION(27, 20, 100, 0)) {
+-            LOG_WARNING(Render_Vulkan,
+-                        "Intel Windows < 27.20.100.0: Disabling broken VK_EXT_vertex_input_dynamic_state");
+-            RemoveExtensionFeature(extensions.vertex_input_dynamic_state,
+-                                   features.vertex_input_dynamic_state,
+-                                   VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+-        }
+-    }
+-
+-    if (u32(Settings::values.dyna_state.GetValue()) == 0) {
+-        LOG_INFO(Render_Vulkan, "Extended Dynamic State disabled by user setting, clearing all EDS features");
+-        features.custom_border_color.customBorderColors = false;
+-        features.custom_border_color.customBorderColorWithoutFormat = false;
+-        features.extended_dynamic_state.extendedDynamicState = false;
+-        features.extended_dynamic_state2.extendedDynamicState2 = false;
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable = false;
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation = false;
+-        features.extended_dynamic_state3.extendedDynamicState3ColorWriteMask = false;
+-        features.extended_dynamic_state3.extendedDynamicState3DepthClampEnable = false;
+-        features.extended_dynamic_state3.extendedDynamicState3LogicOpEnable = false;
+-    }
+-
+     // Return whether we were suitable.
+     return suitable;
+ }
+ 
+ void Device::RemoveUnsuitableExtensions() {
+     // VK_EXT_custom_border_color
+-    // Enable extension if driver supports it, then check individual features
+-    // - customBorderColors: Required to use VK_BORDER_COLOR_FLOAT_CUSTOM_EXT
+-    // - customBorderColorWithoutFormat: Optional, allows VK_FORMAT_UNDEFINED
+-    // If only customBorderColors is available, we must provide a specific format
+-    if (extensions.custom_border_color) {
+-        // Verify that at least customBorderColors is available
+-        if (!features.custom_border_color.customBorderColors) {
+-            LOG_WARNING(Render_Vulkan,
+-                        "VK_EXT_custom_border_color reported but customBorderColors feature not available, disabling");
+-            extensions.custom_border_color = false;
+-        }
+-    }
++    extensions.custom_border_color = features.custom_border_color.customBorderColors &&
++                                     features.custom_border_color.customBorderColorWithoutFormat;
+     RemoveExtensionFeatureIfUnsuitable(extensions.custom_border_color, features.custom_border_color,
+                                        VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+ 
+@@ -1249,79 +1176,21 @@ void Device::RemoveUnsuitableExtensions() {
+                                        VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+ 
+     // VK_EXT_extended_dynamic_state3
+-    const bool supports_color_blend_enable =
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable;
+-    const bool supports_color_blend_equation =
+-        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation;
+-    const bool supports_color_write_mask =
++    dynamic_state3_blending =
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEnable &&
++        features.extended_dynamic_state3.extendedDynamicState3ColorBlendEquation &&
+         features.extended_dynamic_state3.extendedDynamicState3ColorWriteMask;
+-    dynamic_state3_blending = supports_color_blend_enable && supports_color_blend_equation &&
+-                              supports_color_write_mask;
+-
+-    const bool supports_depth_clamp_enable =
+-        features.extended_dynamic_state3.extendedDynamicState3DepthClampEnable;
+-    const bool supports_logic_op_enable =
++    dynamic_state3_enables =
++        features.extended_dynamic_state3.extendedDynamicState3DepthClampEnable &&
+         features.extended_dynamic_state3.extendedDynamicState3LogicOpEnable;
+-    const bool supports_line_raster_mode =
+-        features.extended_dynamic_state3.extendedDynamicState3LineRasterizationMode &&
+-        extensions.line_rasterization && features.line_rasterization.rectangularLines;
+-    const bool supports_conservative_raster_mode =
+-        features.extended_dynamic_state3.extendedDynamicState3ConservativeRasterizationMode &&
+-        extensions.conservative_rasterization;
+-    const bool supports_line_stipple_enable =
+-        features.extended_dynamic_state3.extendedDynamicState3LineStippleEnable &&
+-        extensions.line_rasterization && features.line_rasterization.stippledRectangularLines;
+-    const bool supports_alpha_to_coverage =
+-        features.extended_dynamic_state3.extendedDynamicState3AlphaToCoverageEnable;
+-    const bool supports_alpha_to_one =
+-        features.extended_dynamic_state3.extendedDynamicState3AlphaToOneEnable &&
+-        features.features.alphaToOne;
+-
+-    dynamic_state3_depth_clamp_enable = supports_depth_clamp_enable;
+-    dynamic_state3_logic_op_enable = supports_logic_op_enable;
+-    dynamic_state3_line_raster_mode = supports_line_raster_mode;
+-    dynamic_state3_conservative_raster_mode = supports_conservative_raster_mode;
+-    dynamic_state3_line_stipple_enable = supports_line_stipple_enable;
+-    dynamic_state3_alpha_to_coverage = supports_alpha_to_coverage;
+-    dynamic_state3_alpha_to_one = supports_alpha_to_one;
+-
+-    dynamic_state3_enables = dynamic_state3_depth_clamp_enable || dynamic_state3_logic_op_enable ||
+-                             dynamic_state3_line_raster_mode ||
+-                             dynamic_state3_conservative_raster_mode ||
+-                             dynamic_state3_line_stipple_enable ||
+-                             dynamic_state3_alpha_to_coverage || dynamic_state3_alpha_to_one;
+ 
+     extensions.extended_dynamic_state3 = dynamic_state3_blending || dynamic_state3_enables;
+-    if (!extensions.extended_dynamic_state3) {
+-        dynamic_state3_blending = false;
+-        dynamic_state3_enables = false;
+-        dynamic_state3_depth_clamp_enable = false;
+-        dynamic_state3_logic_op_enable = false;
+-        dynamic_state3_line_raster_mode = false;
+-        dynamic_state3_conservative_raster_mode = false;
+-        dynamic_state3_line_stipple_enable = false;
+-        dynamic_state3_alpha_to_coverage = false;
+-        dynamic_state3_alpha_to_one = false;
+-    }
++    dynamic_state3_blending = dynamic_state3_blending && extensions.extended_dynamic_state3;
++    dynamic_state3_enables = dynamic_state3_enables && extensions.extended_dynamic_state3;
+     RemoveExtensionFeatureIfUnsuitable(extensions.extended_dynamic_state3,
+                                        features.extended_dynamic_state3,
+                                        VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+ 
+-    // VK_EXT_robustness2
+-    // Enable if at least one robustness2 feature is available
+-    extensions.robustness_2 = features.robustness2.robustBufferAccess2 ||
+-                              features.robustness2.robustImageAccess2 ||
+-                              features.robustness2.nullDescriptor;
+-
+-    RemoveExtensionFeatureIfUnsuitable(extensions.robustness_2, features.robustness2,
+-                                       VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+-
+-    // VK_EXT_image_robustness
+-    // Enable if robustImageAccess is available
+-    extensions.image_robustness = features.image_robustness.robustImageAccess;
+-    RemoveExtensionFeatureIfUnsuitable(extensions.image_robustness, features.image_robustness,
+-                                       VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME);
+-
+     // VK_EXT_provoking_vertex
+     if (Settings::values.provoking_vertex.GetValue()) {
+         extensions.provoking_vertex = features.provoking_vertex.provokingVertexLast
+@@ -1359,21 +1228,15 @@ void Device::RemoveUnsuitableExtensions() {
+                                        VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+ 
+     // VK_EXT_transform_feedback
+-    // We only require the basic transformFeedback feature and at least
+-    // one transform feedback buffer. We keep transformFeedbackQueries as it's used by
+-    // the streaming byte count implementation. GeometryStreams and multiple streams
+-    // are not strictly required since we currently support only stream 0.
+     extensions.transform_feedback =
+         features.transform_feedback.transformFeedback &&
++        features.transform_feedback.geometryStreams &&
++        properties.transform_feedback.maxTransformFeedbackStreams >= 4 &&
+         properties.transform_feedback.maxTransformFeedbackBuffers > 0 &&
+-        properties.transform_feedback.transformFeedbackQueries;
++        properties.transform_feedback.transformFeedbackQueries &&
++        properties.transform_feedback.transformFeedbackDraw;
+     RemoveExtensionFeatureIfUnsuitable(extensions.transform_feedback, features.transform_feedback,
+                                        VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+-    if (extensions.transform_feedback) {
+-        LOG_INFO(Render_Vulkan, "VK_EXT_transform_feedback enabled (buffers={}, queries={})",
+-                 properties.transform_feedback.maxTransformFeedbackBuffers,
+-                 properties.transform_feedback.transformFeedbackQueries);
+-    }
+ 
+     // VK_EXT_vertex_input_dynamic_state
+     extensions.vertex_input_dynamic_state =
+@@ -1382,17 +1245,6 @@ void Device::RemoveUnsuitableExtensions() {
+                                        features.vertex_input_dynamic_state,
+                                        VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+ 
+-    // VK_EXT_multi_draw
+-    extensions.multi_draw = features.multi_draw.multiDraw;
+-
+-    if (extensions.multi_draw) {
+-        LOG_INFO(Render_Vulkan, "VK_EXT_multi_draw: maxMultiDrawCount={}",
+-                 properties.multi_draw.maxMultiDrawCount);
+-    }
+-
+-    RemoveExtensionFeatureIfUnsuitable(extensions.multi_draw, features.multi_draw,
+-                                       VK_EXT_MULTI_DRAW_EXTENSION_NAME);
+-
+     // VK_KHR_pipeline_executable_properties
+     if (Settings::values.renderer_shader_feedback.GetValue()) {
+         extensions.pipeline_executable_properties =
+@@ -1416,76 +1268,6 @@ void Device::RemoveUnsuitableExtensions() {
+     RemoveExtensionFeatureIfUnsuitable(extensions.workgroup_memory_explicit_layout,
+                                        features.workgroup_memory_explicit_layout,
+                                        VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
+-
+-    // VK_EXT_swapchain_maintenance1 (extension only, has features)
+-    // Requires VK_EXT_surface_maintenance1 instance extension
+-    extensions.swapchain_maintenance1 = features.swapchain_maintenance1.swapchainMaintenance1;
+-    if (extensions.swapchain_maintenance1) {
+-        // Check if VK_EXT_surface_maintenance1 instance extension is available
+-        const auto instance_extensions = vk::EnumerateInstanceExtensionProperties(dld);
+-        const bool has_surface_maintenance1 = instance_extensions && std::ranges::any_of(*instance_extensions,
+-            [](const VkExtensionProperties& prop) {
+-                return std::strcmp(prop.extensionName, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME) == 0;
+-            });
+-        if (!has_surface_maintenance1) {
+-            LOG_WARNING(Render_Vulkan,
+-                        "VK_EXT_swapchain_maintenance1 requires VK_EXT_surface_maintenance1, disabling");
+-            extensions.swapchain_maintenance1 = false;
+-            features.swapchain_maintenance1.swapchainMaintenance1 = false;
+-        }
+-    }
+-    RemoveExtensionFeatureIfUnsuitable(extensions.swapchain_maintenance1, features.swapchain_maintenance1,
+-                                       VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance1 (core in Vulkan 1.1, no features)
+-    extensions.maintenance1 = loaded_extensions.contains(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance1, VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance2 (core in Vulkan 1.1, no features)
+-    extensions.maintenance2 = loaded_extensions.contains(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance2, VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance3 (core in Vulkan 1.1, no features)
+-    extensions.maintenance3 = loaded_extensions.contains(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance3, VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance4
+-    extensions.maintenance4 = features.maintenance4.maintenance4;
+-    RemoveExtensionFeatureIfUnsuitable(extensions.maintenance4, features.maintenance4,
+-                                       VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance5
+-    extensions.maintenance5 = features.maintenance5.maintenance5;
+-
+-    if (extensions.maintenance5) {
+-        LOG_INFO(Render_Vulkan, "VK_KHR_maintenance5 properties: polygonModePointSize={} "
+-                                "depthStencilSwizzleOne={} earlyFragmentTests={} nonStrictWideLines={}",
+-                 properties.maintenance5.polygonModePointSize,
+-                 properties.maintenance5.depthStencilSwizzleOneSupport,
+-                 properties.maintenance5.earlyFragmentMultisampleCoverageAfterSampleCounting &&
+-                 properties.maintenance5.earlyFragmentSampleMaskTestBeforeSampleCounting,
+-                 properties.maintenance5.nonStrictWideLinesUseParallelogram);
+-    }
+-
+-    RemoveExtensionFeatureIfUnsuitable(extensions.maintenance5, features.maintenance5,
+-                                       VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance6
+-    extensions.maintenance6 = features.maintenance6.maintenance6;
+-    RemoveExtensionFeatureIfUnsuitable(extensions.maintenance6, features.maintenance6,
+-                                       VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance7 (proposed for Vulkan 1.4, no features)
+-    extensions.maintenance7 = loaded_extensions.contains(VK_KHR_MAINTENANCE_7_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance7, VK_KHR_MAINTENANCE_7_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance8 (proposed for Vulkan 1.4, no features)
+-    extensions.maintenance8 = loaded_extensions.contains(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance8, VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+-
+-    // VK_KHR_maintenance9 (proposed for Vulkan 1.4, no features)
+-    extensions.maintenance9 = loaded_extensions.contains(VK_KHR_MAINTENANCE_9_EXTENSION_NAME);
+-    RemoveExtensionIfUnsuitable(extensions.maintenance9, VK_KHR_MAINTENANCE_9_EXTENSION_NAME);
+ }
+ 
+ void Device::SetupFamilies(VkSurfaceKHR surface) {
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index acb2954104..1032513b7f 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -38,13 +38,9 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE(KHR, TimelineSemaphore, TIMELINE_SEMAPHORE, timeline_semaphore)
+ 
+ #define FOR_EACH_VK_FEATURE_1_3(FEATURE)                                                           \
+-    FEATURE(EXT, ImageRobustness, IMAGE_ROBUSTNESS, image_robustness)                              \
+     FEATURE(EXT, ShaderDemoteToHelperInvocation, SHADER_DEMOTE_TO_HELPER_INVOCATION,               \
+             shader_demote_to_helper_invocation)                                                    \
+-    FEATURE(EXT, SubgroupSizeControl, SUBGROUP_SIZE_CONTROL, subgroup_size_control)                \
+-    FEATURE(KHR, Maintenance4, MAINTENANCE_4, maintenance4)
+-
+-#define FOR_EACH_VK_FEATURE_1_4(FEATURE)
++    FEATURE(EXT, SubgroupSizeControl, SUBGROUP_SIZE_CONTROL, subgroup_size_control)
+ 
+ // Define all features which may be used by the implementation and require an extension here.
+ #define FOR_EACH_VK_FEATURE_EXT(FEATURE)                                                           \
+@@ -57,16 +53,12 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE(EXT, 4444Formats, 4444_FORMATS, format_a4b4g4r4)                                       \
+     FEATURE(EXT, IndexTypeUint8, INDEX_TYPE_UINT8, index_type_uint8)                               \
+     FEATURE(EXT, LineRasterization, LINE_RASTERIZATION, line_rasterization)                        \
+-    FEATURE(EXT, MultiDraw, MULTI_DRAW, multi_draw)                                                \
+     FEATURE(EXT, PrimitiveTopologyListRestart, PRIMITIVE_TOPOLOGY_LIST_RESTART,                    \
+             primitive_topology_list_restart)                                                       \
+     FEATURE(EXT, ProvokingVertex, PROVOKING_VERTEX, provoking_vertex)                              \
+     FEATURE(EXT, Robustness2, ROBUSTNESS_2, robustness2)                                           \
+     FEATURE(EXT, TransformFeedback, TRANSFORM_FEEDBACK, transform_feedback)                        \
+     FEATURE(EXT, VertexInputDynamicState, VERTEX_INPUT_DYNAMIC_STATE, vertex_input_dynamic_state)  \
+-    FEATURE(EXT, SwapchainMaintenance1, SWAPCHAIN_MAINTENANCE_1, swapchain_maintenance1)           \
+-    FEATURE(KHR, Maintenance5, MAINTENANCE_5, maintenance5)                                        \
+-    FEATURE(KHR, Maintenance6, MAINTENANCE_6, maintenance6)                                        \
+     FEATURE(KHR, PipelineExecutableProperties, PIPELINE_EXECUTABLE_PROPERTIES,                     \
+             pipeline_executable_properties)                                                        \
+     FEATURE(KHR, WorkgroupMemoryExplicitLayout, WORKGROUP_MEMORY_EXPLICIT_LAYOUT,                  \
+@@ -93,12 +85,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     EXTENSION(KHR, SWAPCHAIN, swapchain)                                                           \
+     EXTENSION(KHR, SWAPCHAIN_MUTABLE_FORMAT, swapchain_mutable_format)                             \
+     EXTENSION(KHR, IMAGE_FORMAT_LIST, image_format_list)                                           \
+-    EXTENSION(KHR, MAINTENANCE_1, maintenance1)                                                    \
+-    EXTENSION(KHR, MAINTENANCE_2, maintenance2)                                                    \
+-    EXTENSION(KHR, MAINTENANCE_3, maintenance3)                                                    \
+-    EXTENSION(KHR, MAINTENANCE_7, maintenance7)                                                    \
+-    EXTENSION(KHR, MAINTENANCE_8, maintenance8)                                                    \
+-    EXTENSION(KHR, MAINTENANCE_9, maintenance9)                                                    \
+     EXTENSION(NV, DEVICE_DIAGNOSTICS_CONFIG, device_diagnostics_config)                            \
+     EXTENSION(NV, GEOMETRY_SHADER_PASSTHROUGH, geometry_shader_passthrough)                        \
+     EXTENSION(NV, VIEWPORT_ARRAY2, viewport_array2)                                                \
+@@ -125,7 +111,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     EXTENSION_NAME(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)                                 \
+     EXTENSION_NAME(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)                                     \
+     EXTENSION_NAME(VK_EXT_4444_FORMATS_EXTENSION_NAME)                                             \
+-    EXTENSION_NAME(VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME)                                         \
+     EXTENSION_NAME(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME)                                       \
+     EXTENSION_NAME(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)                                             \
+     EXTENSION_NAME(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)                               \
+@@ -175,7 +160,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE_NAME(depth_bias_control, depthBiasExact)                                               \
+     FEATURE_NAME(extended_dynamic_state, extendedDynamicState)                                     \
+     FEATURE_NAME(format_a4b4g4r4, formatA4B4G4R4)                                                  \
+-    FEATURE_NAME(image_robustness, robustImageAccess)                                              \
+     FEATURE_NAME(index_type_uint8, indexTypeUint8)                                                 \
+     FEATURE_NAME(primitive_topology_list_restart, primitiveTopologyListRestart)                    \
+     FEATURE_NAME(provoking_vertex, provokingVertexLast)                                            \
+@@ -470,11 +454,6 @@ public:
+         return extensions.swapchain_mutable_format;
+     }
+ 
+-    /// Returns true if VK_EXT_swapchain_maintenance1 is enabled.
+-    bool IsExtSwapchainMaintenance1Enabled() const {
+-        return extensions.swapchain_maintenance1;
+-    }
+-
+     /// Returns true if VK_KHR_shader_float_controls is enabled.
+     bool IsKhrShaderFloatControlsSupported() const {
+         return extensions.shader_float_controls;
+@@ -511,18 +490,10 @@ public:
+     }
+ 
+     /// Returns true if the device supports VK_EXT_shader_stencil_export.
+-    /// Note: Most Mali/NVIDIA drivers don't support this. Use hardware blits as fallback.
+     bool IsExtShaderStencilExportSupported() const {
+         return extensions.shader_stencil_export;
+     }
+ 
+-    /// Returns true if depth/stencil operations can be performed efficiently.
+-    /// Either through shader export or hardware blits.
+-    bool CanPerformDepthStencilOperations() const {
+-        return extensions.shader_stencil_export || is_blit_depth24_stencil8_supported ||
+-               is_blit_depth32_stencil8_supported;
+-    }
+-
+     /// Returns true if the device supports VK_EXT_depth_range_unrestricted.
+     bool IsExtDepthRangeUnrestrictedSupported() const {
+         return extensions.depth_range_unrestricted;
+@@ -563,46 +534,6 @@ public:
+         return extensions.custom_border_color;
+     }
+ 
+-    /// Returns true if the device supports VK_EXT_image_robustness.
+-    bool IsExtImageRobustnessSupported() const {
+-        return extensions.image_robustness;
+-    }
+-
+-    /// Returns true if robustImageAccess is supported.
+-    bool IsRobustImageAccessSupported() const {
+-        return features.image_robustness.robustImageAccess;
+-    }
+-
+-    /// Returns true if the device supports VK_EXT_robustness2.
+-    bool IsExtRobustness2Supported() const {
+-        return extensions.robustness_2;
+-    }
+-
+-    /// Returns true if robustBufferAccess2 is supported.
+-    bool IsRobustBufferAccess2Supported() const {
+-        return features.robustness2.robustBufferAccess2;
+-    }
+-
+-    /// Returns true if robustImageAccess2 is supported.
+-    bool IsRobustImageAccess2Supported() const {
+-        return features.robustness2.robustImageAccess2;
+-    }
+-
+-    /// Returns true if nullDescriptor is supported.
+-    bool IsNullDescriptorSupported() const {
+-        return features.robustness2.nullDescriptor;
+-    }
+-
+-    /// Returns true if customBorderColors feature is available.
+-    bool IsCustomBorderColorsSupported() const {
+-        return features.custom_border_color.customBorderColors;
+-    }
+-
+-    /// Returns true if customBorderColorWithoutFormat feature is available.
+-    bool IsCustomBorderColorWithoutFormatSupported() const {
+-        return features.custom_border_color.customBorderColorWithoutFormat;
+-    }
+-
+     /// Returns true if the device supports VK_EXT_extended_dynamic_state.
+     bool IsExtExtendedDynamicStateSupported() const {
+         return extensions.extended_dynamic_state;
+@@ -652,50 +583,6 @@ public:
+         return extensions.line_rasterization;
+     }
+ 
+-    bool SupportsRectangularLines() const {
+-        return features.line_rasterization.rectangularLines != VK_FALSE;
+-    }
+-
+-    bool SupportsSmoothLines() const {
+-        return features.line_rasterization.smoothLines != VK_FALSE;
+-    }
+-
+-    bool SupportsStippledRectangularLines() const {
+-        return features.line_rasterization.stippledRectangularLines != VK_FALSE;
+-    }
+-
+-    bool SupportsAlphaToOne() const {
+-        return features.features.alphaToOne != VK_FALSE;
+-    }
+-
+-    bool SupportsDynamicState3DepthClampEnable() const {
+-        return dynamic_state3_depth_clamp_enable;
+-    }
+-
+-    bool SupportsDynamicState3LogicOpEnable() const {
+-        return dynamic_state3_logic_op_enable;
+-    }
+-
+-    bool SupportsDynamicState3LineRasterizationMode() const {
+-        return dynamic_state3_line_raster_mode;
+-    }
+-
+-    bool SupportsDynamicState3ConservativeRasterizationMode() const {
+-        return dynamic_state3_conservative_raster_mode;
+-    }
+-
+-    bool SupportsDynamicState3LineStippleEnable() const {
+-        return dynamic_state3_line_stipple_enable;
+-    }
+-
+-    bool SupportsDynamicState3AlphaToCoverageEnable() const {
+-        return dynamic_state3_alpha_to_coverage;
+-    }
+-
+-    bool SupportsDynamicState3AlphaToOneEnable() const {
+-        return dynamic_state3_alpha_to_one;
+-    }
+-
+     /// Returns true if the device supports VK_EXT_vertex_input_dynamic_state.
+     bool IsExtVertexInputDynamicStateSupported() const {
+         return extensions.vertex_input_dynamic_state;
+@@ -828,73 +715,6 @@ public:
+         return features2.features.multiViewport;
+     }
+ 
+-    /// Returns true if the device supports VK_KHR_maintenance1.
+-    bool IsKhrMaintenance1Supported() const {
+-        return extensions.maintenance1;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance2.
+-    bool IsKhrMaintenance2Supported() const {
+-        return extensions.maintenance2;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance3.
+-    bool IsKhrMaintenance3Supported() const {
+-        return extensions.maintenance3;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance4.
+-    bool IsKhrMaintenance4Supported() const {
+-        return extensions.maintenance4;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance5.
+-    bool IsKhrMaintenance5Supported() const {
+-        return extensions.maintenance5;
+-    }
+-
+-    /// Returns true if polygon mode POINT supports gl_PointSize.
+-    bool SupportsPolygonModePointSize() const {
+-        return extensions.maintenance5 && properties.maintenance5.polygonModePointSize;
+-    }
+-
+-    /// Returns true if depth/stencil swizzle ONE is supported.
+-    bool SupportsDepthStencilSwizzleOne() const {
+-        return extensions.maintenance5 && properties.maintenance5.depthStencilSwizzleOneSupport;
+-    }
+-
+-    /// Returns true if early fragment tests optimizations are available.
+-    bool SupportsEarlyFragmentTests() const {
+-        return extensions.maintenance5 &&
+-               properties.maintenance5.earlyFragmentMultisampleCoverageAfterSampleCounting &&
+-               properties.maintenance5.earlyFragmentSampleMaskTestBeforeSampleCounting;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance6.
+-    bool IsKhrMaintenance6Supported() const {
+-        return extensions.maintenance6;
+-    }
+-
+-    /// Returns true if the device supports VK_EXT_multi_draw.
+-    bool IsExtMultiDrawSupported() const {
+-        return extensions.multi_draw;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance7.
+-    bool IsKhrMaintenance7Supported() const {
+-        return extensions.maintenance7;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance8.
+-    bool IsKhrMaintenance8Supported() const {
+-        return extensions.maintenance8;
+-    }
+-
+-    /// Returns true if the device supports VK_KHR_maintenance9.
+-    bool IsKhrMaintenance9Supported() const {
+-        return extensions.maintenance9;
+-    }
+-
+     /// Returns true if the device supports UINT8 index buffer conversion via compute shader.
+     bool SupportsUint8Indices() const {
+         return features.bit8_storage.storageBuffer8BitAccess &&
+@@ -984,7 +804,6 @@ private:
+         FOR_EACH_VK_FEATURE_1_1(FEATURE);
+         FOR_EACH_VK_FEATURE_1_2(FEATURE);
+         FOR_EACH_VK_FEATURE_1_3(FEATURE);
+-        FOR_EACH_VK_FEATURE_1_4(FEATURE);
+         FOR_EACH_VK_FEATURE_EXT(FEATURE);
+         FOR_EACH_VK_EXTENSION(EXTENSION);
+ 
+@@ -1001,7 +820,6 @@ private:
+         FOR_EACH_VK_FEATURE_1_1(FEATURE_CORE);
+         FOR_EACH_VK_FEATURE_1_2(FEATURE_CORE);
+         FOR_EACH_VK_FEATURE_1_3(FEATURE_CORE);
+-        FOR_EACH_VK_FEATURE_1_4(FEATURE_CORE);
+         FOR_EACH_VK_FEATURE_EXT(FEATURE_EXT);
+ 
+ #undef FEATURE_CORE
+@@ -1017,8 +835,6 @@ private:
+         VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor{};
+         VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size_control{};
+         VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback{};
+-        VkPhysicalDeviceMaintenance5PropertiesKHR maintenance5{};
+-        VkPhysicalDeviceMultiDrawPropertiesEXT multi_draw{};
+ 
+         VkPhysicalDeviceProperties properties{};
+     };
+@@ -1049,13 +865,6 @@ private:
+     bool must_emulate_scaled_formats{};        ///< Requires scaled vertex format emulation
+     bool dynamic_state3_blending{};            ///< Has blending features of dynamic_state3.
+     bool dynamic_state3_enables{};             ///< Has at least one enable feature of dynamic_state3.
+-    bool dynamic_state3_depth_clamp_enable{};
+-    bool dynamic_state3_logic_op_enable{};
+-    bool dynamic_state3_line_raster_mode{};
+-    bool dynamic_state3_conservative_raster_mode{};
+-    bool dynamic_state3_line_stipple_enable{};
+-    bool dynamic_state3_alpha_to_coverage{};
+-    bool dynamic_state3_alpha_to_one{};
+     bool supports_conditional_barriers{};      ///< Allows barriers in conditional control flow.
+     size_t sampler_heap_budget{};              ///< Sampler budget for buggy drivers (0 = unlimited).
+     u64 device_access_memory{};                ///< Total size of device local memory in bytes.
+diff --git a/src/video_core/vulkan_common/vulkan_wrapper.cpp b/src/video_core/vulkan_common/vulkan_wrapper.cpp
+index 534a11edd4..c50c8413b5 100644
+--- a/src/video_core/vulkan_common/vulkan_wrapper.cpp
++++ b/src/video_core/vulkan_common/vulkan_wrapper.cpp
+@@ -116,8 +116,6 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
+     X(vkCmdDrawIndirectCount);
+     X(vkCmdDrawIndexedIndirectCount);
+     X(vkCmdDrawIndirectByteCountEXT);
+-    X(vkCmdDrawMultiEXT);
+-    X(vkCmdDrawMultiIndexedEXT);
+     X(vkCmdEndConditionalRenderingEXT);
+     X(vkCmdEndQuery);
+     X(vkCmdEndRenderPass);
+@@ -146,8 +144,6 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
+     X(vkCmdSetDepthWriteEnableEXT);
+     X(vkCmdSetPrimitiveRestartEnableEXT);
+     X(vkCmdSetRasterizerDiscardEnableEXT);
+-    X(vkCmdSetAlphaToCoverageEnableEXT);
+-    X(vkCmdSetAlphaToOneEnableEXT);
+     X(vkCmdSetConservativeRasterizationModeEXT);
+     X(vkCmdSetLineRasterizationModeEXT);
+     X(vkCmdSetLineStippleEnableEXT);
+diff --git a/src/video_core/vulkan_common/vulkan_wrapper.h b/src/video_core/vulkan_common/vulkan_wrapper.h
+index 04b9420d98..caff288941 100644
+--- a/src/video_core/vulkan_common/vulkan_wrapper.h
++++ b/src/video_core/vulkan_common/vulkan_wrapper.h
+@@ -216,8 +216,6 @@ struct DeviceDispatch : InstanceDispatch {
+     PFN_vkCmdDrawIndirectCount vkCmdDrawIndirectCount{};
+     PFN_vkCmdDrawIndexedIndirectCount vkCmdDrawIndexedIndirectCount{};
+     PFN_vkCmdDrawIndirectByteCountEXT vkCmdDrawIndirectByteCountEXT{};
+-    PFN_vkCmdDrawMultiEXT vkCmdDrawMultiEXT{};
+-    PFN_vkCmdDrawMultiIndexedEXT vkCmdDrawMultiIndexedEXT{};
+     PFN_vkCmdEndConditionalRenderingEXT vkCmdEndConditionalRenderingEXT{};
+     PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT{};
+     PFN_vkCmdEndQuery vkCmdEndQuery{};
+@@ -239,8 +237,6 @@ struct DeviceDispatch : InstanceDispatch {
+     PFN_vkCmdSetDepthWriteEnableEXT vkCmdSetDepthWriteEnableEXT{};
+     PFN_vkCmdSetPrimitiveRestartEnableEXT vkCmdSetPrimitiveRestartEnableEXT{};
+     PFN_vkCmdSetRasterizerDiscardEnableEXT vkCmdSetRasterizerDiscardEnableEXT{};
+-    PFN_vkCmdSetAlphaToCoverageEnableEXT vkCmdSetAlphaToCoverageEnableEXT{};
+-    PFN_vkCmdSetAlphaToOneEnableEXT vkCmdSetAlphaToOneEnableEXT{};
+     PFN_vkCmdSetConservativeRasterizationModeEXT vkCmdSetConservativeRasterizationModeEXT{};
+     PFN_vkCmdSetLineRasterizationModeEXT vkCmdSetLineRasterizationModeEXT{};
+     PFN_vkCmdSetLineStippleEnableEXT vkCmdSetLineStippleEnableEXT{};
+@@ -1239,19 +1235,6 @@ public:
+                                            counter_buffer_offset, counter_offset, stride);
+     }
+ 
+-    void DrawMultiEXT(u32 draw_count, const VkMultiDrawInfoEXT* vertex_info,
+-                      u32 instance_count, u32 first_instance, u32 stride) const noexcept {
+-        dld->vkCmdDrawMultiEXT(handle, draw_count, vertex_info, instance_count, first_instance,
+-                               stride);
+-    }
+-
+-    void DrawMultiIndexedEXT(u32 draw_count, const VkMultiDrawIndexedInfoEXT* index_info,
+-                             u32 instance_count, u32 first_instance, u32 stride,
+-                             const int32_t* vertex_offset) const noexcept {
+-        dld->vkCmdDrawMultiIndexedEXT(handle, draw_count, index_info, instance_count,
+-                                      first_instance, stride, vertex_offset);
+-    }
+-
+     void ClearAttachments(Span<VkClearAttachment> attachments,
+                           Span<VkClearRect> rects) const noexcept {
+         dld->vkCmdClearAttachments(handle, attachments.size(), attachments.data(), rects.size(),
+@@ -1484,14 +1467,6 @@ public:
+         dld->vkCmdSetLogicOpEnableEXT(handle, enable ? VK_TRUE : VK_FALSE);
+     }
+ 
+-    void SetAlphaToCoverageEnableEXT(bool enable) const noexcept {
+-        dld->vkCmdSetAlphaToCoverageEnableEXT(handle, enable ? VK_TRUE : VK_FALSE);
+-    }
+-
+-    void SetAlphaToOneEnableEXT(bool enable) const noexcept {
+-        dld->vkCmdSetAlphaToOneEnableEXT(handle, enable ? VK_TRUE : VK_FALSE);
+-    }
+-
+     void SetDepthClampEnableEXT(bool enable) const noexcept {
+         dld->vkCmdSetDepthClampEnableEXT(handle, enable ? VK_TRUE : VK_FALSE);
+     }

@@ -8,7 +8,7 @@ cd ./eden
 # temporary
 temppatcherror=""
 temppatchname="temporary.patch"
-for temppatch in $(ls -A ../patches/*$temppatchname | sort -n -r); do
+for temppatch in $(ls -A ../patches/*$temppatchname | sort -n); do
     if patch -p1 < $temppatch; then
         echo "patch $temppatch OK !!!"
         continue
