@@ -30,6 +30,7 @@ ACTIONS_DESCRIPTION_MAPPING = {
     "success": "[CI] Build succeeded",
     "failure": "[CI] Build failed",
     "error": "[CI] Build cancelled",
+    "cancelled": "[CI] Build cancelled",
 }
 
 # Send commit status
