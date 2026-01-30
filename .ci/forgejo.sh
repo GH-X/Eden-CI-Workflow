@@ -173,8 +173,8 @@ parse_payload() {
 		FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
 		FORGEJO_REF=$(.ci/common/field.py field="sha")
 
-		_host="$RELEASE_NIGHTLY_HOST"
-		_repo="$RELEASE_NIGHTLY_REPO"
+		_host="$RELEASE_MASTER_HOST"
+		_repo="$RELEASE_MASTER_REPO"
 
 		_tag="v${_timestamp}.${FORGEJO_REF}"
 		_ref="${FORGEJO_REF}"
