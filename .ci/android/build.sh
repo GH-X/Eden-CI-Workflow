@@ -100,6 +100,7 @@ chmod +x ./gradlew
 
 set -- "$@" -DUSE_CCACHE="${CCACHE}"
 [ "$DEVEL" != "true" ] && set -- "$@" -DENABLE_UPDATE_CHECKER=ON
+[ "$BUILD_ID" = "nightly" ] && set -- "$@" -DNIGHTLY_BUILD=ON
 
 echo "-- building..."
 

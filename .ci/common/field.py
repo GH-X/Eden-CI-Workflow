@@ -6,7 +6,7 @@ import urllib.request
 import json
 
 # --- Environment variables ---
-FORGEJO_TOKEN = os.getenv("FORGEJO_TOKEN")
+FORGEJO_TOKEN = os.getenv("FJ_TOKEN") or os.getenv("FORGEJO_TOKEN")
 FORGEJO_HOST = os.getenv("FORGEJO_HOST", "git.eden-emu.dev")
 FORGEJO_REPO = os.getenv("FORGEJO_REPO")
 FORGEJO_BRANCH = os.getenv("FORGEJO_BRANCH")

@@ -12,7 +12,7 @@ import argparse
 FORGEJO_HOST = os.getenv("FORGEJO_HOST")
 FORGEJO_REPO = os.getenv("FORGEJO_REPO")
 FORGEJO_REF = os.getenv("FORGEJO_REF")
-FORGEJO_TOKEN = os.getenv("FORGEJO_TOKEN")
+FORGEJO_TOKEN = os.getenv("FJ_TOKEN") or os.getenv("FORGEJO_TOKEN")
 
 # GitHub Actions environment for workflow URL
 GITHUB_SERVER_URL = os.getenv("GITHUB_SERVER_URL", "https://github.com")
