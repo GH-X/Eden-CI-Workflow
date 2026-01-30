@@ -23,6 +23,7 @@ jobs:
     env:
       GH_TOKEN: "${{ secrets.CUSTOM_GITHUB_TOKEN }}"
       FJ_TOKEN: "${{ secrets.FORGEJO_TOKEN }}"
+      DEVEL: "${{ inputs.devel }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.1
