@@ -62,7 +62,6 @@ jobs:
         compiler: ${{ fromJson(needs.win-matrix.outputs.compiler) }}
 
     env:
-      QT_VERSION: 6.9.1
       TARGET: ${{ matrix.os.arch }}
       COMPILER: "${{ matrix.compiler.program }}"
       PGO_TARGET: "${{ matrix.compiler.target }}"
@@ -80,8 +79,7 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1.13.0

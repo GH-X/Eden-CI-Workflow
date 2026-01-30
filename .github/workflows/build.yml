@@ -1,4 +1,4 @@
-name: "[Master] Build Workflow"
+name: "Build"
 
 on:
   workflow_call:
@@ -37,46 +37,36 @@ jobs:
           fetch-depth: 0
 
       - name: Parse Forgejo payload
-        shell: bash
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           cat payload.json
           ./.ci/forgejo.sh --parse ${{ inputs.build-id }}
 
       - name: Load payload environment
-        shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
-      - name: Send Commit Status to Forgejo only on pull_request/master
+      - name: Send pending status
         if: ${{ (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' }}
-        shell: bash
-        run: |
-          python ./.ci/common/status.py --pending
+        run: python3 .ci/common/status.py --pending
 
       # for some amazing reason you can't pass env vars to reusable workflows
       - name: Setup Outputs
         id: out
-        shell: bash
         run: |
           echo "cachever=${CPM_CACHE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "pgo=${FORCE_PGO}" >> "$GITHUB_OUTPUT"
 
       - name: Clone
-        shell: bash
-        run: |
-          ./.ci/forgejo.sh --clone ${{ inputs.build-id }}
+        run: ./.ci/forgejo.sh --clone ${{ inputs.build-id }}
 
       - name: Apply Temporary Patch
         if: ${{ env.TEMP_PATCH_NUMBER != '' }}
-        shell: bash
         run: |
           wget https://git.eden-emu.dev/eden-emu/eden/pulls/${TEMP_PATCH_NUMBER}.patch
           git -C eden apply --3way ../${TEMP_PATCH_NUMBER}.patch
           rm ${TEMP_PATCH_NUMBER}.patch
 
       - name: Summary
-        shell: bash
         run: |
           ./.ci/fj/summary.sh ${{ inputs.build-id }}
 
@@ -111,6 +101,9 @@ jobs:
       - name: Clone
         uses: actions/download-artifact@v7.0.0
 
+      - name: Load payload environment
+        run: FORGEJO_LENV=forgejo-env/forgejo.env . .ci/fj/load-env.sh
+
       - name: Build
         run: ./.ci/source/build.sh
 
@@ -121,7 +114,7 @@ jobs:
         uses: actions/upload-artifact@v6.0.0
         with:
           name: source
-          path: source.*
+          path: ./*.tar.zst
 
   deb:
     name: ".deb builds"
@@ -200,55 +193,3 @@ jobs:
     name: "musl room"
     needs: [clone]
     uses: ./.github/workflows/room.yml
-
-  status-if-cancelled:
-    name: "Send Cancelled Commit Status to Forgejo"
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && cancelled() && ((inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Workflow
-        uses: actions/checkout@v6.0.1
-      - name: Download Forgejo environment
-        uses: actions/download-artifact@v7.0.0
-        with:
-          name: forgejo-env
-      - name: Load payload env and send status
-        run: |
-          FORGEJO_LENV=forgejo.env . ./.ci/fj/load-env.sh
-          python3 ./.ci/common/status.py --error
-
-  status-if-failure:
-    name: "Send Failure Commit Status to Forgejo"
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && failure() && ((inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Workflow
-        uses: actions/checkout@v6.0.1
-      - name: Download Forgejo environment
-        uses: actions/download-artifact@v7.0.0
-        with:
-          name: forgejo-env
-      - name: Load payload env and send status
-        run: |
-          FORGEJO_LENV=forgejo.env . ./.ci/fj/load-env.sh
-          python3 ./.ci/common/status.py --failure
-
-  status-if-success:
-    name: "Send Success Commit Status to Forgejo"
-    # TODO: ?ploo this
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && success() && ((inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Workflow
-        uses: actions/checkout@v6.0.1
-      - name: Download Forgejo environment
-        uses: actions/download-artifact@v7.0.0
-        with:
-          name: forgejo-env
-      - name: Load payload env and send status
-        run: |
-          FORGEJO_LENV=forgejo.env . ./.ci/fj/load-env.sh
-          python3 ./.ci/common/status.py --success
