@@ -100,7 +100,11 @@ chmod +x ./gradlew
 
 set -- "$@" -DUSE_CCACHE="${CCACHE}"
 [ "$DEVEL" != "true" ] && set -- "$@" -DENABLE_UPDATE_CHECKER=ON
-[ "$BUILD_ID" = "nightly" ] && set -- "$@" -DNIGHTLY_BUILD=ON
+if [ "$BUILD_ID" = "nightly" ]; then
+	NIGHTLY=true
+else
+	NIGHTLY=false
+fi
 
 echo "-- building..."
 
@@ -109,6 +113,7 @@ echo "-- building..."
     -Dorg.gradle.parallel="${CCACHE}" \
     -Dorg.gradle.workers.max="${NUM_JOBS}" \
     -PYUZU_ANDROID_ARGS="$*" \
+	-Pnightly=$NIGHTLY \
     --info
 
 if [ -n "${ANDROID_KEYSTORE_B64}" ]; then
