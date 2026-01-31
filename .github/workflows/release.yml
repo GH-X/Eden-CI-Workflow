@@ -49,7 +49,7 @@ jobs:
 
       - name: Release
         id: release
-        if: ${{ env.GH_TOKEN && (inputs.build-id) != 'test' }}
+        if: ${{ env.GH_TOKEN && (inputs.build-id) != 'test' && (inputs.status) == 'success' }}
         uses: softprops/action-gh-release@v2.5.0
         with:
           name: "${{ env.GITHUB_TITLE }}"
@@ -66,7 +66,7 @@ jobs:
             artifacts/*
 
       - name: Add Release URL to Summary
-        if: ${{ env.GH_TOKEN && (inputs.build-id) != 'test' }}
+        if: ${{ env.GH_TOKEN && (inputs.build-id) != 'test' && (inputs.status) == 'success' }}
         run: |
           {
             echo "## Release Summary"
@@ -74,7 +74,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send Release Status
-        if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' }}
+        if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' && (inputs.status) == 'success'}}
         run: python3 ./.ci/common/status.py --release ${{ steps.release.outputs.url }}
 
       - name: Send Nightly Release to Discord
@@ -82,7 +82,7 @@ jobs:
         run: .ci/discord/publish.sh
 
       - name: Release (PR Number)
-        if: ${{ env.GH_TOKEN && (inputs.build-id) == 'pull_request' }}
+        if: ${{ env.GH_TOKEN && (inputs.build-id) == 'pull_request' && (inputs.status) == 'success' }}
         uses: softprops/action-gh-release@v2.5.0
         with:
           name: "${{ env.GITHUB_TITLE }}"
@@ -98,7 +98,7 @@ jobs:
           make_latest: true
 
       - name: Release (Forgejo)
-        if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'tag' }}
+        if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'tag' && (inputs.status) == 'success' }}
         run: |
           . .ci/fj/release.sh
           echo "- View Release on Forgejo: [${{ env.FORGEJO_REF }}](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
