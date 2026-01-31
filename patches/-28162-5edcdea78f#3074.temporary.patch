@@ -1,5 +1,40 @@
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp b/src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp
+index db11def7b2..1de5709394 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp
+@@ -1,4 +1,4 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
++// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+@@ -492,22 +492,8 @@ void EmitSetPatch(EmitContext& ctx, IR::Patch patch, Id value) {
+ 
+ void EmitSetFragColor(EmitContext& ctx, u32 index, u32 component, Id value) {
+     const Id component_id{ctx.Const(component)};
+-    const AttributeType type{ctx.runtime_info.color_output_types[index]};
+-    if (type == AttributeType::Float) {
+-        const Id pointer{ctx.OpAccessChain(ctx.output_f32, ctx.frag_color.at(index), component_id)};
+-        ctx.OpStore(pointer, value);
+-    } else if (type == AttributeType::UnsignedInt) {
+-        const Id pointer{ctx.OpAccessChain(ctx.output_u32, ctx.frag_color.at(index), component_id)};
+-        ctx.OpStore(pointer, ctx.OpBitcast(ctx.U32[1], value));
+-    } else if (type == AttributeType::SignedInt) {
+-        const Id output_s32{ctx.TypePointer(spv::StorageClass::Output, ctx.S32[1])};
+-        const Id pointer{ctx.OpAccessChain(output_s32, ctx.frag_color.at(index), component_id)};
+-        ctx.OpStore(pointer, ctx.OpBitcast(ctx.S32[1], value));
+-    } else {
+-        // Disabled or unknown, treat as float
+-        const Id pointer{ctx.OpAccessChain(ctx.output_f32, ctx.frag_color.at(index), component_id)};
+-        ctx.OpStore(pointer, value);
+-    }
++    const Id pointer{ctx.OpAccessChain(ctx.output_f32, ctx.frag_color.at(index), component_id)};
++    ctx.OpStore(pointer, value);
+ }
+ 
+ void EmitSetSampleMask(EmitContext& ctx, Id value) {
 diff --git a/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp b/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
-index 38d1e075a1..1b4968a3fd 100644
+index c70f9ae934..1b4968a3fd 100644
 --- a/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
 +++ b/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
 @@ -1432,9 +1432,6 @@ void EmitContext::DefineInputs(const IR::Program& program) {
@@ -79,11 +114,42 @@ index 38d1e075a1..1b4968a3fd 100644
          }
      }
      if (stage == Stage::TessellationEval) {
+@@ -1677,8 +1658,7 @@ void EmitContext::DefineOutputs(const IR::Program& program) {
+             if (!info.stores_frag_color[index] && !profile.need_declared_frag_colors) {
+                 continue;
+             }
+-            const Id type{GetAttributeType(*this, runtime_info.color_output_types[index])};
+-            frag_color[index] = DefineOutput(*this, type, std::nullopt);
++            frag_color[index] = DefineOutput(*this, F32[4], std::nullopt);
+             Decorate(frag_color[index], spv::Decoration::Location, index);
+             Name(frag_color[index], fmt::format("frag_color{}", index));
+         }
+diff --git a/src/shader_recompiler/runtime_info.h b/src/shader_recompiler/runtime_info.h
+index 613c598d0c..dc54d932a6 100644
+--- a/src/shader_recompiler/runtime_info.h
++++ b/src/shader_recompiler/runtime_info.h
+@@ -1,6 +1,3 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+ // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -107,9 +104,6 @@ struct RuntimeInfo {
+     /// Transform feedback state for each varying
+     std::array<TransformFeedbackVarying, 256> xfb_varyings{};
+     u32 xfb_count{0};
+-
+-    /// Output types for each color attachment
+-    std::array<AttributeType, 8> color_output_types{};
+ };
+ 
+ } // namespace Shader
 diff --git a/src/video_core/renderer_vulkan/blit_image.cpp b/src/video_core/renderer_vulkan/blit_image.cpp
-index 5b4b44db53..68543bdd48 100644
+index 07611ef98c..ff811551ed 100644
 --- a/src/video_core/renderer_vulkan/blit_image.cpp
 +++ b/src/video_core/renderer_vulkan/blit_image.cpp
-@@ -46,7 +46,7 @@ namespace Vulkan {
+@@ -37,7 +37,7 @@ namespace Vulkan {
  using VideoCommon::ImageViewType;
  
  namespace {
@@ -92,7 +158,7 @@ index 5b4b44db53..68543bdd48 100644
  [[nodiscard]] VkImageAspectFlags AspectMaskFromFormat(VideoCore::Surface::PixelFormat format) {
      using VideoCore::Surface::SurfaceType;
      switch (VideoCore::Surface::GetFormatType(format)) {
-@@ -525,24 +525,18 @@ BlitImageHelper::BlitImageHelper(const Device& device_, Scheduler& scheduler_,
+@@ -516,17 +516,13 @@ BlitImageHelper::BlitImageHelper(const Device& device_, Scheduler& scheduler_,
            nullptr, PUSH_CONSTANT_RANGE<VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(float) * 4>))),
        full_screen_vert(BuildShader(device, FULL_SCREEN_TRIANGLE_VERT_SPV)),
        blit_color_to_color_frag(BuildShader(device, BLIT_COLOR_FLOAT_FRAG_SPV)),
@@ -112,15 +178,7 @@ index 5b4b44db53..68543bdd48 100644
        convert_abgr8_to_d32f_frag(BuildShader(device, CONVERT_ABGR8_TO_D32F_FRAG_SPV)),
        convert_d32f_to_abgr8_frag(BuildShader(device, CONVERT_D32F_TO_ABGR8_FRAG_SPV)),
        convert_d24s8_to_abgr8_frag(BuildShader(device, CONVERT_D24S8_TO_ABGR8_FRAG_SPV)),
-       convert_s8d24_to_abgr8_frag(BuildShader(device, CONVERT_S8D24_TO_ABGR8_FRAG_SPV)),
--      convert_abgr8_srgb_to_d24s8_frag(device.IsExtShaderStencilExportSupported()
--                                      ? BuildShader(device, CONVERT_ABGR8_SRGB_TO_D24S8_FRAG_SPV)
--                                      : vk::ShaderModule{}),
-+      convert_abgr8_srgb_to_d24s8_frag(BuildShader(device, CONVERT_ABGR8_SRGB_TO_D24S8_FRAG_SPV)),
-       convert_rgba_to_bgra_frag(BuildShader(device, CONVERT_RGBA8_TO_BGRA8_FRAG_SPV)),
-       convert_yuv420_to_rgb_comp(BuildShader(device, CONVERT_YUV420_TO_RGB_COMP_SPV)),
-       convert_rgb_to_yuv420_comp(BuildShader(device, CONVERT_RGB_TO_YUV420_COMP_SPV)),
-@@ -673,11 +667,6 @@ void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
+@@ -653,11 +649,6 @@ void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
  
  void BlitImageHelper::ConvertABGR8ToD24S8(const Framebuffer* dst_framebuffer,
                                            const ImageView& src_image_view) {
@@ -132,18 +190,6 @@ index 5b4b44db53..68543bdd48 100644
      ConvertPipelineDepthTargetEx(convert_abgr8_to_d24s8_pipeline, dst_framebuffer->RenderPass(),
                                   convert_abgr8_to_d24s8_frag);
      Convert(*convert_abgr8_to_d24s8_pipeline, dst_framebuffer, src_image_view);
-@@ -713,11 +702,6 @@ void BlitImageHelper::ConvertS8D24ToABGR8(const Framebuffer* dst_framebuffer,
- 
- void BlitImageHelper::ConvertABGR8SRGBToD24S8(const Framebuffer* dst_framebuffer,
-                                              const ImageView& src_image_view) {
--    if (!device.IsExtShaderStencilExportSupported()) {
--        // Shader requires VK_EXT_shader_stencil_export which is not available
--        LOG_WARNING(Render_Vulkan, "ConvertABGR8SRGBToD24S8 requires shader_stencil_export, skipping");
--        return;
--    }
-     ConvertPipelineDepthTargetEx(convert_abgr8_srgb_to_d24s8_pipeline,
-                                 dst_framebuffer->RenderPass(),
-                                 convert_abgr8_srgb_to_d24s8_frag);
 diff --git a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp b/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
 index 06cbd9e6da..d8f832ae57 100644
 --- a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
@@ -477,10 +523,18 @@ index 34941d6e8d..c8e89d60a4 100644
      vk::DescriptorSetLayout descriptor_set_layout;
      DescriptorAllocator descriptor_allocator;
 diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 9f2d16a328..f755818f25 100644
+index 6207e127c1..f755818f25 100644
 --- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-@@ -146,8 +146,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
+@@ -39,7 +39,6 @@
+ #include "video_core/shader_cache.h"
+ #include "video_core/shader_environment.h"
+ #include "video_core/shader_notify.h"
+-#include "video_core/surface.h"
+ #include "video_core/vulkan_common/vulkan_device.h"
+ #include "video_core/vulkan_common/vulkan_wrapper.h"
+ 
+@@ -147,8 +146,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
  Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> programs,
                                      const GraphicsPipelineCacheKey& key,
                                      const Shader::IR::Program& program,
@@ -490,7 +544,7 @@ index 9f2d16a328..f755818f25 100644
      Shader::RuntimeInfo info;
      if (previous_program) {
          info.previous_stage_stores = previous_program->info.stores;
-@@ -169,14 +168,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+@@ -170,14 +168,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
                  info.fixed_state_point_size = point_size;
              }
              if (key.state.xfb_enabled) {
@@ -509,7 +563,7 @@ index 9f2d16a328..f755818f25 100644
              }
              info.convert_depth_mode = gl_ndc;
          }
-@@ -223,14 +218,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+@@ -224,14 +218,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
              info.fixed_state_point_size = point_size;
          }
          if (key.state.xfb_enabled != 0) {
@@ -528,7 +582,30 @@ index 9f2d16a328..f755818f25 100644
          }
          info.convert_depth_mode = gl_ndc;
          break;
-@@ -414,35 +405,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+@@ -239,22 +229,6 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+         info.alpha_test_func = MaxwellToCompareFunction(
+             key.state.UnpackComparisonOp(key.state.alpha_test_func.Value()));
+         info.alpha_test_reference = std::bit_cast<float>(key.state.alpha_test_ref);
+-
+-        if (device.IsMoltenVK()) {
+-            for (size_t i = 0; i < 8; ++i) {
+-                const auto format = static_cast<Tegra::RenderTargetFormat>(key.state.color_formats[i]);
+-                const auto pixel_format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(format);
+-                if (VideoCore::Surface::IsPixelFormatInteger(pixel_format)) {
+-                    if (VideoCore::Surface::IsPixelFormatSignedInteger(pixel_format)) {
+-                        info.color_output_types[i] = Shader::AttributeType::SignedInt;
+-                    } else {
+-                        info.color_output_types[i] = Shader::AttributeType::UnsignedInt;
+-                    }
+-                } else {
+-                    info.color_output_types[i] = Shader::AttributeType::Float;
+-                }
+-            }
+-        }
+         break;
+     default:
+         break;
+@@ -431,35 +405,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                      device.GetMaxVertexInputBindings(), Maxwell::NumVertexArrays);
      }
  
@@ -572,7 +649,7 @@ index 9f2d16a328..f755818f25 100644
  }
  
  PipelineCache::~PipelineCache() {
-@@ -547,8 +517,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+@@ -564,8 +517,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                  dynamic_features.has_extended_dynamic_state ||
              (key.state.extended_dynamic_state_2 != 0) !=
                  dynamic_features.has_extended_dynamic_state_2 ||
@@ -583,7 +660,7 @@ index 9f2d16a328..f755818f25 100644
              (key.state.extended_dynamic_state_3_blend != 0) !=
                  dynamic_features.has_extended_dynamic_state_3_blend ||
              (key.state.extended_dynamic_state_3_enables != 0) !=
-@@ -702,7 +672,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+@@ -719,7 +672,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
          const size_t stage_index{index - 1};
          infos[stage_index] = &program.info;
  
@@ -1297,7 +1374,7 @@ index 7e99bf8fa7..b3e1c4f025 100644
  
      u32 GetWidth() const {
 diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-index eb50f36d25..0a41b4c02a 100644
+index 6ce7433240..1d900d16a4 100644
 --- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 @@ -1137,8 +1137,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
@@ -1325,7 +1402,7 @@ index eb50f36d25..0a41b4c02a 100644
      const bool is_resolve = is_src_msaa && !is_dst_msaa;
      scheduler.RequestOutsideRenderPassOperationContext();
      scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
-@@ -2295,26 +2284,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
+@@ -2283,26 +2272,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
  
  Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& tsc) {
      const auto& device = runtime.device;
@@ -1356,7 +1433,7 @@ index eb50f36d25..0a41b4c02a 100644
          pnext = &border_ci;
      }
      const VkSamplerReductionModeCreateInfoEXT reduction_ci{
-@@ -2348,8 +2329,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
+@@ -2336,8 +2317,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
              .compareOp = MaxwellToVK::Sampler::DepthCompareFunction(tsc.depth_compare_func),
              .minLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.0f : tsc.MinLod(),
              .maxLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.25f : tsc.MaxLod(),
