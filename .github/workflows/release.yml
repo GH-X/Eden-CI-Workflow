@@ -23,6 +23,7 @@ jobs:
     env:
       GH_TOKEN: "${{ secrets.CUSTOM_GITHUB_TOKEN }}"
       FJ_TOKEN: "${{ secrets.FORGEJO_TOKEN }}"
+      DISCORD_WEBHOOK: "${{ secrets.DISCORD_WEBHOOK }}"
       DEVEL: "${{ inputs.devel }}"
     runs-on: ubuntu-latest
     steps:
@@ -74,8 +75,11 @@ jobs:
 
       - name: Send Release Status
         if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' }}
-        run: |
-          python3 ./.ci/common/status.py --release ${{ steps.release.outputs.url }}
+        run: python3 ./.ci/common/status.py --release ${{ steps.release.outputs.url }}
+
+      - name: Send Nightly Release to Discord
+        if: ${{ env.DISCORD_WEBHOOK && (inputs.build-id) == 'nightly' && (inputs.status) == 'success' }}
+        run: .ci/discord/publish.sh
 
       - name: Release (PR Number)
         if: ${{ env.GH_TOKEN && (inputs.build-id) == 'pull_request' }}
