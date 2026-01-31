@@ -249,17 +249,18 @@ clone_repository() {
 	git rev-parse --short=10 HEAD > GIT-COMMIT
 	{ git describe --tags HEAD --abbrev=0 || echo 'v0.1.0-Workflow'; } > GIT-TAG
 
-	# slight hack: also add the merge base
-	# <https://codeberg.org/forgejo/forgejo/issues/9601>
-	FORGEJO_PR_MERGE_BASE=$(git merge-base master HEAD | cut -c1-10)
-	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$FORGEJO_LENV"
-	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$GITHUB_ENV"
-
 	if [ "$1" = "tag" ]; then
 		cp GIT-TAG GIT-RELEASE
 	fi
 
+	FORGEJO_PR_MERGE_BASE=$(git merge-base master HEAD | cut -c1-10)
+
 	cd ..
+
+	# slight hack: also add the merge base
+	# <https://codeberg.org/forgejo/forgejo/issues/9601>
+	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$FORGEJO_LENV"
+	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$GITHUB_ENV"
 }
 
 case "$1" in
