@@ -254,6 +254,7 @@ clone_repository() {
 	fi
 
 	FORGEJO_PR_MERGE_BASE=$(git merge-base master HEAD | cut -c1-10)
+	FORGEJO_LONGSHA=$(git rev-parse "$FORGEJO_REF")
 
 	cd ..
 
@@ -261,6 +262,9 @@ clone_repository() {
 	# <https://codeberg.org/forgejo/forgejo/issues/9601>
 	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$FORGEJO_LENV"
 	echo "FORGEJO_PR_MERGE_BASE=$FORGEJO_PR_MERGE_BASE" >>"$GITHUB_ENV"
+
+	echo "FORGEJO_LONGSHA=$FORGEJO_LONGSHA" >>"$FORGEJO_LENV"
+	echo "FORGEJO_LONGSHA=$FORGEJO_LONGSHA" >>"$GITHUB_ENV"
 }
 
 case "$1" in

@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       devel:
-        description: 'Development mode (disables update checker, adds nightly qualifier)'
+        description: 'Development mode (disables update checker)'
         type: boolean
         required: true
       build-id:
@@ -70,7 +70,7 @@ jobs:
         run: |
           {
             echo "## Release Summary"
-            echo "- View Release on GitHub: [${{ env.GITHUB_TITLE }}](${{ steps.release.outputs.url }})"
+            echo "- View Release on GitHub: [$GITHUB_TITLE](${{ steps.release.outputs.url }})"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send Release Status
@@ -101,7 +101,7 @@ jobs:
         if: ${{ env.FJ_TOKEN && (inputs.build-id) == 'tag' && (inputs.status) == 'success' }}
         run: |
           . .ci/fj/release.sh
-          echo "- View Release on Forgejo: [${{ env.FORGEJO_REF }}](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- View Release on Forgejo: [$FORGEJO_REF](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload changelog
         uses: actions/upload-artifact@v6.0.0
