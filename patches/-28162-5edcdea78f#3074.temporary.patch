@@ -317,10 +317,10 @@ index 0ae81af0fb..c2d9ad8020 100644
      }
  }
 diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
-index fca235b58e..f0d20b137d 100644
+index d36553da4a..41385d9c62 100644
 --- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
 +++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
-@@ -263,7 +263,6 @@ GraphicsPipeline::GraphicsPipeline(
+@@ -266,7 +266,6 @@ GraphicsPipeline::GraphicsPipeline(
          std::ranges::copy(info->constant_buffer_used_sizes, uniform_buffer_sizes[stage].begin());
          num_textures += Shader::NumDescriptors(info->texture_descriptors);
      }
@@ -328,7 +328,7 @@ index fca235b58e..f0d20b137d 100644
      auto func{[this, shader_notify, &render_pass_cache, &descriptor_pool, pipeline_statistics] {
          DescriptorLayoutBuilder builder{MakeBuilder(device, stage_infos)};
          uses_push_descriptor = builder.CanUsePushDescriptor();
-@@ -703,18 +702,13 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+@@ -714,18 +713,13 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
          .lineWidth = 1.0f,
          // TODO(alekpop): Transfer from regs
      };
@@ -349,7 +349,7 @@ index fca235b58e..f0d20b137d 100644
          .lineStippleFactor = key.state.line_stipple_factor,
          .lineStipplePattern = static_cast<uint16_t>(key.state.line_stipple_pattern),
      };
-@@ -745,8 +739,6 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+@@ -756,8 +750,6 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
          provoking_vertex.pNext = std::exchange(rasterization_ci.pNext, &provoking_vertex);
      }
  
@@ -358,7 +358,7 @@ index fca235b58e..f0d20b137d 100644
      const VkPipelineMultisampleStateCreateInfo multisample_ci{
          .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
          .pNext = nullptr,
-@@ -755,10 +747,8 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+@@ -766,10 +758,8 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
          .sampleShadingEnable = Settings::values.sample_shading.GetValue() > 0 ? VK_TRUE : VK_FALSE,
          .minSampleShading = f32(Settings::values.sample_shading.GetValue()) / 100.0f,
          .pSampleMask = nullptr,
@@ -371,7 +371,7 @@ index fca235b58e..f0d20b137d 100644
      };
      const VkPipelineDepthStencilStateCreateInfo depth_stencil_ci{
          .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-@@ -823,7 +813,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+@@ -834,7 +824,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
          VK_DYNAMIC_STATE_LINE_WIDTH,
      };
      if (key.state.extended_dynamic_state) {
@@ -380,7 +380,7 @@ index fca235b58e..f0d20b137d 100644
              VK_DYNAMIC_STATE_CULL_MODE_EXT,
              VK_DYNAMIC_STATE_FRONT_FACE_EXT,
              VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT,
-@@ -833,68 +823,51 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+@@ -844,68 +834,51 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
              VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT,
              VK_DYNAMIC_STATE_STENCIL_OP_EXT,
          };
@@ -523,18 +523,18 @@ index 34941d6e8d..c8e89d60a4 100644
      vk::DescriptorSetLayout descriptor_set_layout;
      DescriptorAllocator descriptor_allocator;
 diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 6207e127c1..f755818f25 100644
+index f3dd0f90d8..58ad060f19 100644
 --- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-@@ -39,7 +39,6 @@
+@@ -40,7 +40,6 @@
  #include "video_core/shader_cache.h"
  #include "video_core/shader_environment.h"
  #include "video_core/shader_notify.h"
 -#include "video_core/surface.h"
  #include "video_core/vulkan_common/vulkan_device.h"
  #include "video_core/vulkan_common/vulkan_wrapper.h"
- 
-@@ -147,8 +146,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
+ #include "video_core/gpu_logging/gpu_logging.h"
+@@ -149,8 +148,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
  Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> programs,
                                      const GraphicsPipelineCacheKey& key,
                                      const Shader::IR::Program& program,
@@ -544,7 +544,7 @@ index 6207e127c1..f755818f25 100644
      Shader::RuntimeInfo info;
      if (previous_program) {
          info.previous_stage_stores = previous_program->info.stores;
-@@ -170,14 +168,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+@@ -172,14 +170,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
                  info.fixed_state_point_size = point_size;
              }
              if (key.state.xfb_enabled) {
@@ -563,7 +563,7 @@ index 6207e127c1..f755818f25 100644
              }
              info.convert_depth_mode = gl_ndc;
          }
-@@ -224,14 +218,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+@@ -226,14 +220,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
              info.fixed_state_point_size = point_size;
          }
          if (key.state.xfb_enabled != 0) {
@@ -582,7 +582,7 @@ index 6207e127c1..f755818f25 100644
          }
          info.convert_depth_mode = gl_ndc;
          break;
-@@ -239,22 +229,6 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+@@ -241,22 +231,6 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
          info.alpha_test_func = MaxwellToCompareFunction(
              key.state.UnpackComparisonOp(key.state.alpha_test_func.Value()));
          info.alpha_test_reference = std::bit_cast<float>(key.state.alpha_test_ref);
@@ -605,7 +605,7 @@ index 6207e127c1..f755818f25 100644
          break;
      default:
          break;
-@@ -431,35 +405,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+@@ -433,35 +407,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                      device.GetMaxVertexInputBindings(), Maxwell::NumVertexArrays);
      }
  
@@ -649,7 +649,7 @@ index 6207e127c1..f755818f25 100644
  }
  
  PipelineCache::~PipelineCache() {
-@@ -564,8 +517,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+@@ -566,8 +519,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                  dynamic_features.has_extended_dynamic_state ||
              (key.state.extended_dynamic_state_2 != 0) !=
                  dynamic_features.has_extended_dynamic_state_2 ||
@@ -660,7 +660,7 @@ index 6207e127c1..f755818f25 100644
              (key.state.extended_dynamic_state_3_blend != 0) !=
                  dynamic_features.has_extended_dynamic_state_3_blend ||
              (key.state.extended_dynamic_state_3_enables != 0) !=
-@@ -719,7 +672,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+@@ -721,7 +674,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
          const size_t stage_index{index - 1};
          infos[stage_index] = &program.info;
  
@@ -754,10 +754,10 @@ index 414c270c8e..a05fb48a9d 100644
              }
              query->value = [&]() -> u64 {
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index c3a5ed391b..2413009649 100644
+index 60b899a811..b421fb12f1 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-@@ -197,11 +197,6 @@ RasterizerVulkan::RasterizerVulkan(Core::Frontend::EmuWindow& emu_window_, Tegra
+@@ -200,11 +200,6 @@ RasterizerVulkan::RasterizerVulkan(Core::Frontend::EmuWindow& emu_window_, Tegra
        fence_manager(*this, gpu, texture_cache, buffer_cache, query_cache, device, scheduler),
        wfi_event(device.GetLogical().CreateEvent()) {
      scheduler.SetQueryCache(query_cache);
@@ -769,11 +769,10 @@ index c3a5ed391b..2413009649 100644
  }
  
  RasterizerVulkan::~RasterizerVulkan() = default;
-@@ -239,44 +234,16 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
-         const auto& draw_state = maxwell3d->draw_manager->GetDrawState();
+@@ -243,43 +238,16 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
          const u32 num_instances{instance_count};
          const DrawParams draw_params{MakeDrawParams(draw_state, num_instances, is_indexed)};
--
+ 
 -        // Use VK_EXT_multi_draw if available (single draw becomes multi-draw with count=1)
 -        if (device.IsExtMultiDrawSupported()) {
 -            scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
@@ -821,10 +820,10 @@ index c3a5ed391b..2413009649 100644
 +                            draw_params.base_vertex, draw_params.base_instance);
 +            }
 +        });
-     });
- }
  
-@@ -416,48 +383,13 @@ void RasterizerVulkan::Clear(u32 layer_count) {
+         // Log draw call
+         if (Settings::values.gpu_logging_enabled.GetValue() &&
+@@ -443,48 +411,13 @@ void RasterizerVulkan::Clear(u32 layer_count) {
          .baseArrayLayer = regs.clear_surface.layer,
          .layerCount = layer_count,
      };
@@ -878,7 +877,7 @@ index c3a5ed391b..2413009649 100644
  
      const u32 color_attachment = regs.clear_surface.RT;
      if (use_color && framebuffer->HasAspectColorBit(color_attachment)) {
-@@ -892,21 +824,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
+@@ -928,21 +861,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
  
  void RasterizerVulkan::FlushWork() {
  #ifdef ANDROID
@@ -907,7 +906,7 @@ index c3a5ed391b..2413009649 100644
      scheduler.Flush();
      draw_counter = 0;
  }
-@@ -972,8 +906,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
+@@ -1008,8 +943,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
  
  void RasterizerVulkan::UpdateDynamicStates() {
      auto& regs = maxwell3d->regs;
@@ -916,7 +915,7 @@ index c3a5ed391b..2413009649 100644
      UpdateViewportsState(regs);
      UpdateScissorsState(regs);
      UpdateDepthBias(regs);
-@@ -981,8 +913,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
+@@ -1017,8 +950,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
      UpdateDepthBounds(regs);
      UpdateStencilFaces(regs);
      UpdateLineWidth(regs);
@@ -925,7 +924,7 @@ index c3a5ed391b..2413009649 100644
      if (device.IsExtExtendedDynamicStateSupported()) {
          UpdateCullMode(regs);
          UpdateDepthCompareOp(regs);
-@@ -993,52 +923,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
+@@ -1029,52 +960,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
              UpdateDepthTestEnable(regs);
              UpdateDepthWriteEnable(regs);
              UpdateStencilTestEnable(regs);
@@ -1008,7 +1007,7 @@ index c3a5ed391b..2413009649 100644
      if (device.IsExtVertexInputDynamicStateSupported()) {
          if (auto* gp = pipeline_cache.CurrentGraphicsPipeline(); gp && gp->HasDynamicVertexInput()) {
              UpdateVertexInput(regs);
-@@ -1051,16 +969,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
+@@ -1087,16 +1006,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
  
      const auto& regs = maxwell3d->regs;
      if (!device.IsExtTransformFeedbackSupported()) {
@@ -1028,7 +1027,7 @@ index c3a5ed391b..2413009649 100644
          return;
      }
      query_cache.CounterEnable(VideoCommon::QueryType::StreamingByteCount,
-@@ -1398,10 +1309,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
+@@ -1439,10 +1351,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
          return;
      }
  
@@ -1039,7 +1038,7 @@ index c3a5ed391b..2413009649 100644
      scheduler.Record([enable = regs.conservative_raster_enable](vk::CommandBuffer cmdbuf) {
          cmdbuf.SetConservativeRasterizationModeEXT(
              enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT
-@@ -1414,50 +1321,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
+@@ -1455,50 +1363,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
          return;
      }
  
@@ -1099,7 +1098,7 @@ index c3a5ed391b..2413009649 100644
  }
  
  void RasterizerVulkan::UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
-@@ -1499,9 +1379,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
+@@ -1540,9 +1421,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
      if (!state_tracker.TouchLogicOpEnable()) {
          return;
      }
@@ -1109,7 +1108,7 @@ index c3a5ed391b..2413009649 100644
      scheduler.Record([enable = regs.logic_op.enable](vk::CommandBuffer cmdbuf) {
          cmdbuf.SetLogicOpEnableEXT(enable != 0);
      });
-@@ -1511,9 +1388,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+@@ -1552,9 +1430,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
      if (!state_tracker.TouchDepthClampEnable()) {
          return;
      }
@@ -1119,7 +1118,7 @@ index c3a5ed391b..2413009649 100644
      bool is_enabled = !(regs.viewport_clip_control.geometry_clip ==
                              Maxwell::ViewportClipControl::GeometryClip::Passthrough ||
                          regs.viewport_clip_control.geometry_clip ==
-@@ -1524,41 +1398,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+@@ -1565,41 +1440,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
          [is_enabled](vk::CommandBuffer cmdbuf) { cmdbuf.SetDepthClampEnableEXT(is_enabled); });
  }
  
@@ -1175,18 +1174,18 @@ index b689c6b660..30780b9cbd 100644
      void UpdateStencilOp(Tegra::Engines::Maxwell3D::Regs& regs);
      void UpdateStencilTestEnable(Tegra::Engines::Maxwell3D::Regs& regs);
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index e19029812b..f4b9696ec1 100644
+index e526d606dc..854c37a7fc 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-@@ -13,7 +13,6 @@
- 
+@@ -17,7 +17,6 @@
  #include "common/thread.h"
+ #include "video_core/gpu_logging/gpu_logging.h"
  #include "video_core/renderer_vulkan/vk_command_pool.h"
 -#include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
  #include "video_core/renderer_vulkan/vk_master_semaphore.h"
  #include "video_core/renderer_vulkan/vk_scheduler.h"
  #include "video_core/renderer_vulkan/vk_state_tracker.h"
-@@ -141,27 +140,9 @@ void Scheduler::RequestOutsideRenderPassOperationContext() {
+@@ -154,27 +153,9 @@ void Scheduler::RequestOutsideRenderPassOperationContext() {
  
  bool Scheduler::UpdateGraphicsPipeline(GraphicsPipeline* pipeline) {
      if (state.graphics_pipeline == pipeline) {
@@ -1374,10 +1373,10 @@ index 7e99bf8fa7..b3e1c4f025 100644
  
      u32 GetWidth() const {
 diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-index 6ce7433240..1d900d16a4 100644
+index 39a43d5950..f641c7eea3 100644
 --- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-@@ -1137,8 +1137,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1138,8 +1138,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                  UNREACHABLE();
              }
          }();
@@ -1386,7 +1385,7 @@ index 6ce7433240..1d900d16a4 100644
          if (!can_blit_depth_stencil) {
              UNIMPLEMENTED_IF(is_src_msaa || is_dst_msaa);
              blit_image_helper.BlitDepthStencil(dst_framebuffer, src, dst_region, src_region,
-@@ -1153,15 +1151,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1154,15 +1152,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
      const VkImage src_image = src.ImageHandle();
      const VkImageSubresourceLayers dst_layers = MakeSubresourceLayers(&dst);
      const VkImageSubresourceLayers src_layers = MakeSubresourceLayers(&src);
@@ -1402,7 +1401,7 @@ index 6ce7433240..1d900d16a4 100644
      const bool is_resolve = is_src_msaa && !is_dst_msaa;
      scheduler.RequestOutsideRenderPassOperationContext();
      scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
-@@ -2283,26 +2272,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
+@@ -2284,26 +2273,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
  
  Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& tsc) {
      const auto& device = runtime.device;
@@ -1431,9 +1430,9 @@ index 6ce7433240..1d900d16a4 100644
 -    if (has_custom_border_colors) {
 +    if (arbitrary_borders) {
          pnext = &border_ci;
-     }
-     const VkSamplerReductionModeCreateInfoEXT reduction_ci{
-@@ -2336,8 +2317,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
+         // Log extension usage for custom border color
+         if (Settings::values.gpu_logging_enabled.GetValue()) {
+@@ -2342,8 +2323,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
              .compareOp = MaxwellToVK::Sampler::DepthCompareFunction(tsc.depth_compare_func),
              .minLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.0f : tsc.MinLod(),
              .maxLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.25f : tsc.MaxLod(),
@@ -1467,10 +1466,10 @@ index 8d2e8e2a37..13f679ff54 100644
  #undef CreateEvent
  #undef CreateSemaphore
 diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
-index 8c596fe347..45497e7b5a 100644
+index 0b3aea6d2e..71188172d7 100644
 --- a/src/video_core/vulkan_common/vulkan_device.cpp
 +++ b/src/video_core/vulkan_common/vulkan_device.cpp
-@@ -294,10 +294,9 @@ std::unordered_map<VkFormat, VkFormatProperties> GetFormatProperties(vk::Physica
+@@ -297,10 +297,9 @@ std::unordered_map<VkFormat, VkFormatProperties> GetFormatProperties(vk::Physica
  #if defined(ANDROID) && defined(ARCHITECTURE_arm64)
  void OverrideBcnFormats(std::unordered_map<VkFormat, VkFormatProperties>& format_properties) {
      // These properties are extracted from Adreno driver 512.687.0
@@ -1484,7 +1483,7 @@ index 8c596fe347..45497e7b5a 100644
                                                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
  
      constexpr VkFormatFeatureFlags buffer_features{VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT};
-@@ -485,6 +484,8 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+@@ -488,6 +487,8 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
      is_non_gpu = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_OTHER ||
                   properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
  
@@ -1493,7 +1492,7 @@ index 8c596fe347..45497e7b5a 100644
      supports_d24_depth =
          IsFormatSupported(VK_FORMAT_D24_UNORM_S8_UINT,
                            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, FormatType::Optimal);
-@@ -495,11 +496,6 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+@@ -498,11 +499,6 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
      CollectToolingInfo();
  
      if (is_qualcomm) {
@@ -1505,7 +1504,7 @@ index 8c596fe347..45497e7b5a 100644
          LOG_WARNING(Render_Vulkan,
                      "Disabling shader float controls and 64-bit integer features on Qualcomm proprietary drivers");
          RemoveExtension(extensions.shader_float_controls, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
-@@ -562,31 +558,35 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+@@ -565,31 +561,35 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
          }
  
          if (nv_major_version >= 510) {
@@ -1560,7 +1559,7 @@ index 8c596fe347..45497e7b5a 100644
      sets_per_pool = 64;
      if (is_amd_driver) {
          // AMD drivers need a higher amount of Sets per Pool in certain circumstances like in XC2.
-@@ -631,9 +631,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+@@ -634,9 +634,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
      }
  
      if (is_intel_windows) {
@@ -1571,7 +1570,7 @@ index 8c596fe347..45497e7b5a 100644
          cant_blit_msaa = true;
      }
  
-@@ -650,57 +648,53 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+@@ -653,57 +651,53 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
              (std::min)(properties.properties.limits.maxVertexInputBindings, 16U);
      }
  
@@ -1664,7 +1663,7 @@ index 8c596fe347..45497e7b5a 100644
          RemoveExtensionFeature(extensions.vertex_input_dynamic_state, features.vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
      }
  
-@@ -788,8 +782,8 @@ void Device::SaveShader(std::span<const u32> spirv) const {
+@@ -795,8 +789,8 @@ void Device::SaveShader(std::span<const u32> spirv) const {
  }
  
  bool Device::ComputeIsOptimalAstcSupported() const {
@@ -1675,7 +1674,7 @@ index 8c596fe347..45497e7b5a 100644
          VK_FORMAT_ASTC_4x4_UNORM_BLOCK,   VK_FORMAT_ASTC_4x4_SRGB_BLOCK,
          VK_FORMAT_ASTC_5x4_UNORM_BLOCK,   VK_FORMAT_ASTC_5x4_SRGB_BLOCK,
          VK_FORMAT_ASTC_5x5_UNORM_BLOCK,   VK_FORMAT_ASTC_5x5_SRGB_BLOCK,
-@@ -808,10 +802,9 @@ bool Device::ComputeIsOptimalAstcSupported() const {
+@@ -815,10 +809,9 @@ bool Device::ComputeIsOptimalAstcSupported() const {
      if (!features.features.textureCompressionASTC_LDR) {
          return false;
      }
@@ -1689,7 +1688,7 @@ index 8c596fe347..45497e7b5a 100644
                                      VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
      for (const auto format : astc_formats) {
          const auto physical_format_properties{physical.GetFormatProperties(format)};
-@@ -1004,7 +997,7 @@ bool Device::GetSuitability(bool requires_swapchain) {
+@@ -1011,7 +1004,7 @@ bool Device::GetSuitability(bool requires_swapchain) {
      // Set next pointer.
      void** next = &features2.pNext;
  
@@ -1698,7 +1697,7 @@ index 8c596fe347..45497e7b5a 100644
      if (instance_version >= VK_API_VERSION_1_2) {
          features_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
          features_1_3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-@@ -1115,16 +1108,6 @@ bool Device::GetSuitability(bool requires_swapchain) {
+@@ -1122,16 +1115,6 @@ bool Device::GetSuitability(bool requires_swapchain) {
              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT;
          SetNext(next, properties.transform_feedback);
      }
@@ -1715,7 +1714,7 @@ index 8c596fe347..45497e7b5a 100644
  
      // Perform the property fetch.
      physical.GetProperties2(properties2);
-@@ -1157,70 +1140,14 @@ bool Device::GetSuitability(bool requires_swapchain) {
+@@ -1164,70 +1147,14 @@ bool Device::GetSuitability(bool requires_swapchain) {
          }
      }
  
@@ -1788,7 +1787,7 @@ index 8c596fe347..45497e7b5a 100644
      RemoveExtensionFeatureIfUnsuitable(extensions.custom_border_color, features.custom_border_color,
                                         VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
  
-@@ -1249,79 +1176,21 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1256,79 +1183,21 @@ void Device::RemoveUnsuitableExtensions() {
                                         VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
  
      // VK_EXT_extended_dynamic_state3
@@ -1875,7 +1874,7 @@ index 8c596fe347..45497e7b5a 100644
      // VK_EXT_provoking_vertex
      if (Settings::values.provoking_vertex.GetValue()) {
          extensions.provoking_vertex = features.provoking_vertex.provokingVertexLast
-@@ -1359,21 +1228,15 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1366,21 +1235,15 @@ void Device::RemoveUnsuitableExtensions() {
                                         VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
  
      // VK_EXT_transform_feedback
@@ -1901,7 +1900,7 @@ index 8c596fe347..45497e7b5a 100644
  
      // VK_EXT_vertex_input_dynamic_state
      extensions.vertex_input_dynamic_state =
-@@ -1382,17 +1245,6 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1389,17 +1252,6 @@ void Device::RemoveUnsuitableExtensions() {
                                         features.vertex_input_dynamic_state,
                                         VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
  
@@ -1919,7 +1918,7 @@ index 8c596fe347..45497e7b5a 100644
      // VK_KHR_pipeline_executable_properties
      if (Settings::values.renderer_shader_feedback.GetValue()) {
          extensions.pipeline_executable_properties =
-@@ -1416,76 +1268,6 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1423,76 +1275,6 @@ void Device::RemoveUnsuitableExtensions() {
      RemoveExtensionFeatureIfUnsuitable(extensions.workgroup_memory_explicit_layout,
                                         features.workgroup_memory_explicit_layout,
                                         VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
@@ -1997,7 +1996,7 @@ index 8c596fe347..45497e7b5a 100644
  
  void Device::SetupFamilies(VkSurfaceKHR surface) {
 diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
-index acb2954104..1032513b7f 100644
+index 744b5f827e..5e4f7700d4 100644
 --- a/src/video_core/vulkan_common/vulkan_device.h
 +++ b/src/video_core/vulkan_common/vulkan_device.h
 @@ -38,13 +38,9 @@ VK_DEFINE_HANDLE(VmaAllocator)
@@ -2264,7 +2263,7 @@ index acb2954104..1032513b7f 100644
      /// Returns true if the device supports UINT8 index buffer conversion via compute shader.
      bool SupportsUint8Indices() const {
          return features.bit8_storage.storageBuffer8BitAccess &&
-@@ -984,7 +804,6 @@ private:
+@@ -988,7 +808,6 @@ private:
          FOR_EACH_VK_FEATURE_1_1(FEATURE);
          FOR_EACH_VK_FEATURE_1_2(FEATURE);
          FOR_EACH_VK_FEATURE_1_3(FEATURE);
@@ -2272,7 +2271,7 @@ index acb2954104..1032513b7f 100644
          FOR_EACH_VK_FEATURE_EXT(FEATURE);
          FOR_EACH_VK_EXTENSION(EXTENSION);
  
-@@ -1001,7 +820,6 @@ private:
+@@ -1005,7 +824,6 @@ private:
          FOR_EACH_VK_FEATURE_1_1(FEATURE_CORE);
          FOR_EACH_VK_FEATURE_1_2(FEATURE_CORE);
          FOR_EACH_VK_FEATURE_1_3(FEATURE_CORE);
@@ -2280,7 +2279,7 @@ index acb2954104..1032513b7f 100644
          FOR_EACH_VK_FEATURE_EXT(FEATURE_EXT);
  
  #undef FEATURE_CORE
-@@ -1017,8 +835,6 @@ private:
+@@ -1021,8 +839,6 @@ private:
          VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor{};
          VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size_control{};
          VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback{};
@@ -2289,7 +2288,7 @@ index acb2954104..1032513b7f 100644
  
          VkPhysicalDeviceProperties properties{};
      };
-@@ -1049,13 +865,6 @@ private:
+@@ -1053,13 +869,6 @@ private:
      bool must_emulate_scaled_formats{};        ///< Requires scaled vertex format emulation
      bool dynamic_state3_blending{};            ///< Has blending features of dynamic_state3.
      bool dynamic_state3_enables{};             ///< Has at least one enable feature of dynamic_state3.
