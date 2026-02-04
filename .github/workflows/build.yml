@@ -68,7 +68,7 @@ jobs:
         if: ${{ env.TEMP_PATCH_NUMBER != '' }}
         run: |
           wget https://git.eden-emu.dev/eden-emu/eden/pulls/${TEMP_PATCH_NUMBER}.patch
-          git -C eden apply --3way ../${TEMP_PATCH_NUMBER}.patch
+          git -C eden apply --3way --ignore-whitespace ../${TEMP_PATCH_NUMBER}.patch
           rm ${TEMP_PATCH_NUMBER}.patch
 
       - name: Summary
