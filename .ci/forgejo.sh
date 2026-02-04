@@ -72,7 +72,7 @@ parse_payload() {
 
 	# NB: mirrors do not (generally) work for our purposes
 	# unless they magically can mirror everything in 10 seconds
-	FALLBACK_IDX=0
+	: "${FALLBACK_IDX:=0}"
 	if [ -z "$FORGEJO_HOST" ]; then
 		FORGEJO_HOST=$(jq -r ".[$FALLBACK_IDX].host" $DEFAULT_JSON)
 	fi
@@ -247,7 +247,7 @@ clone_repository() {
 
 	echo "$FORGEJO_BRANCH" > GIT-REFSPEC
 	git rev-parse --short=10 HEAD > GIT-COMMIT
-	{ git describe --tags HEAD --abbrev=0 || echo 'v0.1.0-Workflow'; } > GIT-TAG
+	{ git describe --tags HEAD --abbrev=0 || echo 'v0.1.1-Workflow'; } > GIT-TAG
 
 	if [ "$1" = "tag" ]; then
 		cp GIT-TAG GIT-RELEASE
