@@ -47,6 +47,11 @@ jobs:
       - name: Generate changelog
         run: ./.ci/changelog/generate.sh "${{ inputs.build-id }}" > changelog.md
 
+      - name: Delete Previous PR Number
+        if: ${{ env.GH_TOKEN && (inputs.build-id) == 'pull_request' && (inputs.status) == 'success' }}
+        run: gh release delete "$FORGEJO_PR_NUMBER" --repo "$RELEASE_REPO" --cleanup-tag -y
+        continue-on-error: true
+
       - name: Release
         id: release
         if: ${{ env.GH_TOKEN && (inputs.build-id) != 'test' || (inputs.build-id) != 'push' && (inputs.status) == 'success' }}
