@@ -3,12 +3,12 @@ name: "Build"
 on:
   workflow_call:
     inputs:
-      devel:
-        description: 'Development mode (disables update checker, adds nightly qualifier)'
-        type: boolean
-        required: true
       build-id:
         description: 'Identifier for workflows and caching'
+        type: string
+        required: true
+      devel:
+        description: 'Development mode (disables update checker)'
         type: string
         required: true
 

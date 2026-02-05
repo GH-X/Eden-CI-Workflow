@@ -4,19 +4,19 @@ on:
   workflow_call:
     inputs:
       build-id:
-        description: "build id"
+        description: 'Identifier for workflows and caching'
         type: string
         required: true
       cpm-cache-version:
-        description: "CPM cache version (e.g. v7)"
+        description: "CPM Cache Version"
         type: string
         required: true
       devel:
-        description: 'development build'
+        description: 'Development mode (disables update checker)'
         type: string
         required: true
       force_pgo:
-        description: 'test PGO builds'
+        description: 'Force PGO builds'
         type: string
         required: true
 
