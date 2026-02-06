@@ -243,7 +243,7 @@ index c5bc14f448..f0b021ca08 100644
          BitField<4, 1, u32> extended_dynamic_state_3_enables;
          BitField<5, 1, u32> dynamic_vertex_input;
 diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
-index 0ae81af0fb..c2d9ad8020 100644
+index 22e646afe9..6bf44d57f0 100644
 --- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
 +++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
 @@ -419,9 +419,6 @@ ConditionalRenderingResolvePass::ConditionalRenderingResolvePass(
@@ -1466,7 +1466,7 @@ index 8d2e8e2a37..13f679ff54 100644
  #undef CreateEvent
  #undef CreateSemaphore
 diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
-index 0b3aea6d2e..71188172d7 100644
+index f06551b91e..2a9f0ed7d6 100644
 --- a/src/video_core/vulkan_common/vulkan_device.cpp
 +++ b/src/video_core/vulkan_common/vulkan_device.cpp
 @@ -297,10 +297,9 @@ std::unordered_map<VkFormat, VkFormatProperties> GetFormatProperties(vk::Physica
@@ -1714,7 +1714,7 @@ index 0b3aea6d2e..71188172d7 100644
  
      // Perform the property fetch.
      physical.GetProperties2(properties2);
-@@ -1164,70 +1147,14 @@ bool Device::GetSuitability(bool requires_swapchain) {
+@@ -1164,68 +1147,14 @@ bool Device::GetSuitability(bool requires_swapchain) {
          }
      }
  
@@ -1722,7 +1722,6 @@ index 0b3aea6d2e..71188172d7 100644
 -
 -    // Driver detection variables for workarounds in GetSuitability
 -    const VkDriverId driver_id = properties.driver.driverID;
--    const bool is_intel_windows = driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS;
 -
 -    // VK_EXT_extended_dynamic_state2 below this will appear drivers that need workarounds.
 -
@@ -1739,15 +1738,14 @@ index 0b3aea6d2e..71188172d7 100644
 -    }
 -
 -    // Intel Windows < 27.20.100.0: Broken VertexInputDynamicState
+-    // Same for NVIDIA Proprietary < 580.119.02, unknown when VIDS was first NOT broken
 -    // Disable VertexInputDynamicState on old Intel Windows drivers
--    if (extensions.vertex_input_dynamic_state && is_intel_windows) {
+-    if (extensions.vertex_input_dynamic_state) {
 -        const u32 version = (properties.properties.driverVersion << 3) >> 3;
--        if (version < VK_MAKE_API_VERSION(27, 20, 100, 0)) {
--            LOG_WARNING(Render_Vulkan,
--                        "Intel Windows < 27.20.100.0: Disabling broken VK_EXT_vertex_input_dynamic_state");
--            RemoveExtensionFeature(extensions.vertex_input_dynamic_state,
--                                   features.vertex_input_dynamic_state,
--                                   VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+-        if ((driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS && version < VK_MAKE_API_VERSION(27, 20, 100, 0))
+-        || (driver_id == VK_DRIVER_ID_NVIDIA_PROPRIETARY && version < VK_MAKE_API_VERSION(580, 119, 02, 0))) {
+-            LOG_WARNING(Render_Vulkan, "Disabling broken VK_EXT_vertex_input_dynamic_state");
+-            RemoveExtensionFeature(extensions.vertex_input_dynamic_state, features.vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
 -        }
 -    }
 -
@@ -1786,8 +1784,8 @@ index 0b3aea6d2e..71188172d7 100644
 +                                     features.custom_border_color.customBorderColorWithoutFormat;
      RemoveExtensionFeatureIfUnsuitable(extensions.custom_border_color, features.custom_border_color,
                                         VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
- 
-@@ -1256,79 +1183,21 @@ void Device::RemoveUnsuitableExtensions() {
+     // VK_KHR_unified_image_layouts
+@@ -1258,79 +1187,21 @@ void Device::RemoveUnsuitableExtensions() {
                                         VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
  
      // VK_EXT_extended_dynamic_state3
@@ -1874,7 +1872,7 @@ index 0b3aea6d2e..71188172d7 100644
      // VK_EXT_provoking_vertex
      if (Settings::values.provoking_vertex.GetValue()) {
          extensions.provoking_vertex = features.provoking_vertex.provokingVertexLast
-@@ -1366,21 +1235,15 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1368,21 +1239,15 @@ void Device::RemoveUnsuitableExtensions() {
                                         VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
  
      // VK_EXT_transform_feedback
@@ -1900,7 +1898,7 @@ index 0b3aea6d2e..71188172d7 100644
  
      // VK_EXT_vertex_input_dynamic_state
      extensions.vertex_input_dynamic_state =
-@@ -1389,17 +1252,6 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1391,17 +1256,6 @@ void Device::RemoveUnsuitableExtensions() {
                                         features.vertex_input_dynamic_state,
                                         VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
  
@@ -1918,7 +1916,7 @@ index 0b3aea6d2e..71188172d7 100644
      // VK_KHR_pipeline_executable_properties
      if (Settings::values.renderer_shader_feedback.GetValue()) {
          extensions.pipeline_executable_properties =
-@@ -1423,76 +1275,6 @@ void Device::RemoveUnsuitableExtensions() {
+@@ -1425,76 +1279,6 @@ void Device::RemoveUnsuitableExtensions() {
      RemoveExtensionFeatureIfUnsuitable(extensions.workgroup_memory_explicit_layout,
                                         features.workgroup_memory_explicit_layout,
                                         VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
@@ -1996,7 +1994,7 @@ index 0b3aea6d2e..71188172d7 100644
  
  void Device::SetupFamilies(VkSurfaceKHR surface) {
 diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
-index 744b5f827e..5e4f7700d4 100644
+index 73a232ddee..e4e343e50d 100644
 --- a/src/video_core/vulkan_common/vulkan_device.h
 +++ b/src/video_core/vulkan_common/vulkan_device.h
 @@ -38,13 +38,9 @@ VK_DEFINE_HANDLE(VmaAllocator)
@@ -2031,7 +2029,7 @@ index 744b5f827e..5e4f7700d4 100644
      FEATURE(KHR, PipelineExecutableProperties, PIPELINE_EXECUTABLE_PROPERTIES,                     \
              pipeline_executable_properties)                                                        \
      FEATURE(KHR, WorkgroupMemoryExplicitLayout, WORKGROUP_MEMORY_EXPLICIT_LAYOUT,                  \
-@@ -93,12 +85,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+@@ -95,12 +87,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
      EXTENSION(KHR, SWAPCHAIN, swapchain)                                                           \
      EXTENSION(KHR, SWAPCHAIN_MUTABLE_FORMAT, swapchain_mutable_format)                             \
      EXTENSION(KHR, IMAGE_FORMAT_LIST, image_format_list)                                           \
@@ -2044,7 +2042,7 @@ index 744b5f827e..5e4f7700d4 100644
      EXTENSION(NV, DEVICE_DIAGNOSTICS_CONFIG, device_diagnostics_config)                            \
      EXTENSION(NV, GEOMETRY_SHADER_PASSTHROUGH, geometry_shader_passthrough)                        \
      EXTENSION(NV, VIEWPORT_ARRAY2, viewport_array2)                                                \
-@@ -125,7 +111,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+@@ -127,7 +113,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
      EXTENSION_NAME(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)                                 \
      EXTENSION_NAME(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)                                     \
      EXTENSION_NAME(VK_EXT_4444_FORMATS_EXTENSION_NAME)                                             \
@@ -2052,7 +2050,7 @@ index 744b5f827e..5e4f7700d4 100644
      EXTENSION_NAME(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME)                                       \
      EXTENSION_NAME(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)                                             \
      EXTENSION_NAME(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)                               \
-@@ -175,7 +160,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
+@@ -177,7 +162,6 @@ VK_DEFINE_HANDLE(VmaAllocator)
      FEATURE_NAME(depth_bias_control, depthBiasExact)                                               \
      FEATURE_NAME(extended_dynamic_state, extendedDynamicState)                                     \
      FEATURE_NAME(format_a4b4g4r4, formatA4B4G4R4)                                                  \
@@ -2060,7 +2058,7 @@ index 744b5f827e..5e4f7700d4 100644
      FEATURE_NAME(index_type_uint8, indexTypeUint8)                                                 \
      FEATURE_NAME(primitive_topology_list_restart, primitiveTopologyListRestart)                    \
      FEATURE_NAME(provoking_vertex, provokingVertexLast)                                            \
-@@ -470,11 +454,6 @@ public:
+@@ -472,11 +456,6 @@ public:
          return extensions.swapchain_mutable_format;
      }
  
@@ -2072,7 +2070,7 @@ index 744b5f827e..5e4f7700d4 100644
      /// Returns true if VK_KHR_shader_float_controls is enabled.
      bool IsKhrShaderFloatControlsSupported() const {
          return extensions.shader_float_controls;
-@@ -511,18 +490,10 @@ public:
+@@ -513,18 +492,10 @@ public:
      }
  
      /// Returns true if the device supports VK_EXT_shader_stencil_export.
@@ -2091,7 +2089,7 @@ index 744b5f827e..5e4f7700d4 100644
      /// Returns true if the device supports VK_EXT_depth_range_unrestricted.
      bool IsExtDepthRangeUnrestrictedSupported() const {
          return extensions.depth_range_unrestricted;
-@@ -563,46 +534,6 @@ public:
+@@ -565,46 +536,6 @@ public:
          return extensions.custom_border_color;
      }
  
@@ -2138,7 +2136,7 @@ index 744b5f827e..5e4f7700d4 100644
      /// Returns true if the device supports VK_EXT_extended_dynamic_state.
      bool IsExtExtendedDynamicStateSupported() const {
          return extensions.extended_dynamic_state;
-@@ -652,50 +583,6 @@ public:
+@@ -654,50 +585,6 @@ public:
          return extensions.line_rasterization;
      }
  
@@ -2189,7 +2187,7 @@ index 744b5f827e..5e4f7700d4 100644
      /// Returns true if the device supports VK_EXT_vertex_input_dynamic_state.
      bool IsExtVertexInputDynamicStateSupported() const {
          return extensions.vertex_input_dynamic_state;
-@@ -828,73 +715,6 @@ public:
+@@ -830,73 +717,6 @@ public:
          return features2.features.multiViewport;
      }
  
@@ -2263,7 +2261,7 @@ index 744b5f827e..5e4f7700d4 100644
      /// Returns true if the device supports UINT8 index buffer conversion via compute shader.
      bool SupportsUint8Indices() const {
          return features.bit8_storage.storageBuffer8BitAccess &&
-@@ -988,7 +808,6 @@ private:
+@@ -990,7 +810,6 @@ private:
          FOR_EACH_VK_FEATURE_1_1(FEATURE);
          FOR_EACH_VK_FEATURE_1_2(FEATURE);
          FOR_EACH_VK_FEATURE_1_3(FEATURE);
@@ -2271,7 +2269,7 @@ index 744b5f827e..5e4f7700d4 100644
          FOR_EACH_VK_FEATURE_EXT(FEATURE);
          FOR_EACH_VK_EXTENSION(EXTENSION);
  
-@@ -1005,7 +824,6 @@ private:
+@@ -1007,7 +826,6 @@ private:
          FOR_EACH_VK_FEATURE_1_1(FEATURE_CORE);
          FOR_EACH_VK_FEATURE_1_2(FEATURE_CORE);
          FOR_EACH_VK_FEATURE_1_3(FEATURE_CORE);
@@ -2279,7 +2277,7 @@ index 744b5f827e..5e4f7700d4 100644
          FOR_EACH_VK_FEATURE_EXT(FEATURE_EXT);
  
  #undef FEATURE_CORE
-@@ -1021,8 +839,6 @@ private:
+@@ -1023,8 +841,6 @@ private:
          VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor{};
          VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size_control{};
          VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback{};
@@ -2288,7 +2286,7 @@ index 744b5f827e..5e4f7700d4 100644
  
          VkPhysicalDeviceProperties properties{};
      };
-@@ -1053,13 +869,6 @@ private:
+@@ -1055,13 +871,6 @@ private:
      bool must_emulate_scaled_formats{};        ///< Requires scaled vertex format emulation
      bool dynamic_state3_blending{};            ///< Has blending features of dynamic_state3.
      bool dynamic_state3_enables{};             ///< Has at least one enable feature of dynamic_state3.
