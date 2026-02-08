@@ -57,7 +57,7 @@ if [ "$BUILD_ID" = pull_request ] && release; then
 	echo "RELEASE_PR=1"
 fi
 
-if [ "$BUILD_ID" = "nightly" ] && dc; then
+if [ "$BUILD_ID" = "nightly" ] && dc && release; then
 	echo "RELEASE_DISCORD=1"
 fi
 
