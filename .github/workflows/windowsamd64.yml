@@ -1,4 +1,4 @@
-name: " Nightly Windows Amd64 "
+name: " Custom Windows Amd64 "
 
 on:
   workflow_call:

@@ -1,4 +1,4 @@
-name: " Nightly MSYS2 Amd64 "
+name: " Custom MSYS2 Amd64 "
 
 on:
   workflow_call:

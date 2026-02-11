@@ -1,4 +1,4 @@
-name: " Nightly Build Workflow "
+name: " Custom Build Workflow "
 
 on:
   workflow_call:

@@ -1,4 +1,4 @@
-name: " Nightly "
+name: " Custom "
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     concurrency:
       group: nightly-build
       cancel-in-progress: false
-    uses: ./.github/workflows/buildnightly.yml
+    uses: ./.github/workflows/buildcustom.yml
     with:
       build-id: 'pushed'
       build-commit: ${{ github.event.head_commit.message }}
@@ -33,7 +33,7 @@ jobs:
     concurrency:
       group: nightly-build
       cancel-in-progress: false
-    uses: ./.github/workflows/buildnightly.yml
+    uses: ./.github/workflows/buildcustom.yml
     with:
       build-id: 'manual'
       build-commit: ${{ github.event.inputs.commit }}
