@@ -1,0 +1,116 @@
+name: "Release"
+
+on:
+  workflow_call:
+    inputs:
+      build-id:
+        description: 'Identifier for workflows and caching'
+        type: string
+        required: true
+      devel:
+        description: 'Development mode (disables update checker)'
+        type: string
+        required: true
+      status:
+        description: 'The result of the prior build step.'
+        type: string
+        required: true
+
+jobs:
+  release:
+    name: "Release"
+
+    env:
+      GH_TOKEN: "${{ secrets.CUSTOM_GITHUB_TOKEN }}"
+      FJ_TOKEN: "${{ secrets.FORGEJO_TOKEN }}"
+      DISCORD_WEBHOOK: "${{ secrets.DISCORD_WEBHOOK }}"
+      DEVEL: "${{ inputs.devel }}"
+      STATUS: "${{ inputs.status }}"
+      BUILD_ID: "${{ inputs.build-id }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v7.0.0
+
+      - name: Load environments
+        run: |
+          FORGEJO_LENV=forgejo-env/forgejo.env . .ci/fj/load-env.sh
+          . .ci/common/steps.sh | tee -a "$GITHUB_ENV"
+
+      - name: Send build status
+        if: ${{ env.SEND_STATUS == '1' }}
+        run: python3 ./.ci/common/status.py --$STATUS
+
+      - name: Package artifacts nicely
+        run: ./.ci/common/pack.sh
+
+      - name: Generate changelog
+        run: ./.ci/changelog/generate.sh "$BUILD_ID" > changelog.md
+
+      - name: Delete Previous PR Number
+        if: ${{ env.RELEASE_PR == '1' }}
+        run: gh release delete "$FORGEJO_PR_NUMBER" --repo "$RELEASE_REPO" --cleanup-tag -y
+        continue-on-error: true
+
+      - name: Release
+        id: release
+        if: ${{ env.SEND_RELEASE == '1' }}
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          name: "${{ env.GITHUB_TITLE }}"
+          tag_name: ${{ env.GITHUB_TAG }}
+          repository: ${{ env.RELEASE_REPO }}
+          body_path: ./changelog.md
+          token: ${{ env.GH_TOKEN }}
+          prerelease: false
+          draft: ${{ inputs.build-id == 'tag' }}
+          generate_release_notes: false
+          make_latest: true
+          files: |
+            artifacts/*
+
+      - name: Add Release URL to Summary
+        if: ${{ env.SEND_RELEASE == '1' }}
+        run: |
+          {
+            echo "## Release Summary"
+            echo "- View Release on GitHub: [$GITHUB_TITLE](${{ steps.release.outputs.url }})"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send Release Status
+        if: ${{ env.SEND_STATUS == '1' && env.SEND_RELEASE == '1' }}
+        run: python3 ./.ci/common/status.py --release ${{ steps.release.outputs.url }}
+
+      - name: Send Nightly Release to Discord
+        if: ${{ env.RELEASE_DISCORD == '1' }}
+        run: .ci/discord/publish.sh
+
+      - name: Release (PR Number)
+        if: ${{ env.RELEASE_PR == '1' }}
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          name: "${{ env.GITHUB_TITLE }}"
+          tag_name: ${{ env.FORGEJO_PR_NUMBER }}
+          repository: ${{ env.RELEASE_REPO }}
+          body_path: ./changelog.md
+          prerelease: false
+          draft: false
+          generate_release_notes: false
+          token: ${{ env.GH_TOKEN }}
+          make_latest: true
+
+      - name: Release (Forgejo)
+        if: ${{ env.RELEASE_FJ == '1' }}
+        run: |
+          . .ci/fj/release.sh
+          echo "- View Release on Forgejo: [$FORGEJO_REF](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: changelog
+          path: changelog.md

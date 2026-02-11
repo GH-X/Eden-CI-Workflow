@@ -1,9 +1,9 @@
-name: "[Manual] Workflow PR"
+name: "[Auto] Nightly Builds"
 
 on:
-  pull_request:
-    branches:
-      - '*'
+  schedule:
+    # every day at 6 pm
+    - cron: "0 18 * * *"
   workflow_dispatch:
 
 env:
@@ -12,13 +12,10 @@ env:
 jobs:
   build:
     name: Build
-    concurrency:
-      group: test-build-${{ github.ref_name }}
-      cancel-in-progress: true
     uses: ./.github/workflows/build.yml
     with:
-      devel: true
-      build-id: 'test'
+      devel: false
+      build-id: 'nightly'
     secrets: inherit
 
   release:
@@ -32,7 +29,7 @@ jobs:
       discussions: write
     uses: ./.github/workflows/release.yml
     with:
-      devel: true
-      build-id: 'test'
+      devel: false
+      build-id: 'nightly'
       status: ${{ needs.build.result }}
     secrets: inherit

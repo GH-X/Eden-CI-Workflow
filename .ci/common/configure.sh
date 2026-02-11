@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # The master CMake configurator.
@@ -19,8 +19,11 @@
 # shellcheck disable=SC1091
 
 ROOTDIR="$PWD"
-BUILDDIR="${BUILDDIR:-build}"
-WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BUILDDIR="${BUILDDIR:-$ROOTDIR/build}"
+WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
+
+# shellcheck disable=SC2153
+echo "Build ID: $BUILD_ID"
 
 # check if it's called eden dir
 if [ ! -f "$ROOTDIR/CMakeLists.txt" ]; then
@@ -35,13 +38,17 @@ if [ ! -d "$WORKFLOW_DIR/.ci/common" ]; then
 	exit 1
 fi
 
-. "$WORKFLOW_DIR"/.ci/common/project.sh
+. "$WORKFLOW_DIR/.ci/common/project.sh"
 
 # annoying
 if [ "$DEVEL" = "true" ]; then
 	UPDATES=OFF
 else
 	UPDATES=ON
+fi
+
+if [ "$BUILD_ID" = nightly ]; then
+	NIGHTLY=ON
 fi
 
 # platform handling
@@ -55,7 +62,7 @@ fi
 
 # Flags all targets use
 COMMON_FLAGS=(
-	# DO not build tests
+	# Do not build tests
 	-DBUILD_TESTING=OFF
 
 	# build type
@@ -66,7 +73,7 @@ COMMON_FLAGS=(
 	-DYUZU_USE_QT_MULTIMEDIA="${USE_MULTIMEDIA:-OFF}"
 	-DYUZU_USE_QT_WEB_ENGINE="${USE_WEBENGINE:-OFF}"
 	-DENABLE_QT_TRANSLATION=ON
-	-DENABLE_QT_UPDATE_CHECKER="${UPDATES:-ON}"
+	-DENABLE_UPDATE_CHECKER="${UPDATES:-ON}"
 
 	# misc
 	-DUSE_CCACHE="${CCACHE:-OFF}"
@@ -97,7 +104,12 @@ COMMON_FLAGS=(
 	# packaging stuff
 	-DCMAKE_INSTALL_PREFIX=/usr
 	-DYUZU_CMD="${STANDALONE:-OFF}"
-	-DYUZU_ROOM_STANDALONE="${STANDALONE:-OFF}"
+
+	# The room functionality is bundled in now.
+	# We don't need it standalone.
+	-DYUZU_ROOM_STANDALONE=OFF
+
+	-DNIGHTLY_BUILD="${NIGHTLY:-OFF}"
 )
 
 # cmd line stuff

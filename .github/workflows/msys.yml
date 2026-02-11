@@ -4,19 +4,19 @@ on:
   workflow_call:
     inputs:
       build-id:
-        description: "build id"
+        description: 'Identifier for workflows and caching'
         type: string
         required: true
       cpm-cache-version:
-        description: "CPM cache version (e.g. v7)"
+        description: 'CPM Cache Version'
         type: string
         required: true
       devel:
-        description: 'development build'
+        description: 'Development mode (disables update checker)'
         type: string
         required: true
       force_pgo:
-        description: 'test PGO builds'
+        description: 'Force PGO builds'
         type: string
         required: true
 
@@ -26,6 +26,7 @@ env:
   CCACHE: "true"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
+  BUILD_ID: ${{ inputs.build-id }}
 
 jobs:
   msys-matrix:
@@ -81,7 +82,6 @@ jobs:
         os: ${{ fromJson(needs.msys-matrix.outputs.include) }}
 
     env:
-      QT_VERSION: 6.9.1
       TARGET: ${{ matrix.os.arch }}
       COMPILER: "${{ matrix.os.program }}"
       PGO_TARGET: "${{ matrix.os.target }}"
@@ -99,8 +99,7 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Setup MSYS2
         id: msys2
@@ -138,6 +137,7 @@ jobs:
         run: ./.ci/windows/package.sh
         env:
           MSYS_TOOLCHAIN: ${{ matrix.os.msystem }}
+          ARCH: mingw-${{ env.ARCH }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6.0.0

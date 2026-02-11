@@ -1,16 +1,16 @@
-name: "[Master] Build Workflow"
+name: "Build"
 
 on:
   workflow_call:
     inputs:
-      devel:
-        description: 'Development mode (disables update checker, adds nightly qualifier)'
-        type: boolean
-        default: true
       build-id:
         description: 'Identifier for workflows and caching'
         type: string
-        default: 'master'
+        required: true
+      devel:
+        description: 'Development mode (disables update checker)'
+        type: string
+        required: true
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
@@ -19,8 +19,8 @@ env:
   CPM_CACHE_VERSION: "v15"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
-  TEMP_PATCH_STATUS: "false"
-  TEMP_PATCH: "3289"
+  BUILD_ID: ${{ inputs.build-id }}
+  TEMP_PATCH_NUMBER: ""
   FORCE_PGO: "false"
 
 jobs:
@@ -37,49 +37,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Send Commit Status to Forgejo
-        if: ${{ inputs.build-id == 'master' || inputs.build-id == 'pull_request' }}
-        shell: bash
-        run: |
-          export FORGEJO_REPO="${{ github.event.client_payload.repository }}"
-          export FORGEJO_REF="${{ github.event.client_payload.ref }}"
-          python ./.ci/common/status.py pending
-
       - name: Parse Forgejo payload
-        shell: bash
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
-          cat payload.json
+          jq . payload.json
           ./.ci/forgejo.sh --parse ${{ inputs.build-id }}
 
       - name: Load payload environment
-        shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
+
+      - name: Send pending status
+        if: ${{ (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' }}
+        run: python3 .ci/common/status.py --pending
 
       # for some amazing reason you can't pass env vars to reusable workflows
       - name: Setup Outputs
         id: out
-        shell: bash
         run: |
           echo "cachever=${CPM_CACHE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "pgo=${FORCE_PGO}" >> "$GITHUB_OUTPUT"
 
       - name: Clone
-        shell: bash
-        run: |
-          ./.ci/forgejo.sh --clone ${{ inputs.build-id }}
+        run: ./.ci/forgejo.sh --clone ${{ inputs.build-id }}
 
       - name: Apply Temporary Patch
-        if: ${{ env.TEMP_PATCH_STATUS == 'true' }}
-        shell: bash
+        if: ${{ env.TEMP_PATCH_NUMBER != '' }}
         run: |
-          wget https://git.eden-emu.dev/eden-emu/eden/pulls/${TEMP_PATCH}.patch
-          git -C eden apply ../${TEMP_PATCH}.patch
-          rm ${TEMP_PATCH}.patch
+          wget https://git.eden-emu.dev/eden-emu/eden/pulls/${TEMP_PATCH_NUMBER}.patch
+          git -C eden apply --3way --ignore-whitespace ../${TEMP_PATCH_NUMBER}.patch
+          rm ${TEMP_PATCH_NUMBER}.patch
 
       - name: Summary
-        shell: bash
         run: |
           ./.ci/fj/summary.sh ${{ inputs.build-id }}
 
@@ -114,6 +102,9 @@ jobs:
       - name: Clone
         uses: actions/download-artifact@v7.0.0
 
+      - name: Load payload environment
+        run: FORGEJO_LENV=forgejo-env/forgejo.env . .ci/fj/load-env.sh
+
       - name: Build
         run: ./.ci/source/build.sh
 
@@ -124,12 +115,12 @@ jobs:
         uses: actions/upload-artifact@v6.0.0
         with:
           name: source
-          path: source.*
+          path: ./*.tar.zst
 
   deb:
     name: ".deb builds"
     needs: [clone]
-    uses: ./.github/workflows/deb.yml
+    uses: ./.github/workflows/debian.yml
     with:
       build-id: '${{ inputs.build-id }}'
       cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
@@ -189,52 +180,17 @@ jobs:
       devel: ${{ inputs.devel }}
     secrets: inherit
 
-  unix:
-    name: "UNIX"
+  freebsd:
+    name: "FreeBSD"
     needs: [clone]
-    uses: ./.github/workflows/unix.yml
+    uses: ./.github/workflows/freebsd.yml
     with:
       build-id: '${{ inputs.build-id }}'
       cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
       devel: ${{ inputs.devel }}
     secrets: inherit
 
-  status-if-cancelled:
-    name: "Send Cancelled Commit Status to Forgejo"
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && cancelled() && ((inputs.build-id || '') == 'master' || (inputs.build-id || '') == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.1
-      - name: Load payload env and send status
-        run: |
-          export FORGEJO_REPO="${{ github.event.client_payload.repository }}"
-          export FORGEJO_REF="${{ github.event.client_payload.ref }}"
-          python3 ./.ci/common/status.py error
-
-  status-if-failure:
-    name: "Send Failure Commit Status to Forgejo"
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && failure() && ((inputs.build-id || '') == 'master' || (inputs.build-id || '') == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.1
-      - name: Load payload env and send status
-        run: |
-          export FORGEJO_REPO="${{ github.event.client_payload.repository }}"
-          export FORGEJO_REF="${{ github.event.client_payload.ref }}"
-          python3 ./.ci/common/status.py failure
-
-  status-if-success:
-    name: "Send Success Commit Status to Forgejo"
-    # TODO: ?ploo this
-    needs: [source, deb, linux, windows, android, macos, unix, msys]
-    if: ${{ always() && success() && ((inputs.build-id || '') == 'master' || (inputs.build-id || '') == 'pull_request') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.1
-      - name: Load payload env and send status
-        run: |
-          export FORGEJO_REPO="${{ github.event.client_payload.repository }}"
-          export FORGEJO_REF="${{ github.event.client_payload.ref }}"
-          python3 ./.ci/common/status.py success
+  room:
+    name: "musl room"
+    needs: [clone]
+    uses: ./.github/workflows/room.yml

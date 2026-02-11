@@ -1,25 +1,33 @@
 #!/bin/sh -e
 
+# SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # shellcheck disable=SC1091
 
 ROOTDIR="$PWD"
-. "$ROOTDIR"/.ci/common/project.sh
-
-RELEASE_JSON=".ci/release.json"
-GH_HOST=$(jq -r --arg id "tag" '.[] | select(.["build-id"] == $id) | .host' $RELEASE_JSON)
-GH_REPO=$(jq -r --arg id "tag" '.[] | select(.["build-id"] == $id) | .repository' $RELEASE_JSON)
+WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
+. "$WORKFLOW_DIR/.ci/common/project.sh"
+ARTIFACTS_DIR="$ROOTDIR/artifacts"
 
 DEFAULT_JSON=".ci/default.json"
 FJ_HOST=$(jq -r ".[0].host" $DEFAULT_JSON)
 FJ_REPO=$(jq -r ".[0].repository" $DEFAULT_JSON)
 
-sed -i "s|$GH_HOST/$GH_REPO|$FJ_HOST/$FJ_REPO|g" changelog.md
-git clone https://git.crueter.xyz/scripts/fj.git
+sed -i "s|$RELEASE_HOST/$RELEASE_REPO|$FJ_HOST/$FJ_REPO|g" "$ROOTDIR/changelog.md"
+git clone --depth 1 https://git.crueter.xyz/scripts/fj.git
 
-fj/fj.sh -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	create -b changelog.md -n "$PROJECT_PRETTYNAME $FORGEJO_REF" -d > url
+echo "-- Creating Release"
+"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
+	create -b "$ROOTDIR/changelog.md" -n "$PROJECT_PRETTYNAME $FORGEJO_REF" -d
 
-cat url
+echo "-- Uploading Assets"
 
-fj/fj.sh -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	upload -g artifacts/*
+# Cloudflare sucks, so we upload twice just to ensure we don't get blocked.
+"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
+	upload -g "$ARTIFACTS_DIR"/*
+
+"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
+	upload -g "$ARTIFACTS_DIR"/*
+
+export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/$FORGEJO_REF"

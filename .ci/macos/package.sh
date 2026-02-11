@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # credit: escary and hauntek
@@ -8,17 +8,20 @@
 ROOTDIR="$PWD"
 
 # shellcheck disable=SC1091
-. "$ROOTDIR"/.ci/common/project.sh
+WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
+. "$WORKFLOW_DIR/.ci/common/project.sh"
 
-BUILDDIR="${BUILDDIR:-build}"
+BUILDDIR="${BUILDDIR:-$ROOTDIR/build}"
 ARTIFACTS_DIR="$ROOTDIR/artifacts"
 APP="${PROJECT_REPO}.app"
+
+ARTIFACT="${ARTIFACTS_DIR}/${PROJECT_PRETTYNAME}-macOS-${ARTIFACT_REF}.tar.gz"
 
 cd "$BUILDDIR/bin"
 
 codesign --deep --force --verbose --sign - "$APP"
 
 mkdir -p "$ARTIFACTS_DIR"
-tar czf "$ARTIFACTS_DIR/${PROJECT_REPO}.tar.gz" "$APP"
+tar czf "$ARTIFACT" "$APP"
 
-echo "MacOS package created at $ARTIFACTS_DIR/${PROJECT_REPO}.tar.gz"
+echo "-- macOS package created at $ARTIFACT"

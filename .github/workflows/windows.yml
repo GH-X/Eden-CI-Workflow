@@ -4,19 +4,19 @@ on:
   workflow_call:
     inputs:
       build-id:
-        description: "build id"
+        description: 'Identifier for workflows and caching'
         type: string
         required: true
       cpm-cache-version:
-        description: "CPM cache version (e.g. v7)"
+        description: 'CPM Cache Version'
         type: string
         required: true
       devel:
-        description: 'development build'
+        description: 'Development mode (disables update checker)'
         type: string
         required: true
       force_pgo:
-        description: 'test PGO builds'
+        description: 'Force PGO builds'
         type: string
         required: true
 
@@ -26,6 +26,7 @@ env:
   CCACHE: "true"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
+  BUILD_ID: ${{ inputs.build-id }}
 
 jobs:
   win-matrix:
@@ -62,7 +63,6 @@ jobs:
         compiler: ${{ fromJson(needs.win-matrix.outputs.compiler) }}
 
     env:
-      QT_VERSION: 6.9.1
       TARGET: ${{ matrix.os.arch }}
       COMPILER: "${{ matrix.compiler.program }}"
       PGO_TARGET: "${{ matrix.compiler.target }}"
@@ -80,8 +80,7 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1.13.0

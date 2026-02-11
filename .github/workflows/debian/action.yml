@@ -7,6 +7,9 @@ inputs:
   name:
     description: 'what to name this workflow'
     required: true
+  pretty-name:
+    description: 'The pretty name to use in the artifact'
+    required: true
   cpm-cache-version:
     description: "CPM cache version (e.g. v7)"
     type: string
@@ -32,14 +35,13 @@ runs:
 
     - name: Build
       shell: bash
-      run: |
-        chmod a+x ./.ci/deb/makedeb.sh
-        ./.ci/deb/makedeb.sh
+      run: ./.ci/debian/makedeb.sh
       env:
         ARCH: ${{ inputs.arch }}
+        DEB_NAME: ${{ inputs.pretty-name }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v6.0.0
       with:
         name: ${{ inputs.name }}-${{ inputs.arch }}
-        path: ./eden*.deb
+        path: ./artifacts/*.deb
