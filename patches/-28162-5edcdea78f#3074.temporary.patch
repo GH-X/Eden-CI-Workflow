@@ -948,7 +948,7 @@ index 3960f78343..3b5c2e3c01 100644
  
      if (blit_supported) {
 diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
-index b9ff4cd00e..a05fb48a9d 100644
+index c035eb7cd9..2fa38b8409 100644
 --- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
 @@ -1,4 +1,4 @@
@@ -1561,7 +1561,7 @@ index b689c6b660..30780b9cbd 100644
      void UpdateStencilOp(Tegra::Engines::Maxwell3D::Regs& regs);
      void UpdateStencilTestEnable(Tegra::Engines::Maxwell3D::Regs& regs);
 diff --git a/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp b/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
-index f1e15595b3..80ff75e3b9 100644
+index 1d7af349d1..46bb53ef06 100644
 --- a/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
 @@ -1,4 +1,4 @@
@@ -1628,7 +1628,7 @@ index f1e15595b3..80ff75e3b9 100644
      const VkSubpassDescription subpass{
          .flags = 0,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index aafcfdf65b..854c37a7fc 100644
+index 2a69d6d244..75d6cf53ca 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -17,7 +17,6 @@
@@ -1696,20 +1696,15 @@ index aafcfdf65b..854c37a7fc 100644
          upload_cmdbuf.End();
          cmdbuf.End();
  
-@@ -344,11 +313,11 @@ void Scheduler::EndRenderPass()
- 
-         query_cache->CounterEnable(VideoCommon::QueryType::ZPassPixelCount64, false);
-         query_cache->NotifySegment(false);
-+
-         Record([num_images = num_renderpass_images,
+@@ -348,7 +317,6 @@ void Scheduler::EndRenderPass()
                         images = renderpass_images,
                         ranges = renderpass_image_ranges](vk::CommandBuffer cmdbuf) {
-             std::array<VkImageMemoryBarrier, 9> barriers;
+             std::vector<VkImageMemoryBarrier> barriers(num_images);
 -            VkPipelineStageFlags src_stages = 0;
              for (size_t i = 0; i < num_images; ++i) {
                  const VkImageSubresourceRange& range = ranges[i];
                  const bool is_color = (range.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0;
-@@ -356,76 +325,38 @@ void Scheduler::EndRenderPass()
+@@ -356,76 +324,38 @@ void Scheduler::EndRenderPass()
                                                & (VK_IMAGE_ASPECT_DEPTH_BIT
                                                   | VK_IMAGE_ASPECT_STENCIL_BIT)) !=0;
  
@@ -1807,10 +1802,10 @@ index aafcfdf65b..854c37a7fc 100644
                                     nullptr,
                                     nullptr,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
-index 5216a436c8..3cb9df799b 100644
+index fb0ac9b008..8e63b1a810 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.h
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.h
-@@ -217,7 +217,6 @@ private:
+@@ -237,7 +237,6 @@ private:
          GraphicsPipeline* graphics_pipeline = nullptr;
          bool is_rescaling = false;
          bool rescaling_defined = false;
@@ -1916,10 +1911,10 @@ index 74bae9e181..aef726658a 100644
          const bool has_changed = current_topology != new_topology;
          current_topology = new_topology;
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 7418ad934e..fdd2de2379 100644
+index 7e7e67639d..e14741afc3 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-@@ -306,17 +306,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+@@ -344,17 +344,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
          swapchain_ci.queueFamilyIndexCount = static_cast<u32>(queue_indices.size());
          swapchain_ci.pQueueFamilyIndices = queue_indices.data();
      }
@@ -1959,7 +1954,7 @@ index 7e99bf8fa7..b3e1c4f025 100644
  
      u32 GetWidth() const {
 diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-index 988ab53266..f641c7eea3 100644
+index 0069f10f9c..5dc134a140 100644
 --- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 @@ -810,8 +810,7 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
@@ -2011,7 +2006,7 @@ index 988ab53266..f641c7eea3 100644
                                 0, nullptr, nullptr, write_barriers);
      });
  }
-@@ -1038,12 +1021,11 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
+@@ -1040,12 +1023,11 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
              .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
              .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
          };
@@ -2025,7 +2020,7 @@ index 988ab53266..f641c7eea3 100644
          };
          const std::array pre_barriers{
              VkImageMemoryBarrier{
-@@ -1110,39 +1092,18 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
+@@ -1112,39 +1094,18 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
                  .subresourceRange = dst_range.SubresourceRange(dst_aspect_mask),
              },
          };
@@ -2069,7 +2064,7 @@ index 988ab53266..f641c7eea3 100644
                                 0, {}, {}, post_barriers);
      });
  }
-@@ -1177,8 +1138,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1179,8 +1140,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                  UNREACHABLE();
              }
          }();
@@ -2078,7 +2073,7 @@ index 988ab53266..f641c7eea3 100644
          if (!can_blit_depth_stencil) {
              UNIMPLEMENTED_IF(is_src_msaa || is_dst_msaa);
              blit_image_helper.BlitDepthStencil(dst_framebuffer, src, dst_region, src_region,
-@@ -1193,15 +1152,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1195,15 +1154,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
      const VkImage src_image = src.ImageHandle();
      const VkImageSubresourceLayers dst_layers = MakeSubresourceLayers(&dst);
      const VkImageSubresourceLayers src_layers = MakeSubresourceLayers(&src);
@@ -2094,7 +2089,7 @@ index 988ab53266..f641c7eea3 100644
      const bool is_resolve = is_src_msaa && !is_dst_msaa;
      scheduler.RequestOutsideRenderPassOperationContext();
      scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
-@@ -1269,12 +1219,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1271,12 +1221,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                  .layerCount = VK_REMAINING_ARRAY_LAYERS,
              },
          };
@@ -2108,7 +2103,7 @@ index 988ab53266..f641c7eea3 100644
                                 0, nullptr, nullptr, read_barriers);
          if (is_resolve) {
              cmdbuf.ResolveImage(src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image,
-@@ -1287,14 +1232,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1289,14 +1234,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                  src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                  MakeImageBlit(dst_region, src_region, dst_layers, src_layers), vk_filter);
          }
@@ -2124,7 +2119,7 @@ index 988ab53266..f641c7eea3 100644
                                 0, write_barrier);
      });
  }
-@@ -1872,14 +1810,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+@@ -1874,14 +1812,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                          .layerCount = VK_REMAINING_ARRAY_LAYERS,
                      },
                  };
@@ -2140,7 +2135,7 @@ index 988ab53266..f641c7eea3 100644
                                         0, read_barrier);
  
                  for (size_t index = 0; index < buffers.size(); index++) {
-@@ -1887,20 +1818,17 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+@@ -1889,20 +1820,17 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                                               vk_copies[index]);
                  }
  
@@ -2164,7 +2159,7 @@ index 988ab53266..f641c7eea3 100644
                      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                      .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -1914,13 +1842,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+@@ -1916,13 +1844,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                          .layerCount = VK_REMAINING_ARRAY_LAYERS,
                      },
                  };
@@ -2179,7 +2174,7 @@ index 988ab53266..f641c7eea3 100644
                                         0, memory_write_barrier, nullptr, image_write_barrier);
              });
              return;
-@@ -1955,15 +1877,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+@@ -1957,15 +1879,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                      .layerCount = VK_REMAINING_ARRAY_LAYERS,
                  },
              };
@@ -2196,7 +2191,7 @@ index 988ab53266..f641c7eea3 100644
                                     0, read_barrier);
  
              for (size_t index = 0; index < buffers.size(); index++) {
-@@ -1995,14 +1909,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+@@ -1997,14 +1911,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                      .layerCount = VK_REMAINING_ARRAY_LAYERS,
                  },
              };
@@ -2212,7 +2207,7 @@ index 988ab53266..f641c7eea3 100644
                                     0, memory_write_barrier, nullptr, image_write_barrier);
          });
      }
-@@ -2366,26 +2273,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
+@@ -2368,26 +2275,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
  
  Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& tsc) {
      const auto& device = runtime.device;
@@ -2243,7 +2238,7 @@ index 988ab53266..f641c7eea3 100644
          pnext = &border_ci;
          // Log extension usage for custom border color
          if (Settings::values.gpu_logging_enabled.GetValue()) {
-@@ -2424,8 +2323,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
+@@ -2426,8 +2325,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
              .compareOp = MaxwellToVK::Sampler::DepthCompareFunction(tsc.depth_compare_func),
              .minLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.0f : tsc.MinLod(),
              .maxLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.25f : tsc.MaxLod(),
@@ -2254,7 +2249,7 @@ index 988ab53266..f641c7eea3 100644
              .unnormalizedCoordinates = VK_FALSE,
          });
      };
-@@ -2556,9 +2455,7 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
+@@ -2566,9 +2465,7 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
              .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
              .pNext = nullptr,
              .srcAccessMask = VK_ACCESS_NONE,
@@ -2265,7 +2260,7 @@ index 988ab53266..f641c7eea3 100644
              .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
              .newLayout = VK_IMAGE_LAYOUT_GENERAL,
              .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -2574,16 +2471,8 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
+@@ -2584,16 +2481,8 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
          };
          scheduler.RequestOutsideRenderPassOperationContext();
          scheduler.Record([barrier](vk::CommandBuffer cmdbuf) {
@@ -2306,12 +2301,12 @@ index 8d2e8e2a37..13f679ff54 100644
  #undef CreateEvent
  #undef CreateSemaphore
 diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
-index f06551b91e..2a9f0ed7d6 100644
+index 8cb2ebfb62..fd548e81c1 100644
 --- a/src/video_core/vulkan_common/vulkan_device.cpp
 +++ b/src/video_core/vulkan_common/vulkan_device.cpp
-@@ -297,10 +297,9 @@ std::unordered_map<VkFormat, VkFormatProperties> GetFormatProperties(vk::Physica
+@@ -297,10 +297,9 @@ ankerl::unordered_dense::map<VkFormat, VkFormatProperties> GetFormatProperties(v
  #if defined(ANDROID) && defined(ARCHITECTURE_arm64)
- void OverrideBcnFormats(std::unordered_map<VkFormat, VkFormatProperties>& format_properties) {
+ void OverrideBcnFormats(ankerl::unordered_dense::map<VkFormat, VkFormatProperties>& format_properties) {
      // These properties are extracted from Adreno driver 512.687.0
 -    constexpr VkFormatFeatureFlags tiling_features{VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
 -                                                   VK_FORMAT_FEATURE_BLIT_SRC_BIT |
@@ -2834,7 +2829,7 @@ index f06551b91e..2a9f0ed7d6 100644
  
  void Device::SetupFamilies(VkSurfaceKHR surface) {
 diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
-index 73a232ddee..e4e343e50d 100644
+index 7d738a81df..77f03720c1 100644
 --- a/src/video_core/vulkan_common/vulkan_device.h
 +++ b/src/video_core/vulkan_common/vulkan_device.h
 @@ -38,13 +38,9 @@ VK_DEFINE_HANDLE(VmaAllocator)
