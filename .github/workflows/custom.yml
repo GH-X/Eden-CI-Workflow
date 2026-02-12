@@ -23,6 +23,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/buildcustom.yml
     with:
+      devel: true
       build-id: 'pushed'
       build-commit: ${{ github.event.head_commit.message }}
     secrets: inherit
@@ -35,6 +36,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/buildcustom.yml
     with:
+      devel: true
       build-id: 'manual'
       build-commit: ${{ github.event.inputs.commit }}
     secrets: inherit

@@ -3,14 +3,14 @@ name: " Custom Build Workflow "
 on:
   workflow_call:
     inputs:
-      devel:
-        description: 'Development mode (disables update checker, adds nightly qualifier)'
-        type: boolean
-        default: true
       build-id:
         description: 'Identifier for workflows and caching'
         type: string
-        default: 'master'
+        required: true
+      devel:
+        description: 'Development mode (disables update checker)'
+        type: string
+        required: true
       build-commit:
         description: 'Specify commit'
         type: string
@@ -23,6 +23,7 @@ env:
   CPM_CACHE_VERSION: "v15"
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
+  BUILD_ID: ${{ inputs.build-id }}
   FORCE_PGO: "false"
 
 jobs:
@@ -43,9 +44,9 @@ jobs:
         shell: bash {0}
         run: |
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
-          cat payload.json
+          jq . payload.json
           commit=$(echo "${{ inputs.build-commit }}" | awk -F- '{print $NF}' | grep -E "^([A-Za-z0-9]{10,40})$")
-          ./.ci/forgejonightly.sh --parse ${{ inputs.build-id }} $commit
+          ./.ci/forgejocustom.sh --parse ${{ inputs.build-id }} $commit
 
       - name: Load payload environment
         shell: bash
@@ -63,7 +64,7 @@ jobs:
       - name: Clone
         shell: bash
         run: |
-          ./.ci/forgejonightly.sh --clone ${{ inputs.build-id }}
+          ./.ci/forgejocustom.sh --clone ${{ inputs.build-id }}
 
       - name: ReLoad payload environment
         shell: bash
@@ -83,7 +84,7 @@ jobs:
       - name: Summary
         shell: bash
         run: |
-          ./.ci/fj/summarynightly.sh ${{ inputs.build-id }}
+          ./.ci/fj/summarycustom.sh ${{ inputs.build-id }}
 
       - name: Cleanup
         run: |
