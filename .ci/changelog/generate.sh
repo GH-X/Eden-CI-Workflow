@@ -8,13 +8,11 @@
 WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
 . "$WORKFLOW_DIR/.ci/common/project.sh"
 
-tagged() {
-	falsy "$DEVEL"
-}
-
 opts() {
 	falsy "$DISABLE_OPTS"
 }
+
+DEVEL=true
 
 # FIXME(crueter)
 # TODO(crueter): field() func that does linking and such
@@ -37,15 +35,21 @@ pull_request)
 	;;
 tag)
 	echo "## Changelog"
+	DEVEL=false
 	;;
 nightly)
 	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/commits/$FORGEJO_LONGSHA)."
+	DEVEL=false
 	;;
 push | test)
 	echo "CI test build"
 	;;
 esac
 echo
+
+tagged() {
+	falsy "$DEVEL"
+}
 
 # TODO(crueter): Don't include fields if their corresponding artifacts aren't found.
 
