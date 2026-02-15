@@ -49,6 +49,7 @@ jobs:
         run: ./.ci/common/pack.sh
 
       - name: Generate changelog
+        if: ${{ always() }}
         run: ./.ci/changelog/generate.sh "$BUILD_ID" > changelog.md
 
       - name: Delete Previous PR Number
@@ -110,6 +111,7 @@ jobs:
           echo "- View Release on Forgejo: [$FORGEJO_REF](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload changelog
+        if: ${{ always() }}
         uses: actions/upload-artifact@v6.0.0
         with:
           name: changelog
