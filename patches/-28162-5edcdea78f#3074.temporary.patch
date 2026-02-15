@@ -1628,7 +1628,7 @@ index 1d7af349d1..46bb53ef06 100644
      const VkSubpassDescription subpass{
          .flags = 0,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index 2a69d6d244..75d6cf53ca 100644
+index aafcfdf65b..2ce49b2d0d 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -17,7 +17,6 @@
@@ -1699,7 +1699,7 @@ index 2a69d6d244..75d6cf53ca 100644
 @@ -348,7 +317,6 @@ void Scheduler::EndRenderPass()
                         images = renderpass_images,
                         ranges = renderpass_image_ranges](vk::CommandBuffer cmdbuf) {
-             std::vector<VkImageMemoryBarrier> barriers(num_images);
+             std::array<VkImageMemoryBarrier, 9> barriers;
 -            VkPipelineStageFlags src_stages = 0;
              for (size_t i = 0; i < num_images; ++i) {
                  const VkImageSubresourceRange& range = ranges[i];
@@ -1802,10 +1802,10 @@ index 2a69d6d244..75d6cf53ca 100644
                                     nullptr,
                                     nullptr,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
-index fb0ac9b008..8e63b1a810 100644
+index 2913211480..851fd601d2 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.h
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.h
-@@ -237,7 +237,6 @@ private:
+@@ -236,7 +236,6 @@ private:
          GraphicsPipeline* graphics_pipeline = nullptr;
          bool is_rescaling = false;
          bool rescaling_defined = false;
@@ -1911,10 +1911,10 @@ index 74bae9e181..aef726658a 100644
          const bool has_changed = current_topology != new_topology;
          current_topology = new_topology;
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 7e7e67639d..e14741afc3 100644
+index 89aa6c4628..e1df5ee5d7 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-@@ -344,17 +344,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+@@ -323,17 +323,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
          swapchain_ci.queueFamilyIndexCount = static_cast<u32>(queue_indices.size());
          swapchain_ci.pQueueFamilyIndices = queue_indices.data();
      }

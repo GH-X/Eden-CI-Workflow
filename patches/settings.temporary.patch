@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 9a7d3a30d3..5f41ff55e4 100644
+index a03c6e1a2c..0e2263b784 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -239,7 +239,7 @@ struct Values {
@@ -82,7 +82,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -454,40 +454,40 @@ struct Values {
+@@ -454,13 +454,13 @@ struct Values {
  #ifdef ANDROID
                                                              AstcDecodeMode::Cpu,
  #else
@@ -96,9 +96,10 @@ index 9a7d3a30d3..5f41ff55e4 100644
 -                                                               FramePacingMode::Target_Auto,
 +                                                               FramePacingMode::Target_30,
                                                                 FramePacingMode::Target_Auto,
-                                                                FramePacingMode::Target_240,
+                                                                FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-                                                                Category::RendererAdvanced};
+@@ -470,27 +470,27 @@ struct Values {
+                                                                true};
  
      SwitchableSetting<AstcRecompression, true> astc_recompression{linkage,
 -                                                                  AstcRecompression::Uncompressed,
@@ -130,7 +131,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
          Specialization::Default};
  
      SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -509,7 +509,7 @@ struct Values {
+@@ -512,7 +512,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
@@ -139,7 +140,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -518,7 +518,7 @@ struct Values {
+@@ -521,7 +521,7 @@ struct Values {
  
      // Renderer Hacks //
      SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
@@ -148,7 +149,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
                                                    "fast_gpu_time",
                                                    Category::RendererHacks,
                                                    Specialization::Default,
-@@ -547,19 +547,19 @@ struct Values {
+@@ -550,19 +550,19 @@ struct Values {
                                                       Category::RendererHacks};
  
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
@@ -171,7 +172,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
                                                    "gpu_unswizzle_chunk_size",
                                                    Category::RendererHacks,
                                                    Specialization::Default};
-@@ -571,7 +571,7 @@ struct Values {
+@@ -574,7 +574,7 @@ struct Values {
  #if defined (ANDROID) || defined (__APPLE__)
                                             ExtendedDynamicState::Disabled,
  #else
@@ -180,7 +181,7 @@ index 9a7d3a30d3..5f41ff55e4 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -616,10 +616,10 @@ struct Values {
+@@ -619,10 +619,10 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -190,10 +191,10 @@ index 9a7d3a30d3..5f41ff55e4 100644
                                                       Category::System};
 -    SwitchableSetting<Region, true> region_index{linkage, Region::Usa, "region_index", Category::System};
 +    SwitchableSetting<Region, true> region_index{linkage, Region::China, "region_index", Category::System};
-     SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto,
-                                                       "time_zone_index", Category::System};
-     // Measured in seconds since epoch
-@@ -651,7 +651,7 @@ struct Values {
+     SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
+     Setting<u32> serial_battery{linkage, 0, "serial_battery", Category::System};
+     Setting<u32> serial_unit{linkage, 0, "serial_unit", Category::System};
+@@ -654,7 +654,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
