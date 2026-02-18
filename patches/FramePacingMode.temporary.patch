@@ -1,0 +1,36 @@
+diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
+index d4935d9b6d..0f78efaf51 100644
+--- a/src/common/settings_enums.h
++++ b/src/common/settings_enums.h
+@@ -129,7 +129,7 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+ ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
+ ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
+ ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
+-ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
++ENUM(FramePacingMode, Target_Auto, Target_20, Target_30, Target_40, Target_50, Target_60, Target_90, Target_120);
+ ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
+ ENUM(VramUsageMode, Conservative, Aggressive);
+ ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index 89aa6c4628..3e6c5dd12a 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -198,9 +198,18 @@ bool Swapchain::AcquireNextImage() {
+     case Settings::FramePacingMode::Target_Auto:
+         scheduler.Wait(resource_ticks[image_index]);
+         break;
++    case Settings::FramePacingMode::Target_20:
++        scheduler.Wait(resource_ticks[image_index], 20.0);
++        break;
+     case Settings::FramePacingMode::Target_30:
+         scheduler.Wait(resource_ticks[image_index], 30.0);
+         break;
++    case Settings::FramePacingMode::Target_40:
++        scheduler.Wait(resource_ticks[image_index], 40.0);
++        break;
++    case Settings::FramePacingMode::Target_50:
++        scheduler.Wait(resource_ticks[image_index], 50.0);
++        break;
+     case Settings::FramePacingMode::Target_60:
+         scheduler.Wait(resource_ticks[image_index], 60.0);
+         break;
