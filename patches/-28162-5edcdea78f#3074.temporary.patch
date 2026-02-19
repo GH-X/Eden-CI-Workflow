@@ -146,7 +146,7 @@ index 613c598d0c..dc54d932a6 100644
  
  } // namespace Shader
 diff --git a/src/video_core/renderer_vulkan/blit_image.cpp b/src/video_core/renderer_vulkan/blit_image.cpp
-index 62c69c67b0..ff811551ed 100644
+index 07611ef98c..ff811551ed 100644
 --- a/src/video_core/renderer_vulkan/blit_image.cpp
 +++ b/src/video_core/renderer_vulkan/blit_image.cpp
 @@ -37,7 +37,7 @@ namespace Vulkan {
@@ -158,32 +158,7 @@ index 62c69c67b0..ff811551ed 100644
  [[nodiscard]] VkImageAspectFlags AspectMaskFromFormat(VideoCore::Surface::PixelFormat format) {
      using VideoCore::Surface::SurfaceType;
      switch (VideoCore::Surface::GetFormatType(format)) {
-@@ -436,23 +436,7 @@ void TransitionImageLayout(vk::CommandBuffer& cmdbuf, VkImage image, VkImageLayo
-             .layerCount = 1,
-         },
-     };
--    // Blit image barrier - transition can happen at any stage
--    // Using specific stages for better parallelism, but keeping broad since this is a general utility
--    const VkPipelineStageFlags src_stages_blit =
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    const VkPipelineStageFlags dst_stages_blit =
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    cmdbuf.PipelineBarrier(src_stages_blit, dst_stages_blit,
-+    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                            0, barrier);
- }
- 
-@@ -532,17 +516,13 @@ BlitImageHelper::BlitImageHelper(const Device& device_, Scheduler& scheduler_,
+@@ -516,17 +516,13 @@ BlitImageHelper::BlitImageHelper(const Device& device_, Scheduler& scheduler_,
            nullptr, PUSH_CONSTANT_RANGE<VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(float) * 4>))),
        full_screen_vert(BuildShader(device, FULL_SCREEN_TRIANGLE_VERT_SPV)),
        blit_color_to_color_frag(BuildShader(device, BLIT_COLOR_FLOAT_FRAG_SPV)),
@@ -203,7 +178,7 @@ index 62c69c67b0..ff811551ed 100644
        convert_abgr8_to_d32f_frag(BuildShader(device, CONVERT_ABGR8_TO_D32F_FRAG_SPV)),
        convert_d32f_to_abgr8_frag(BuildShader(device, CONVERT_D32F_TO_ABGR8_FRAG_SPV)),
        convert_d24s8_to_abgr8_frag(BuildShader(device, CONVERT_D24S8_TO_ABGR8_FRAG_SPV)),
-@@ -669,11 +649,6 @@ void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
+@@ -653,11 +649,6 @@ void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
  
  void BlitImageHelper::ConvertABGR8ToD24S8(const Framebuffer* dst_framebuffer,
                                            const ImageView& src_image_view) {
@@ -267,175 +242,8 @@ index c5bc14f448..f0b021ca08 100644
          BitField<3, 1, u32> extended_dynamic_state_3_blend;
          BitField<4, 1, u32> extended_dynamic_state_3_enables;
          BitField<5, 1, u32> dynamic_vertex_input;
-diff --git a/src/video_core/renderer_vulkan/present/util.cpp b/src/video_core/renderer_vulkan/present/util.cpp
-index c85af50060..29a1c34976 100644
---- a/src/video_core/renderer_vulkan/present/util.cpp
-+++ b/src/video_core/renderer_vulkan/present/util.cpp
-@@ -1,4 +1,4 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
-+// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
- // SPDX-License-Identifier: GPL-3.0-or-later
- 
- // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
-@@ -68,16 +68,7 @@ void TransitionImageLayout(vk::CommandBuffer& cmdbuf, VkImage image, VkImageLayo
-             .layerCount = 1,
-         },
-     };
--    // Present path - use specific stages for better parallelism on tile-based GPUs
--    const VkPipelineStageFlags src_stages =
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    const VkPipelineStageFlags dst_stages =
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    cmdbuf.PipelineBarrier(src_stages, dst_stages,
-+    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                            0, barrier);
- }
- 
-@@ -160,12 +151,11 @@ void DownloadColorImage(vk::CommandBuffer& cmdbuf, VkImage image, VkBuffer buffe
-             .layerCount = VK_REMAINING_ARRAY_LAYERS,
-         },
-     };
--    // Host will read the downloaded data
-     static constexpr VkMemoryBarrier memory_write_barrier{
-         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-         .pNext = nullptr,
--        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--        .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
-+        .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-     };
-     const VkBufferImageCopy copy{
-         .bufferOffset = 0,
-@@ -180,20 +170,10 @@ void DownloadColorImage(vk::CommandBuffer& cmdbuf, VkImage image, VkBuffer buffe
-         .imageOffset{.x = 0, .y = 0, .z = 0},
-         .imageExtent{extent},
-     };
--    const VkPipelineStageFlags src_stages_copy =
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    cmdbuf.PipelineBarrier(src_stages_copy, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-+    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                            read_barrier);
-     cmdbuf.CopyImageToBuffer(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, copy);
--    const VkPipelineStageFlags dst_stages_copy =
--        VK_PIPELINE_STAGE_HOST_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_copy, 0,
-+    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-                            memory_write_barrier, nullptr, image_write_barrier);
- }
- 
-diff --git a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
-index b10031de10..6256bc8bd8 100644
---- a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
-+++ b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
-@@ -436,27 +436,13 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
-     scheduler.RequestOutsideRenderPassOperationContext();
-     scheduler.Record([src_buffer, dst_buffer, vk_copies, barrier](vk::CommandBuffer cmdbuf) {
-         if (barrier) {
--            // Buffer writes can come from vertex input, shaders, or compute
--            const VkPipelineStageFlags src_stages =
--                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_TRANSFER_BIT;
--            cmdbuf.PipelineBarrier(src_stages,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
-         }
-         cmdbuf.CopyBuffer(src_buffer, dst_buffer, VideoCommon::FixSmallVectorADL(vk_copies));
-         if (barrier) {
--            // Buffer reads can go to vertex input, shaders, or compute
--            const VkPipelineStageFlags dst_stages =
--                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
--                                   dst_stages, 0, WRITE_BARRIER);
-+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
-         }
-     });
- }
-@@ -470,36 +456,21 @@ void BufferCacheRuntime::PreCopyBarrier() {
-     };
-     scheduler.RequestOutsideRenderPassOperationContext();
-     scheduler.Record([](vk::CommandBuffer cmdbuf) {
--        const VkPipelineStageFlags src_stages =
--            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, READ_BARRIER);
-     });
- }
- 
- void BufferCacheRuntime::PostCopyBarrier() {
--    // Specific access flags for buffer destinations: vertex input, uniforms, storage, index
-     static constexpr VkMemoryBarrier WRITE_BARRIER{
-         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-         .pNext = nullptr,
-         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--        .dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
--                         VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
--                         VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-     };
-     scheduler.RequestOutsideRenderPassOperationContext();
-     scheduler.Record([](vk::CommandBuffer cmdbuf) {
--        const VkPipelineStageFlags dst_stages =
--            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, WRITE_BARRIER);
-     });
- }
-@@ -523,24 +494,10 @@ void BufferCacheRuntime::ClearBuffer(VkBuffer dest_buffer, u32 offset, size_t si
- 
-     scheduler.RequestOutsideRenderPassOperationContext();
-     scheduler.Record([dest_buffer, offset, size, value](vk::CommandBuffer cmdbuf) {
--        // Buffer writes can come from vertex input, shaders, or compute
--        const VkPipelineStageFlags src_stages_clear =
--            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages_clear, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, READ_BARRIER);
-         cmdbuf.FillBuffer(dest_buffer, offset, size, value);
--        // Buffer reads can go to vertex input, shaders, or compute
--        const VkPipelineStageFlags dst_stages_clear =
--            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_clear,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, WRITE_BARRIER);
-     });
- }
 diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
-index c978906c38..6bf44d57f0 100644
+index 22e646afe9..74d4891e30 100644
 --- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
 +++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
 @@ -419,9 +419,6 @@ ConditionalRenderingResolvePass::ConditionalRenderingResolvePass(
@@ -448,36 +256,7 @@ index c978906c38..6bf44d57f0 100644
      const size_t compare_size = compare_to_zero ? 8 : 24;
  
      compute_pass_descriptor_queue.Acquire();
-@@ -446,26 +443,13 @@ void ConditionalRenderingResolvePass::Resolve(VkBuffer dst_buffer, VkBuffer src_
-         const VkDescriptorSet set = descriptor_allocator.Commit();
-         device.GetLogical().UpdateDescriptorSet(set, *descriptor_template, descriptor_data);
- 
--        // Memory writes can come from graphics or compute stages
--        const VkPipelineStageFlags src_stages_compute =
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages_compute,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, read_barrier);
-         cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, *pipeline);
-         cmdbuf.BindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *layout, 0, set, {});
-         cmdbuf.Dispatch(1, 1, 1);
--        // Conditional rendering result used by draw indirect or conditional rendering
--        const VkPipelineStageFlags dst_stages_cond =
--            VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
--            VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT |
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-         cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
--                               dst_stages_cond, 0, write_barrier);
-+                               VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, write_barrier);
-     });
- }
- 
-@@ -487,14 +471,6 @@ QueriesPrefixScanPass::QueriesPrefixScanPass(
+@@ -474,14 +471,6 @@ QueriesPrefixScanPass::QueriesPrefixScanPass(
  void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffer,
                                  VkBuffer src_buffer, size_t number_of_sums,
                                  size_t min_accumulation_limit, size_t max_accumulation_limit) {
@@ -492,7 +271,7 @@ index c978906c38..6bf44d57f0 100644
      size_t current_runs = number_of_sums;
      size_t offset = 0;
      while (current_runs != 0) {
-@@ -511,18 +487,22 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
+@@ -498,18 +487,22 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
  
          scheduler.RequestOutsideRenderPassOperationContext();
          scheduler.Record([this, descriptor_data, min_accumulation_limit, max_accumulation_limit,
@@ -518,57 +297,6 @@ index c978906c38..6bf44d57f0 100644
              };
              const QueriesPrefixScanPushConstants uniforms{
                  .min_accumulation_base = static_cast<u32>(min_accumulation_limit),
-@@ -533,29 +513,15 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
-             const VkDescriptorSet set = descriptor_allocator.Commit();
-             device.GetLogical().UpdateDescriptorSet(set, *descriptor_template, descriptor_data);
- 
--            // Memory writes can come from graphics or compute stages
--            const VkPipelineStageFlags src_stages_scan =
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_TRANSFER_BIT;
--            cmdbuf.PipelineBarrier(src_stages_scan,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, read_barrier);
-             cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, *pipeline);
-             cmdbuf.BindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *layout, 0, set, {});
-             cmdbuf.PushConstants(*layout, VK_SHADER_STAGE_COMPUTE_BIT, uniforms);
-             cmdbuf.Dispatch(1, 1, 1);
--            // Query prefix scan results used by draw indirect, conditional rendering, or shaders
--            const VkPipelineStageFlags dst_stages_scan =
--                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
--                VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT |
--                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
--                                   dst_stages_scan, 0, write_barrier);
-+                                   VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0,
-+                                   write_barrier);
-         });
-     }
- }
-@@ -607,15 +573,8 @@ void ASTCDecoderPass::Assemble(Image& image, const StagingBufferRef& map,
-                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
-             },
-         };
--        // If initialized, memory writes can come from graphics or compute stages
--        const VkPipelineStageFlags src_stages_astc = is_initialized ?
--            (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--             VK_PIPELINE_STAGE_TRANSFER_BIT) :
--            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
--        cmdbuf.PipelineBarrier(src_stages_astc,
-+        cmdbuf.PipelineBarrier(is_initialized ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
-+                                              : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, image_barrier);
-         cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, vk_pipeline);
-     });
 diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
 index d36553da4a..41385d9c62 100644
 --- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
@@ -922,33 +650,8 @@ index f3dd0f90d8..58ad060f19 100644
          ConvertLegacyToGeneric(program, runtime_info);
          const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
          device.SaveShader(code);
-diff --git a/src/video_core/renderer_vulkan/vk_present_manager.cpp b/src/video_core/renderer_vulkan/vk_present_manager.cpp
-index 3960f78343..3b5c2e3c01 100644
---- a/src/video_core/renderer_vulkan/vk_present_manager.cpp
-+++ b/src/video_core/renderer_vulkan/vk_present_manager.cpp
-@@ -1,4 +1,4 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
-+// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
- // SPDX-License-Identifier: GPL-3.0-or-later
- 
- // SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
-@@ -441,13 +441,7 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
-         },
-     };
- 
--    // Previous operations that might have written to the frame image
--    const VkPipelineStageFlags src_stages_present =
--        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--        VK_PIPELINE_STAGE_TRANSFER_BIT;
--    cmdbuf.PipelineBarrier(src_stages_present, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
-+    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
-                            {}, {}, pre_barriers);
- 
-     if (blit_supported) {
 diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
-index c035eb7cd9..2fa38b8409 100644
+index 415259c72c..2fa38b8409 100644
 --- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
 @@ -1,4 +1,4 @@
@@ -957,29 +660,7 @@ index c035eb7cd9..2fa38b8409 100644
  // SPDX-License-Identifier: GPL-3.0-or-later
  
  // SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
-@@ -809,19 +809,12 @@ public:
-             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-             .pNext = nullptr,
-             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--            .dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_SHADER_READ_BIT,
-+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-         };
-         scheduler.RequestOutsideRenderPassOperationContext();
-         scheduler.Record([](vk::CommandBuffer cmdbuf) {
--            // After transfer, results may be read by host or used in subsequent operations
--            const VkPipelineStageFlags dst_stages_query =
--                VK_PIPELINE_STAGE_HOST_BIT |
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
--                                   dst_stages_query, 0, WRITE_BARRIER);
-+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
-         });
- 
-         std::scoped_lock lk(flush_guard);
-@@ -866,18 +859,17 @@ private:
+@@ -859,18 +859,17 @@ private:
              return;
          }
          has_flushed_end_pending = true;
@@ -1000,7 +681,7 @@ index c035eb7cd9..2fa38b8409 100644
      }
  
      void FlushEndTFB() {
-@@ -887,15 +879,11 @@ private:
+@@ -880,15 +879,11 @@ private:
          }
          has_flushed_end_pending = false;
  
@@ -1016,7 +697,7 @@ index c035eb7cd9..2fa38b8409 100644
              scheduler.Record([this,
                                total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
                  cmdbuf.EndTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
-@@ -906,7 +894,6 @@ private:
+@@ -899,7 +894,6 @@ private:
      void UpdateBuffers() {
          last_queries.fill(0);
          last_queries_stride.fill(1);
@@ -1024,7 +705,7 @@ index c035eb7cd9..2fa38b8409 100644
          runtime.View3DRegs([this](Maxwell3D& maxwell3d) {
              buffers_count = 0;
              out_topology = maxwell3d.draw_manager->GetDrawState().topology;
-@@ -916,10 +903,6 @@ private:
+@@ -909,10 +903,6 @@ private:
                      continue;
                  }
                  const size_t stream = tf.controls[i].stream;
@@ -1035,16 +716,7 @@ index c035eb7cd9..2fa38b8409 100644
                  last_queries_stride[stream] = tf.controls[i].stride;
                  streams_mask |= 1ULL << stream;
                  buffers_count = std::max<size_t>(buffers_count, stream + 1);
-@@ -949,7 +932,7 @@ private:
-             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-             .pNext = nullptr,
-             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
-         };
-         scheduler.RequestOutsideRenderPassOperationContext();
-         scheduler.Record([dst_buffer = current_bank->GetBuffer(),
-@@ -1120,21 +1103,16 @@ public:
+@@ -1113,21 +1103,16 @@ public:
  
              query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
              u64 num_vertices = 0;
@@ -1068,52 +740,8 @@ index c035eb7cd9..2fa38b8409 100644
                  }
              }
              query->value = [&]() -> u64 {
-@@ -1482,40 +1460,22 @@ void QueryCacheRuntime::Barriers(bool is_prebarrier) {
-         .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-         .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-     };
--    // Query results may be read by host or used in shaders/indirect commands
-     static constexpr VkMemoryBarrier WRITE_BARRIER{
-         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-         .pNext = nullptr,
-         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--        .dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
--                         VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-     };
-     impl->scheduler.RequestOutsideRenderPassOperationContext();
-     if (is_prebarrier) {
-         impl->scheduler.Record([](vk::CommandBuffer cmdbuf) {
--            // Query data can be written by graphics or compute stages
--            const VkPipelineStageFlags src_stages_query =
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_TRANSFER_BIT;
--            cmdbuf.PipelineBarrier(src_stages_query,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
-         });
-     } else {
-         impl->scheduler.Record([](vk::CommandBuffer cmdbuf) {
--            // Query results may be read by host or used in shaders/indirect commands
--            const VkPipelineStageFlags dst_stages_query =
--                VK_PIPELINE_STAGE_HOST_BIT |
--                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
--                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
--                                   dst_stages_query, 0, WRITE_BARRIER);
-+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
-         });
-     }
- }
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 4d508fc2f2..b421fb12f1 100644
+index 60b899a811..b421fb12f1 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -200,11 +200,6 @@ RasterizerVulkan::RasterizerVulkan(Core::Frontend::EmuWindow& emu_window_, Tegra
@@ -1236,35 +864,7 @@ index 4d508fc2f2..b421fb12f1 100644
  
      const u32 color_attachment = regs.clear_surface.RT;
      if (use_color && framebuffer->HasAspectColorBit(color_attachment)) {
-@@ -586,23 +519,14 @@ void RasterizerVulkan::DispatchCompute() {
-     }
-     const std::array<u32, 3> dim{qmd.grid_dim_x, qmd.grid_dim_y, qmd.grid_dim_z};
-     scheduler.RequestOutsideRenderPassOperationContext();
--    // Compute shader reads from storage buffers, uniforms, and images
-     static constexpr VkMemoryBarrier READ_BARRIER{
-         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-         .pNext = nullptr,
--        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
--        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT,
-+        .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
-     };
--    scheduler.Record([](vk::CommandBuffer cmdbuf) {
--        // Memory writes can come from graphics or compute stages
--        const VkPipelineStageFlags src_stages =
--            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--        cmdbuf.PipelineBarrier(src_stages, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
--                               0, READ_BARRIER);
--    });
-+    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-+                               0, READ_BARRIER); });
-     scheduler.Record([dim](vk::CommandBuffer cmdbuf) { cmdbuf.Dispatch(dim[0], dim[1], dim[2]); });
- 
-     // Log compute dispatch
-@@ -937,21 +861,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
+@@ -928,21 +861,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
  
  void RasterizerVulkan::FlushWork() {
  #ifdef ANDROID
@@ -1293,7 +893,7 @@ index 4d508fc2f2..b421fb12f1 100644
      scheduler.Flush();
      draw_counter = 0;
  }
-@@ -1017,8 +943,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
+@@ -1008,8 +943,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
  
  void RasterizerVulkan::UpdateDynamicStates() {
      auto& regs = maxwell3d->regs;
@@ -1302,7 +902,7 @@ index 4d508fc2f2..b421fb12f1 100644
      UpdateViewportsState(regs);
      UpdateScissorsState(regs);
      UpdateDepthBias(regs);
-@@ -1026,8 +950,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
+@@ -1017,8 +950,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
      UpdateDepthBounds(regs);
      UpdateStencilFaces(regs);
      UpdateLineWidth(regs);
@@ -1311,7 +911,7 @@ index 4d508fc2f2..b421fb12f1 100644
      if (device.IsExtExtendedDynamicStateSupported()) {
          UpdateCullMode(regs);
          UpdateDepthCompareOp(regs);
-@@ -1038,52 +960,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
+@@ -1029,52 +960,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
              UpdateDepthTestEnable(regs);
              UpdateDepthWriteEnable(regs);
              UpdateStencilTestEnable(regs);
@@ -1394,7 +994,7 @@ index 4d508fc2f2..b421fb12f1 100644
      if (device.IsExtVertexInputDynamicStateSupported()) {
          if (auto* gp = pipeline_cache.CurrentGraphicsPipeline(); gp && gp->HasDynamicVertexInput()) {
              UpdateVertexInput(regs);
-@@ -1096,16 +1006,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
+@@ -1087,16 +1006,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
  
      const auto& regs = maxwell3d->regs;
      if (!device.IsExtTransformFeedbackSupported()) {
@@ -1414,7 +1014,7 @@ index 4d508fc2f2..b421fb12f1 100644
          return;
      }
      query_cache.CounterEnable(VideoCommon::QueryType::StreamingByteCount,
-@@ -1448,10 +1351,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
+@@ -1439,10 +1351,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
          return;
      }
  
@@ -1425,7 +1025,7 @@ index 4d508fc2f2..b421fb12f1 100644
      scheduler.Record([enable = regs.conservative_raster_enable](vk::CommandBuffer cmdbuf) {
          cmdbuf.SetConservativeRasterizationModeEXT(
              enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT
-@@ -1464,50 +1363,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
+@@ -1455,50 +1363,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
          return;
      }
  
@@ -1485,7 +1085,7 @@ index 4d508fc2f2..b421fb12f1 100644
  }
  
  void RasterizerVulkan::UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
-@@ -1549,9 +1421,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
+@@ -1540,9 +1421,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
      if (!state_tracker.TouchLogicOpEnable()) {
          return;
      }
@@ -1495,7 +1095,7 @@ index 4d508fc2f2..b421fb12f1 100644
      scheduler.Record([enable = regs.logic_op.enable](vk::CommandBuffer cmdbuf) {
          cmdbuf.SetLogicOpEnableEXT(enable != 0);
      });
-@@ -1561,9 +1430,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+@@ -1552,9 +1430,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
      if (!state_tracker.TouchDepthClampEnable()) {
          return;
      }
@@ -1505,7 +1105,7 @@ index 4d508fc2f2..b421fb12f1 100644
      bool is_enabled = !(regs.viewport_clip_control.geometry_clip ==
                              Maxwell::ViewportClipControl::GeometryClip::Passthrough ||
                          regs.viewport_clip_control.geometry_clip ==
-@@ -1574,41 +1440,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+@@ -1565,41 +1440,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
          [is_enabled](vk::CommandBuffer cmdbuf) { cmdbuf.SetDepthClampEnableEXT(is_enabled); });
  }
  
@@ -1561,7 +1161,7 @@ index b689c6b660..30780b9cbd 100644
      void UpdateStencilOp(Tegra::Engines::Maxwell3D::Regs& regs);
      void UpdateStencilTestEnable(Tegra::Engines::Maxwell3D::Regs& regs);
 diff --git a/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp b/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
-index 1d7af349d1..46bb53ef06 100644
+index 118b2a0832..46bb53ef06 100644
 --- a/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_render_pass_cache.cpp
 @@ -1,4 +1,4 @@
@@ -1570,65 +1170,8 @@ index 1d7af349d1..46bb53ef06 100644
  // SPDX-License-Identifier: GPL-3.0-or-later
  
  // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
-@@ -44,19 +44,13 @@ using VideoCore::Surface::SurfaceType;
-         }
- 
-         VkAttachmentDescription AttachmentDescription(const Device& device, PixelFormat format,
--                                                      VkSampleCountFlagBits samples,
--                                                      bool is_depth_stencil) {
-+                                                      VkSampleCountFlagBits samples) {
-             using MaxwellToVK::SurfaceFormat;
- 
-             const SurfaceType surface_type = GetSurfaceType(format);
-             const bool has_stencil = surface_type == SurfaceType::DepthStencil ||
-                                      surface_type == SurfaceType::Stencil;
- 
--            // Use optimal layouts for attachments - this allows drivers to optimize tiling and access patterns
--            const VkImageLayout attachment_layout = is_depth_stencil
--                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
--                : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
--
-             return {
-                 .flags = {},
-                 .format = SurfaceFormat(device, FormatType::Optimal, true, format).format,
-@@ -67,8 +61,8 @@ using VideoCore::Surface::SurfaceType;
-                                                  : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                 .stencilStoreOp = has_stencil ? VK_ATTACHMENT_STORE_OP_STORE
-                                                   : VK_ATTACHMENT_STORE_OP_DONT_CARE,
--                .initialLayout = attachment_layout,
--                .finalLayout = attachment_layout,
-+                .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
-+                .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
-             };
-         }
-     } // Anonymous namespace
-@@ -90,10 +84,10 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
-         const bool is_valid{format != PixelFormat::Invalid};
-         references[index] = VkAttachmentReference{
-             .attachment = is_valid ? num_colors : VK_ATTACHMENT_UNUSED,
--            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-+            .layout = VK_IMAGE_LAYOUT_GENERAL,
-         };
-         if (is_valid) {
--            descriptions.push_back(AttachmentDescription(*device, format, key.samples, false));
-+            descriptions.push_back(AttachmentDescription(*device, format, key.samples));
-             num_attachments = static_cast<u32>(index + 1);
-             ++num_colors;
-         }
-@@ -103,9 +97,9 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
-     if (key.depth_format != PixelFormat::Invalid) {
-         depth_reference = VkAttachmentReference{
-             .attachment = num_colors,
--            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-+            .layout = VK_IMAGE_LAYOUT_GENERAL,
-         };
--        descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples, true));
-+        descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples));
-     }
-     const VkSubpassDescription subpass{
-         .flags = 0,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index aafcfdf65b..2ce49b2d0d 100644
+index e526d606dc..854c37a7fc 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -17,7 +17,6 @@
@@ -1667,140 +1210,6 @@ index aafcfdf65b..2ce49b2d0d 100644
      return true;
  }
  
-@@ -264,26 +245,14 @@ u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_se
-     const u64 signal_value = master_semaphore->NextTick();
-     RecordWithUploadBuffer([signal_semaphore, wait_semaphore, signal_value,
-                             this](vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) {
--        // Specific access flags for upload destinations: vertex input, uniforms, storage, index, textures
-         static constexpr VkMemoryBarrier WRITE_BARRIER{
-             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-             .pNext = nullptr,
-             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--            .dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
--                             VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
--                             VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
--                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-         };
--        // Specify exact stages that need the transfer results instead of ALL_COMMANDS_BIT
-         upload_cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
--                                      VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
--                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                                      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                                      VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
--                                      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                                      VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                                      VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
--                                      0, WRITE_BARRIER);
-+                                      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
-         upload_cmdbuf.End();
-         cmdbuf.End();
- 
-@@ -348,7 +317,6 @@ void Scheduler::EndRenderPass()
-                        images = renderpass_images,
-                        ranges = renderpass_image_ranges](vk::CommandBuffer cmdbuf) {
-             std::array<VkImageMemoryBarrier, 9> barriers;
--            VkPipelineStageFlags src_stages = 0;
-             for (size_t i = 0; i < num_images; ++i) {
-                 const VkImageSubresourceRange& range = ranges[i];
-                 const bool is_color = (range.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0;
-@@ -356,76 +324,38 @@ void Scheduler::EndRenderPass()
-                                               & (VK_IMAGE_ASPECT_DEPTH_BIT
-                                                  | VK_IMAGE_ASPECT_STENCIL_BIT)) !=0;
- 
--                // Determine optimal destination layout based on image usage
--                // After render pass, images may be used as shader resources or as attachments again
--                // Use optimal layouts to allow driver optimizations
-                 VkAccessFlags src_access = 0;
--                VkAccessFlags dst_access = 0;
--                VkPipelineStageFlags this_stage = 0;
--                VkImageLayout new_layout;
--
--                if (is_color) {
--                    // Color attachments can be read as textures or used as attachments again
--                    src_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
--                    this_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--                    new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
--                    dst_access = VK_ACCESS_SHADER_READ_BIT
--                                 | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
--                                 | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
--                } else if (is_depth_stencil) {
--                    // Depth attachments can be read as textures or used as attachments again
--                    src_access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
--                    this_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
--                                 | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--                    new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
--                    dst_access = VK_ACCESS_SHADER_READ_BIT
--                                 | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
--                                 | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
--                } else {
--                    // Fallback to GENERAL for unknown usage
--                    src_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
--                                 | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
--                    this_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
--                                 | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
--                                 | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
--                    new_layout = VK_IMAGE_LAYOUT_GENERAL;
--                    dst_access = VK_ACCESS_SHADER_READ_BIT
--                                 | VK_ACCESS_SHADER_WRITE_BIT
--                                 | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
--                                 | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
--                                 | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
--                                 | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
--                }
--                src_stages |= this_stage;
-+
-+                if (is_color)
-+                    src_access |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-+                else if (is_depth_stencil)
-+                    src_access |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-+                else
-+                    src_access |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-+                                  | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-+
-                 barriers[i] = VkImageMemoryBarrier{
-                         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                         .pNext = nullptr,
-                         .srcAccessMask = src_access,
--                        .dstAccessMask = dst_access,
--                        .oldLayout = is_color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
--                                             : (is_depth_stencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
--                                                                 : VK_IMAGE_LAYOUT_GENERAL),
--                        .newLayout = new_layout,
-+                        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
-+                                         | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-+                                         | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-+                                         | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
-+                                         | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-+                        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-+                        .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                         .image = images[i],
-                         .subresourceRange = range,
-                 };
-             }
--
-             cmdbuf.EndRenderPass();
--
--            // Use specific pipeline stages instead of ALL_COMMANDS_BIT for better parallelism
--            // The destination stages depend on how the images will be used next
--            const VkPipelineStageFlags dst_stages =
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--
--            cmdbuf.PipelineBarrier(src_stages,
--                                   dst_stages,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-+                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
-+                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                    0,
-                                    nullptr,
-                                    nullptr,
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
 index 2913211480..851fd601d2 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.h
@@ -1954,117 +1363,10 @@ index 7e99bf8fa7..b3e1c4f025 100644
  
      u32 GetWidth() const {
 diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-index 0069f10f9c..5dc134a140 100644
+index 348e49fb6d..5dc134a140 100644
 --- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
-@@ -810,8 +810,7 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
-                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                 .pNext = nullptr,
-                 .srcAccessMask = 0,
--                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
--                                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-+                .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
-                 .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -823,8 +822,7 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
-                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                 .pNext = nullptr,
-                 .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
--                                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-+                .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
-                 .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -833,26 +831,11 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
-                 .subresourceRange = subresource_range,
-             },
-         };
--        // Use specific pipeline stages for better parallelism
--        const VkPipelineStageFlags src_stages =
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, nullptr, nullptr, read_barriers);
-         cmdbuf.BlitImage(src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst_image,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions, vk_filter);
--        // After transfer, images may be used in graphics, compute, or as attachments
--        const VkPipelineStageFlags dst_stages =
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, nullptr, nullptr, write_barriers);
-     });
- }
-@@ -1040,12 +1023,11 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
-             .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-             .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-         };
--        // After reinterpret, buffers used as transfer source, uniforms, or storage
-         static constexpr VkMemoryBarrier WRITE_BARRIER{
-             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-             .pNext = nullptr,
-             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT,
-+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-         };
-         const std::array pre_barriers{
-             VkImageMemoryBarrier{
-@@ -1112,39 +1094,18 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
-                 .subresourceRange = dst_range.SubresourceRange(dst_aspect_mask),
-             },
-         };
--        const VkPipelineStageFlags src_stages_transfer =
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages_transfer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, {}, {}, pre_barriers);
- 
-         cmdbuf.CopyImageToBuffer(src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, copy_buffer,
-                                  vk_in_copies);
--        const VkPipelineStageFlags dst_stages_transfer =
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_transfer,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, WRITE_BARRIER, nullptr, middle_in_barrier);
- 
--        cmdbuf.PipelineBarrier(src_stages_transfer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, READ_BARRIER, {}, middle_out_barrier);
-         cmdbuf.CopyBufferToImage(copy_buffer, dst_image, VK_IMAGE_LAYOUT_GENERAL, vk_out_copies);
--        // After reinterpret copy, image may be used in shaders or as attachment
--        const VkPipelineStageFlags dst_stages_post =
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_post,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, {}, {}, post_barriers);
-     });
- }
-@@ -1179,8 +1140,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1140,8 +1140,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                  UNREACHABLE();
              }
          }();
@@ -2073,7 +1375,7 @@ index 0069f10f9c..5dc134a140 100644
          if (!can_blit_depth_stencil) {
              UNIMPLEMENTED_IF(is_src_msaa || is_dst_msaa);
              blit_image_helper.BlitDepthStencil(dst_framebuffer, src, dst_region, src_region,
-@@ -1195,15 +1154,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+@@ -1156,15 +1154,6 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
      const VkImage src_image = src.ImageHandle();
      const VkImageSubresourceLayers dst_layers = MakeSubresourceLayers(&dst);
      const VkImageSubresourceLayers src_layers = MakeSubresourceLayers(&src);
@@ -2089,125 +1391,7 @@ index 0069f10f9c..5dc134a140 100644
      const bool is_resolve = is_src_msaa && !is_dst_msaa;
      scheduler.RequestOutsideRenderPassOperationContext();
      scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
-@@ -1271,12 +1221,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
-                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
-             },
-         };
--        const VkPipelineStageFlags src_stages_resolve =
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_TRANSFER_BIT;
--        cmdbuf.PipelineBarrier(src_stages_resolve, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, nullptr, nullptr, read_barriers);
-         if (is_resolve) {
-             cmdbuf.ResolveImage(src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image,
-@@ -1289,14 +1234,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
-                 src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                 MakeImageBlit(dst_region, src_region, dst_layers, src_layers), vk_filter);
-         }
--        // After blit/resolve, image may be used in shaders or as attachment
--        const VkPipelineStageFlags dst_stages_blit =
--            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_blit,
-+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                0, write_barrier);
-     });
- }
-@@ -1874,14 +1812,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
-                         .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                     },
-                 };
--                const VkPipelineStageFlags src_stages_download =
--                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                    VK_PIPELINE_STAGE_TRANSFER_BIT;
--                cmdbuf.PipelineBarrier(src_stages_download, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                        0, read_barrier);
- 
-                 for (size_t index = 0; index < buffers.size(); index++) {
-@@ -1889,20 +1820,17 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
-                                              vk_copies[index]);
-                 }
- 
--                // Host will read the downloaded data
-                 const VkMemoryBarrier memory_write_barrier{
-                     .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-                     .pNext = nullptr,
--                    .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
--                    .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
-+                    .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-+                    .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-                 };
--                // Image will be used for shaders or as attachment
-                 const VkImageMemoryBarrier image_write_barrier{
-                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                     .pNext = nullptr,
-                     .srcAccessMask = 0,
--                    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
--                                     VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-+                    .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-                     .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -1916,13 +1844,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
-                         .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                     },
-                 };
--                const VkPipelineStageFlags dst_stages_download =
--                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_download,
-+                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                        0, memory_write_barrier, nullptr, image_write_barrier);
-             });
-             return;
-@@ -1957,15 +1879,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
-                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                 },
-             };
--            // Image writes can come from graphics or compute stages
--            const VkPipelineStageFlags src_stages_img =
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_TRANSFER_BIT;
--            cmdbuf.PipelineBarrier(src_stages_img, VK_PIPELINE_STAGE_TRANSFER_BIT,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                    0, read_barrier);
- 
-             for (size_t index = 0; index < buffers.size(); index++) {
-@@ -1997,14 +1911,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
-                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                 },
-             };
--            // After download, image may be used in shaders or as attachment
--            const VkPipelineStageFlags dst_stages_img =
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
--            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, dst_stages_img,
-+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                    0, memory_write_barrier, nullptr, image_write_barrier);
-         });
-     }
-@@ -2368,26 +2275,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
+@@ -2286,26 +2275,18 @@ vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_
  
  Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& tsc) {
      const auto& device = runtime.device;
@@ -2238,7 +1422,7 @@ index 0069f10f9c..5dc134a140 100644
          pnext = &border_ci;
          // Log extension usage for custom border color
          if (Settings::values.gpu_logging_enabled.GetValue()) {
-@@ -2426,8 +2325,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
+@@ -2344,8 +2325,8 @@ Sampler::Sampler(TextureCacheRuntime& runtime, const Tegra::Texture::TSCEntry& t
              .compareOp = MaxwellToVK::Sampler::DepthCompareFunction(tsc.depth_compare_func),
              .minLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.0f : tsc.MinLod(),
              .maxLod = tsc.mipmap_filter == TextureMipmapFilter::None ? 0.25f : tsc.MaxLod(),
@@ -2249,35 +1433,6 @@ index 0069f10f9c..5dc134a140 100644
              .unnormalizedCoordinates = VK_FALSE,
          });
      };
-@@ -2566,9 +2465,7 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
-             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-             .pNext = nullptr,
-             .srcAccessMask = VK_ACCESS_NONE,
--            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
--                             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
--                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-@@ -2584,16 +2481,8 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
-         };
-         scheduler.RequestOutsideRenderPassOperationContext();
-         scheduler.Record([barrier](vk::CommandBuffer cmdbuf) {
--            // After layout transition, image may be used in shaders or as attachment
--            const VkPipelineStageFlags dst_stages_layout =
--                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
--                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
--                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
--                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
--                VK_PIPELINE_STAGE_TRANSFER_BIT;
-             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
--                                   dst_stages_layout, 0, barrier);
-+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, barrier);
-         });
-     }
- }
 diff --git a/src/video_core/vulkan_common/vulkan.h b/src/video_core/vulkan_common/vulkan.h
 index 8d2e8e2a37..13f679ff54 100644
 --- a/src/video_core/vulkan_common/vulkan.h
