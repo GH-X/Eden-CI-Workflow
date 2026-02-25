@@ -1,17 +1,8 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 17833b29fc..a067e3ed29 100644
+index dd3cd14a02..3784151ce3 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
-@@ -169,6 +169,8 @@ struct Values {
-     Setting<AppletMode> my_page_applet_mode{linkage, AppletMode::LLE, "my_page_applet_mode",
-                                             Category::LibraryApplet};
- 
-+    Setting<bool> enable_overlay{linkage, false, "enable_overlay", Category::LibraryApplet};
-+
-     // Audio
-     SwitchableSetting<AudioEngine> sink_id{linkage, AudioEngine::Auto, "output_engine",
-                                            Category::Audio, Specialization::RuntimeList};
-@@ -239,7 +241,7 @@ struct Values {
+@@ -240,7 +240,7 @@ struct Values {
      // The currently used speed mode.
      Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
  
@@ -20,7 +11,7 @@ index 17833b29fc..a067e3ed29 100644
                                              Specialization::Default};
  
      // Cpu
-@@ -257,7 +259,7 @@ struct Values {
+@@ -258,7 +258,7 @@ struct Values {
  #endif
                                                      "cpu_backend",
                                                      Category::Cpu};
@@ -29,7 +20,7 @@ index 17833b29fc..a067e3ed29 100644
                                                        "cpu_accuracy", Category::Cpu};
      SwitchableSetting<CpuClock> fast_cpu_time{linkage,
                                                CpuClock::Off,
-@@ -316,7 +318,7 @@ struct Values {
+@@ -317,7 +317,7 @@ struct Values {
  #endif
                                          "cpuopt_unsafe_host_mmu",
                                          Category::CpuUnsafe};
@@ -38,7 +29,7 @@ index 17833b29fc..a067e3ed29 100644
                                                       Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_reduce_fp_error{
                                                            linkage, true, "cpuopt_unsafe_reduce_fp_error", Category::CpuUnsafe};
-@@ -327,7 +329,7 @@ struct Values {
+@@ -328,7 +328,7 @@ struct Values {
      SwitchableSetting<bool> cpuopt_unsafe_fastmem_check{
                                                          linkage, true, "cpuopt_unsafe_fastmem_check", Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_ignore_global_monitor{
@@ -47,7 +38,7 @@ index 17833b29fc..a067e3ed29 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -353,7 +355,7 @@ struct Values {
+@@ -354,7 +354,7 @@ struct Values {
                                                    true};
  
      SwitchableSetting<ScalingFilter> scaling_filter{linkage,
@@ -56,7 +47,7 @@ index 17833b29fc..a067e3ed29 100644
                                                      "scaling_filter",
                                                      Category::Renderer,
                                                      Specialization::Default,
-@@ -416,7 +418,7 @@ struct Values {
+@@ -417,7 +417,7 @@ struct Values {
  #ifdef ANDROID
                                                        GpuAccuracy::Low,
  #else
@@ -65,7 +56,7 @@ index 17833b29fc..a067e3ed29 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -427,7 +429,7 @@ struct Values {
+@@ -428,7 +428,7 @@ struct Values {
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::Medium};
  
      SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
@@ -74,7 +65,7 @@ index 17833b29fc..a067e3ed29 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -439,14 +441,14 @@ struct Values {
+@@ -440,14 +440,14 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
@@ -91,7 +82,7 @@ index 17833b29fc..a067e3ed29 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -454,13 +456,18 @@ struct Values {
+@@ -455,13 +455,18 @@ struct Values {
  #ifdef ANDROID
                                                              AstcDecodeMode::Cpu,
  #else
@@ -112,7 +103,7 @@ index 17833b29fc..a067e3ed29 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -469,28 +476,23 @@ struct Values {
+@@ -470,28 +475,23 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -145,7 +136,7 @@ index 17833b29fc..a067e3ed29 100644
          Specialization::Default};
  
      SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -512,7 +514,7 @@ struct Values {
+@@ -513,7 +513,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
@@ -154,7 +145,7 @@ index 17833b29fc..a067e3ed29 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -521,7 +523,7 @@ struct Values {
+@@ -532,7 +532,7 @@ struct Values {
  
      // Renderer Hacks //
      SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
@@ -163,7 +154,7 @@ index 17833b29fc..a067e3ed29 100644
                                                    "fast_gpu_time",
                                                    Category::RendererHacks,
                                                    Specialization::Default,
-@@ -535,6 +537,10 @@ struct Values {
+@@ -546,6 +546,10 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -174,7 +165,7 @@ index 17833b29fc..a067e3ed29 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -543,38 +549,35 @@ struct Values {
+@@ -554,38 +558,35 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -220,7 +211,7 @@ index 17833b29fc..a067e3ed29 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -619,13 +622,15 @@ struct Values {
+@@ -630,13 +631,15 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -239,7 +230,7 @@ index 17833b29fc..a067e3ed29 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -645,8 +650,6 @@ struct Values {
+@@ -656,8 +659,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -248,7 +239,7 @@ index 17833b29fc..a067e3ed29 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -654,7 +657,7 @@ struct Values {
+@@ -665,7 +666,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
@@ -257,15 +248,6 @@ index 17833b29fc..a067e3ed29 100644
  #endif
                                                     "use_docked_mode",
                                                     Category::System,
-@@ -820,8 +823,6 @@ struct Values {
- 
-     // Per-game overrides
-     bool use_squashed_iterated_blend;
--
--    Setting<bool> enable_overlay{linkage, false, "enable_overlay", Category::Core};
- };
- 
- extern Values values;
 diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
 index 49205c5b84..034eefaa65 100644
 --- a/src/qt_common/config/uisettings.h
