@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index dd3cd14a02..3784151ce3 100644
+index 7ea4136576..ff8cef49a6 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -154,7 +154,7 @@ index dd3cd14a02..3784151ce3 100644
                                                    "fast_gpu_time",
                                                    Category::RendererHacks,
                                                    Specialization::Default,
-@@ -546,6 +546,10 @@ struct Values {
+@@ -546,6 +546,13 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -162,14 +162,20 @@ index dd3cd14a02..3784151ce3 100644
 +    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
 +                                                     Category::RendererHacks};
 +
++    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
++                                                     Category::RendererHacks};
++
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -554,38 +558,35 @@ struct Values {
+@@ -554,41 +561,35 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
 -    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
+-                                                     Category::RendererHacks};
+-
+-    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
 -                                                     Category::RendererHacks};
 -
      SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
@@ -211,7 +217,7 @@ index dd3cd14a02..3784151ce3 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -630,13 +631,15 @@ struct Values {
+@@ -633,13 +634,15 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -230,7 +236,7 @@ index dd3cd14a02..3784151ce3 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -656,8 +659,6 @@ struct Values {
+@@ -659,8 +662,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -239,7 +245,7 @@ index dd3cd14a02..3784151ce3 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -665,7 +666,7 @@ struct Values {
+@@ -668,7 +669,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
