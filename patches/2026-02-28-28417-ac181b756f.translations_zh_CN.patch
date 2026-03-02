@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index 242e49ebfa..d727f14c40 100644
+index 242e49ebfa..d6427333c0 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -1518,7 +1518,7 @@ index 242e49ebfa..d727f14c40 100644
 +    <message>
 +        <source>Accelerates BCn 3D texture decoding using GPU compute.
 +Disable if experiencing crashes or graphical glitches.</source>
-+        <translation type="vanished">使用 GPU 计算加速 BCn 3D 纹理解码。
++        <translation type="vanished">使用 GPU 加速 BCn 3D 纹理解码。
 +如果遇到崩溃或图形故障，请禁用。</translation>
 +    </message>
 +    <message>
@@ -2965,7 +2965,7 @@ index 242e49ebfa..d727f14c40 100644
 -            &lt;div&gt;该选项通过允许发出的基本块直接跳转到其他基本块(如果目标 PC 是静态的)来避免调度器的查找。&lt;/div&gt;
 -           </translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="305"/>
-+        <source>使用 GPU 计算加速 BCn 3D 纹理解码。
++        <source>使用 GPU 加速 BCn 3D 纹理解码。
 +如果遇到崩溃或图形故障，请禁用。</source>
 +        <translation type="unfinished"></translation>
      </message>
@@ -3619,7 +3619,7 @@ index 242e49ebfa..d727f14c40 100644
 -        <source>Flush log output on each line</source>
 -        <translation>每行刷新日志输出</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="525"/>
-+        <source>BC1（低等质量）</source>
++        <source>BC3（中等质量）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3627,7 +3627,7 @@ index 242e49ebfa..d727f14c40 100644
 -        <source>Enable FS Access Log</source>
 -        <translation>启用文件系统访问记录</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="526"/>
-+        <source>BC3（中等质量）</source>
++        <source>BC1（低等质量）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -17434,7 +17434,7 @@ index 242e49ebfa..d727f14c40 100644
 \ No newline at end of file
 +</TS>
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index f49c43ee2a..7d05965892 100644
+index f49c43ee2a..869e5d9069 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -6,10 +6,9 @@
@@ -17889,7 +17889,7 @@ index f49c43ee2a..7d05965892 100644
 -           tr("Accelerates BCn 3D texture decoding using GPU compute.\n"
 -              "Disable if experiencing crashes or graphical glitches."));
 +           tr("启用 GPU 解压"),
-+           tr("使用 GPU 计算加速 BCn 3D 纹理解码。\n"
++           tr("使用 GPU 加速 BCn 3D 纹理解码。\n"
 +              "如果遇到崩溃或图形故障，请禁用。"));
      INSERT(Settings,
             gpu_unswizzle_texture_size,
@@ -18174,8 +18174,8 @@ index f49c43ee2a..7d05965892 100644
 -             PAIR(AstcRecompression, Bc1, tr("BC1 (Low quality)")),
 -             PAIR(AstcRecompression, Bc3, tr("BC3 (Medium quality)")),
 +             PAIR(AstcRecompression, Uncompressed, tr("不压缩（最高质量）")),
-+             PAIR(AstcRecompression, Bc1, tr("BC1（低等质量）")),
 +             PAIR(AstcRecompression, Bc3, tr("BC3（中等质量）")),
++             PAIR(AstcRecompression, Bc1, tr("BC1（低等质量）")),
           }});
      translations->insert({Settings::EnumMetadata<Settings::FramePacingMode>::Index(),
                            {
