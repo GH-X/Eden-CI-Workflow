@@ -1,0 +1,33 @@
+diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
+index 71210ffe6e..eee820a581 100644
+--- a/src/video_core/texture_cache/texture_cache.h
++++ b/src/video_core/texture_cache/texture_cache.h
+@@ -70,14 +70,16 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+             (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+                      DEFAULT_CRITICAL_MEMORY));
+         minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
+-
+-        lowmemorydevice = false;
+     } else {
+         expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
+         critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
+         minimum_memory = 0;
++    }
+ 
+-        lowmemorydevice = true;
++    switch (Settings::values.vram_usage_mode.GetValue()) {
++        case Settings::VramUsageMode::Conservative:    lowmemorydevice = true; break;
++        case Settings::VramUsageMode::Aggressive:      lowmemorydevice = false; break;
++        default:                                       lowmemorydevice = true;
+     }
+ 
+     const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
+@@ -89,7 +91,7 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+             case Settings::GpuUnswizzleSize::Normal:       gpu_unswizzle_maxsize = 128_MiB; break;
+             case Settings::GpuUnswizzleSize::Large:        gpu_unswizzle_maxsize = 256_MiB; break;
+             case Settings::GpuUnswizzleSize::VeryLarge:    gpu_unswizzle_maxsize = 512_MiB; break;
+-            default:                                       gpu_unswizzle_maxsize = 128_MiB; break;
++            default:                                       gpu_unswizzle_maxsize = 128_MiB;
+         }
+ 
+         switch (Settings::values.gpu_unswizzle_stream_size.GetValue()) {
