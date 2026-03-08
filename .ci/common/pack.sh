@@ -23,6 +23,6 @@ find "$ROOTDIR" \( \
 		-name '*.apk' -o \
 		-name '*.tar.gz' -o \
 		-name '*unknown-linux-musl*' \
-    \) -exec cp {} "$ARTIFACTS_DIR" \;
+    \) -not -path "*artifacts*" -exec cp {} "$ARTIFACTS_DIR" \;
 
 ls -lh "$ARTIFACTS_DIR"
