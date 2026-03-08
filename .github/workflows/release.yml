@@ -59,7 +59,7 @@ jobs:
 
       - name: Release
         id: release
-        if: ${{ env.SEND_RELEASE == '1' }}
+        if: ${{ env.RELEASE_GH == '1' }}
         uses: softprops/action-gh-release@v2.5.0
         with:
           name: "${{ env.GITHUB_TITLE }}"
@@ -75,7 +75,7 @@ jobs:
             artifacts/*
 
       - name: Add Release URL to Summary
-        if: ${{ env.SEND_RELEASE == '1' }}
+        if: ${{ env.RELEASE_GH == '1' }}
         run: |
           {
             echo "## Release Summary"
@@ -83,7 +83,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send Release Status
-        if: ${{ env.SEND_STATUS == '1' && env.SEND_RELEASE == '1' }}
+        if: ${{ env.SEND_STATUS == '1' && env.RELEASE_GH == '1' }}
         run: python3 ./.ci/common/status.py --release ${{ steps.release.outputs.url }}
 
       - name: Send Nightly Release to Discord

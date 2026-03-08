@@ -45,10 +45,6 @@ release() {
 }
 
 # Now set up the actual environment.
-if status; then
-	echo "SEND_STATUS=1"
-fi
-
 if release; then
 	echo "SEND_RELEASE=1"
 fi
@@ -63,4 +59,8 @@ fi
 
 if [ "$BUILD_ID" = "tag" ] && fj && success; then
 	echo "RELEASE_FJ=1"
+fi
+
+if release && [ "$BUILD_ID" != 'tag' ]; then
+	echo "RELEASE_GH=1"
 fi
