@@ -113,8 +113,7 @@ echo "-- building..."
     -Dorg.gradle.parallel="${CCACHE}" \
     -Dorg.gradle.workers.max="${NUM_JOBS}" \
     -PYUZU_ANDROID_ARGS="$*" \
-	-Pnightly=$NIGHTLY \
-    --info
+	-Pnightly=$NIGHTLY
 
 if [ -n "${ANDROID_KEYSTORE_B64}" ]; then
     rm "${ANDROID_KEYSTORE_FILE}"
