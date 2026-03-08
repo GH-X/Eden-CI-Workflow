@@ -25,4 +25,7 @@ find "$ROOTDIR" \( \
 		-name '*unknown-linux-musl*' \
     \) -not -path "*artifacts*" -exec cp {} "$ARTIFACTS_DIR" \;
 
+sudo apt-get install -y mktorrent
+mktorrent -p -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "$ARTIFACTS_DIR/"
+
 ls -lh "$ARTIFACTS_DIR"
