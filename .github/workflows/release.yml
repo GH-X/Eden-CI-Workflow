@@ -23,6 +23,10 @@ jobs:
     env:
       GH_TOKEN: "${{ secrets.CUSTOM_GITHUB_TOKEN }}"
       FJ_TOKEN: "${{ secrets.FORGEJO_TOKEN }}"
+      VPS_SSH_HOST: "${{ secrets.VPS_SSH_HOST }}"
+      VPS_SSH_PORT: "${{ secrets.VPS_SSH_PORT }}"
+      VPS_SSH_PRIV: "${{ secrets.VPS_SSH_PRIV }}"
+      VPS_SSH_PUB: "${{ secrets.VPS_SSH_PUB }}"
       DISCORD_WEBHOOK: "${{ secrets.DISCORD_WEBHOOK }}"
       DEVEL: "${{ inputs.devel }}"
       STATUS: "${{ inputs.status }}"
@@ -109,6 +113,10 @@ jobs:
         run: |
           . .ci/fj/release.sh
           echo "- View Release on Forgejo: [$FORGEJO_REF](${FJ_URL})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Torrent (Forgejo)
+        if: ${{ env.RELEASE_FJ == '1' && env.VPS_SSH_PRIV }}
+        run: .ci/fj/torrent.sh
 
       - name: Upload changelog
         if: ${{ always() }}
