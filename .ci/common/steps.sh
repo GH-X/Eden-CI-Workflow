@@ -45,8 +45,8 @@ release() {
 }
 
 # Now set up the actual environment.
-if release; then
-	echo "SEND_RELEASE=1"
+if status; then
+	echo "SEND_STATUS=1"
 fi
 
 if [ "$BUILD_ID" = pull_request ] && release; then

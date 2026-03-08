@@ -168,24 +168,24 @@ win_matrix() {
 echo "# Packages"
 
 if truthy "$EXPLAIN_TARGETS"; then
-cat << EOF
+	cat <<-EOF
 
-## Targets
+	## Targets
 
-Each build is optimized for a specific architecture and uses a specific compiler.
+	Each build is optimized for a specific architecture and uses a specific compiler.
 
-- **aarch64/arm64**: For devices that use the armv8-a instruction set; e.g. Snapdragon X, all Android devices, and Apple Silicon Macs.
-- **amd64**: For devices that use the amd64 (aka x86_64) instruction set; this is exclusively used by Intel and AMD CPUs and is only found on desktops.
+	- **aarch64/arm64**: For devices that use the armv8-a instruction set; e.g. Snapdragon X, all Android devices, and Apple Silicon Macs.
+	- **amd64**: For devices that use the amd64 (aka x86_64) instruction set; this is exclusively used by Intel and AMD CPUs and is only found on desktops.
 
-**Compilers**
+	**Compilers**
 
-- **MSVC**: The default compiler for Windows. This is the most stable experience, but may lack in performance compared to any of the following alternatives.
-- **GCC**: The standard GNU compiler; this is the default for Linux and will provide the most stable experience.
-- **PGO**: These are built with Clang, and use PGO. PGO (profile-guided optimization) uses data from prior compilations
-	to determine the "hotspots" found within the codebase. Using these hotspots,
-	it can allocate more resources towards these heavily-used areas, and thus generally see improved performance to the tune of ~10-50%,
-	depending on the specific game, hardware, and platform. Do note that additional instabilities may occur.
-EOF
+	- **MSVC**: The default compiler for Windows. This is the most stable experience, but may lack in performance compared to any of the following alternatives.
+	- **GCC**: The standard GNU compiler; this is the default for Linux and will provide the most stable experience.
+	- **PGO**: These are built with Clang, and use PGO. PGO (profile-guided optimization) uses data from prior compilations
+		to determine the "hotspots" found within the codebase. Using these hotspots,
+		it can allocate more resources towards these heavily-used areas, and thus generally see improved performance to the tune of ~10-50%,
+		depending on the specific game, hardware, and platform. Do note that additional instabilities may occur.
+	EOF
 fi
 
 cat << EOF
@@ -196,19 +196,19 @@ Linux packages are distributed via AppImage.
 EOF
 
 if opts && tagged; then
-cat << EOF
-[zsync](https://zsync.moria.org.uk/) files are provided for easier updating, such as via
-[AM](https://github.com/ivan-hc/AM).
+	cat <<-EOF
+	[zsync](https://zsync.moria.org.uk/) files are provided for easier updating, such as via
+	[AM](https://github.com/ivan-hc/AM).
 
-| Build Type | GCC | PGO | Notes |
-|------------|-----|-----|-------|
-EOF
+	| Build Type | GCC | PGO | Notes |
+	|------------|-----|-----|-------|
+	EOF
 else
-cat << EOF
+	cat <<-EOF
 
-| Build Type | GCC | Notes |
-|------------|-----|-------|
-EOF
+	| Build Type | GCC | Notes |
+	|------------|-----|-------|
+	EOF
 fi
 
 linux_matrix
@@ -256,13 +256,13 @@ EOF
 win_matrix
 
 if falsy "$DISABLE_ANDROID"; then
-	cat << EOF
+	cat <<-EOF
 
-## Android
+	## Android
 
-| Build  | Description |
-|--------|-------------|
-EOF
+	| Build  | Description |
+	|--------|-------------|
+	EOF
 
 	android Standard "standard" "Single APK for all supported Android devices (most users should use this)"
 	android x86_64 "chromeos" "For devices running Chrome/FydeOS, AVD emulators, or certain Intel Atom Android devices."
@@ -291,5 +291,15 @@ This can be extracted with \`tar xf ${PROJECT_PRETTYNAME}-Source-${GITHUB_TAG}.t
 | File | Description |
 | ---- | ----------- |
 | [tar.zst](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-Source-${ARTIFACT_REF}.tar.zst) | Source as a zstd-compressed tarball (Windows: use Git Bash or MSYS2) |
-
 EOF
+
+if [ "$1" = "tag" ]; then
+	cat <<-EOF
+	## Torrent
+
+	A torrent containing all artifacts. To use this, simply download the torrent and import it into your favorite torrent client (BitTorrent only!),
+	and artifacts will be downloaded automatically.
+
+	- [Torrent](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent)
+	EOF
+fi
