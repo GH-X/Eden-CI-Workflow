@@ -26,6 +26,8 @@ find "$ROOTDIR" \( \
     \) -not -path "*artifacts*" -exec cp {} "$ARTIFACTS_DIR" \;
 
 sudo apt-get install -y mktorrent
-mktorrent -p -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "$ARTIFACTS_DIR/"
+_dir="${PROJECT_PRETTYNAME}-${ARTIFACT_REF}"
+ln -s "$ARTIFACTS_DIR" "${_dir}"
+mktorrent -p -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "${_dir}/"
 
 ls -lh "$ARTIFACTS_DIR"
