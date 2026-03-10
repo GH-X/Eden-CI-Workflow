@@ -29,6 +29,7 @@ apply_patch() {
 # temporary
 apply_patch $temppatch '#settings.'
 apply_patch $temppatch '#FramePacingMode.'
+apply_patch $temppatch '#lowmemorydevice.'
 apply_patch $temppatch '-28162#5edcdea78f#3074.'
 apply_patch $temppatch '-28093#363d861011#3156.'
 echo "FORGEJO_ERROR_TEMP=$temppatcherror" >> "$FORGEJO_LENV"
