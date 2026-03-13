@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 8cd55bcdd3..cd62aa34fa 100644
+index 8cd55bcdd3..bf9a98fa46 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -82,18 +82,12 @@ index 8cd55bcdd3..cd62aa34fa 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -455,13 +455,18 @@ struct Values {
- #ifdef ANDROID
-                                                             AstcDecodeMode::Cpu,
- #else
--                                                            AstcDecodeMode::Gpu,
-+                                                            AstcDecodeMode::Cpu,
- #endif
+@@ -460,8 +460,13 @@ struct Values {
                                                              "accelerate_astc",
                                                              Category::RendererAdvanced};
  
 +    SwitchableSetting<AstcRecompression, true> astc_recompression{linkage,
-+                                                                  AstcRecompression::Bc3,
++                                                                  AstcRecompression::Bc7,
 +                                                                  "astc_recompression",
 +                                                                  Category::RendererAdvanced};
 +
@@ -254,6 +248,21 @@ index 8cd55bcdd3..cd62aa34fa 100644
  #endif
                                                     "use_docked_mode",
                                                     Category::System,
+diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
+index 638be4127f..ff291eba2b 100644
+--- a/src/common/settings_enums.h
++++ b/src/common/settings_enums.h
+@@ -128,8 +128,8 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+     Roc, Rok, Singapore, Turkey, Uct, Universal, Utc, WSu, Wet, Zulu);
+ ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
+ ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
+-ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
+-ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
++ENUM(AstcRecompression, Uncompressed, Bc1, Bc3, Bc7);
++ENUM(FramePacingMode, Target_Auto, Target_20, Target_30, Target_40, Target_50, Target_60, Target_90, Target_120);
+ ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
+ ENUM(VramUsageMode, Conservative, Aggressive);
+ ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
 diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
 index c2a14858dd..9b9ed39d66 100644
 --- a/src/qt_common/config/uisettings.h
@@ -389,3 +398,94 @@ index c2a14858dd..9b9ed39d66 100644
  }};
  // clang-format on
  
+diff --git a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
+index 930f06daf6..184b4952f7 100644
+--- a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
++++ b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
+@@ -245,12 +245,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
+                 tuple.usage |= usage_storage;
+             }
+             break;
+-        case Settings::AstcRecompression::Bc1:
+-            tuple.format = is_srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
++        case Settings::AstcRecompression::Bc7:
++            tuple.format = is_srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+             break;
+         case Settings::AstcRecompression::Bc3:
+             tuple.format = is_srgb ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+             break;
++        case Settings::AstcRecompression::Bc1:
++            tuple.format = is_srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
++            break;
+         }
+     }
+     // Transcode on hardware that doesn't support BCn natively
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index 5d55cf551b..e1c3a4c528 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -174,9 +174,18 @@ bool Swapchain::AcquireNextImage() {
+     case Settings::FramePacingMode::Target_Auto:
+         scheduler.Wait(resource_ticks[image_index]);
+         break;
++    case Settings::FramePacingMode::Target_20:
++        scheduler.Wait(resource_ticks[image_index], 20.0);
++        break;
+     case Settings::FramePacingMode::Target_30:
+         scheduler.Wait(resource_ticks[image_index], 30.0);
+         break;
++    case Settings::FramePacingMode::Target_40:
++        scheduler.Wait(resource_ticks[image_index], 40.0);
++        break;
++    case Settings::FramePacingMode::Target_50:
++        scheduler.Wait(resource_ticks[image_index], 50.0);
++        break;
+     case Settings::FramePacingMode::Target_60:
+         scheduler.Wait(resource_ticks[image_index], 60.0);
+         break;
+diff --git a/src/video_core/surface.cpp b/src/video_core/surface.cpp
+index 1998849e84..677d0c89f5 100644
+--- a/src/video_core/surface.cpp
++++ b/src/video_core/surface.cpp
+@@ -453,6 +453,8 @@ u64 TranscodedAstcSize(u64 base_size, PixelFormat format) {
+         return uncompressed_size / 8;
+     case Settings::AstcRecompression::Bc3:
+         return uncompressed_size / 4;
++    case Settings::AstcRecompression::Bc7:
++        return uncompressed_size / 4;
+     default:
+         return uncompressed_size;
+     }
+diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
+index 71210ffe6e..eee820a581 100644
+--- a/src/video_core/texture_cache/texture_cache.h
++++ b/src/video_core/texture_cache/texture_cache.h
+@@ -70,14 +70,16 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+             (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+                      DEFAULT_CRITICAL_MEMORY));
+         minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
+-
+-        lowmemorydevice = false;
+     } else {
+         expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
+         critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
+         minimum_memory = 0;
++    }
+ 
+-        lowmemorydevice = true;
++    switch (Settings::values.vram_usage_mode.GetValue()) {
++        case Settings::VramUsageMode::Conservative:    lowmemorydevice = true; break;
++        case Settings::VramUsageMode::Aggressive:      lowmemorydevice = false; break;
++        default:                                       lowmemorydevice = true;
+     }
+ 
+     const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
+@@ -89,7 +91,7 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+             case Settings::GpuUnswizzleSize::Normal:       gpu_unswizzle_maxsize = 128_MiB; break;
+             case Settings::GpuUnswizzleSize::Large:        gpu_unswizzle_maxsize = 256_MiB; break;
+             case Settings::GpuUnswizzleSize::VeryLarge:    gpu_unswizzle_maxsize = 512_MiB; break;
+-            default:                                       gpu_unswizzle_maxsize = 128_MiB; break;
++            default:                                       gpu_unswizzle_maxsize = 128_MiB;
+         }
+ 
+         switch (Settings::values.gpu_unswizzle_stream_size.GetValue()) {

@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index 242e49ebfa..23689c1866 100644
+index 242e49ebfa..0db67dfe4a 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -145,7 +145,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/compatdb.cpp" line="194"/>
-@@ -375,3399 +377,4807 @@ This would ban both their forum username and their IP address.</source>
+@@ -375,9264 +377,11622 @@ This would ban both their forum username and their IP address.</source>
          <translation>%</translation>
      </message>
      <message>
@@ -1369,7 +1369,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="502"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="435"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="436"/>
          <source>Vulkan</source>
          <translation>Vulkan</translation>
      </message>
@@ -1416,12 +1416,12 @@ index 242e49ebfa..23689c1866 100644
 +        <translation type="vanished">自动</translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="559"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="560"/>
 +        <source>Polish (polska)</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="560"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="561"/>
 +        <source>Thai (แบบไทย)</source>
 +        <translation type="unfinished"></translation>
 +    </message>
@@ -1556,7 +1556,7 @@ index 242e49ebfa..23689c1866 100644
 +        <translation type="vanished">120 FPS</translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="437"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="438"/>
 +        <source>OpenGL GLSL</source>
 +        <translation type="unfinished"></translation>
 +    </message>
@@ -1797,14 +1797,14 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="583"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="515"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="516"/>
          <source>FXAA</source>
 -        <translation>快速近似抗锯齿</translation>
 +        <translation>FXAA</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="584"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="516"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="517"/>
          <source>SMAA</source>
 -        <translation>子像素形态学抗锯齿</translation>
 +        <translation>SMAA</translation>
@@ -1883,42 +1883,42 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="609"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="541"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="542"/>
          <source>Japanese (日本語)</source>
 -        <translation>日语 (日本語)</translation>
 +        <translation>日语（日本語）</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="610"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="542"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="543"/>
          <source>American English</source>
 -        <translation>美式英语</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="611"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="543"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="544"/>
          <source>French (français)</source>
 -        <translation>法语 (français)</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="612"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="544"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="545"/>
          <source>German (Deutsch)</source>
 -        <translation>德语 (Deutsch)</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="613"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="545"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="546"/>
          <source>Italian (italiano)</source>
 -        <translation>意大利语 (italiano)</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="614"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="546"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="547"/>
          <source>Spanish (español)</source>
 -        <translation>西班牙语 (español)</translation>
 +        <translation type="unfinished"></translation>
@@ -1931,28 +1931,28 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="616"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="548"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="549"/>
          <source>Korean (한국어)</source>
 -        <translation>韩语 (한국어)</translation>
 +        <translation>韩语（한국어）</translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="617"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="549"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="550"/>
          <source>Dutch (Nederlands)</source>
 -        <translation>荷兰语 (Nederlands)</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="618"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="550"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="551"/>
          <source>Portuguese (português)</source>
 -        <translation>葡萄牙语 (português)</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="619"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="551"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="552"/>
          <source>Russian (Русский)</source>
 -        <translation>俄语 (Русский)</translation>
 +        <translation type="unfinished"></translation>
@@ -1965,21 +1965,21 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="621"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="553"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="554"/>
          <source>British English</source>
 -        <translation>英式英语</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="622"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="554"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="555"/>
          <source>Canadian French</source>
 -        <translation>加拿大法语</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="623"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="555"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="556"/>
          <source>Latin American Spanish</source>
 -        <translation>拉美西班牙语</translation>
 +        <translation type="unfinished"></translation>
@@ -1998,7 +1998,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="626"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="558"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="559"/>
          <source>Brazilian Portuguese (português do Brasil)</source>
 -        <translation>巴西-葡萄牙语 (português do Brasil)</translation>
 -    </message>
@@ -2011,29 +2011,29 @@ index 242e49ebfa..23689c1866 100644
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="631"/>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="670"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="564"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="603"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="565"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="604"/>
          <source>Japan</source>
 -        <translation>日本</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="632"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="565"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="566"/>
          <source>USA</source>
 -        <translation>美国</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="633"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="566"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="567"/>
          <source>Europe</source>
 -        <translation>欧洲</translation>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="634"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="567"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="568"/>
          <source>Australia</source>
 -        <translation>澳大利亚</translation>
 +        <translation type="unfinished"></translation>
@@ -2046,7 +2046,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
 -        <location filename="../../src/qt_common/config/shared_translation.cpp" line="636"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="569"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="570"/>
          <source>Korea</source>
 -        <translation>韩国</translation>
 +        <translation type="unfinished"></translation>
@@ -2721,8 +2721,8 @@ index 242e49ebfa..23689c1866 100644
 -        <source>ExtendedDynamicState 2</source>
 -        <translation>扩展动态状态 2</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="187"/>
-+        <source>大多数 GPU 不支持 ASTC 纹理，必须解压缩为中间格式：RGBA8。
-+BC1/BC3：中间格式将被重新压缩为 BC1 或 BC3 格式，节省显存但会降低图像质量。</source>
++        <source>大多数 GPU 不支持 ASTC 纹理，必须解压缩为中间格式（RGBA8）。
++中间格式将被重新压缩为 BCn（BC1/BC3/BC7）格式，节省显存但会降低图像质量。</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3208,8 +3208,8 @@ index 242e49ebfa..23689c1866 100644
 -&lt;div style=&quot;white-space: nowrap&quot;&gt;启用此选项将减少内存访问的开销，并且对不访问无效内存的程序没有影响。&lt;/div&gt;
 -           </translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="279"/>
-+        <source>通过依赖旧式缩放通道这个变通方案可能会修复某些游戏中的图形故障。
-+修复《路易吉洋馆3》中的线条伪影（AMD/Intel GPU）或灰色纹理闪烁（Nvidia GPU）。</source>
++        <source>通过依赖旧式缩放通道这个变通方案，可能会修复某些游戏中的图形故障。
++例如线条伪影或灰色纹理闪烁等。</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3622,7 +3622,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</source>
 -        <translation>启用此选项会将最新的音频命令列表输出到控制台。只影响使用音频渲染器的游戏。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="414"/>
-+        <source>BC3（中等质量）</source>
++        <source>BC7（高等质量，仅限 Vulkan）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3630,17 +3630,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Dump Audio Commands To Console**</source>
 -        <translation>将音频命令转储至控制台**</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="415"/>
-+        <source>BC1（低等质量）</source>
++        <source>BC3（中等质量）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="604"/>
 -        <source>Flush log output on each line</source>
 -        <translation>每行刷新日志输出</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="419"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="457"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="528"/>
-+        <source>自动</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="416"/>
++        <source>BC1（低等质量）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3648,7 +3646,9 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Enable FS Access Log</source>
 -        <translation>启用文件系统访问记录</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="420"/>
-+        <source>每秒 20 帧</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="458"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="529"/>
++        <source>自动</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3656,7 +3656,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Enable Verbose Reporting Services**</source>
 -        <translation>启用详细报告服务**</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="421"/>
-+        <source>每秒 30 帧</source>
++        <source>每秒 20 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3664,7 +3664,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Censor username in logs</source>
 -        <translation>审查日志中的用户名</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="422"/>
-+        <source>每秒 40 帧</source>
++        <source>每秒 30 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3672,7 +3672,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>**This will be reset automatically when Eden closes.</source>
 -        <translation>**这会在 Eden 关闭时自动重置。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="423"/>
-+        <source>每秒 50 帧</source>
++        <source>每秒 40 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -3683,7 +3683,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Configure Debug Controller</source>
 -        <translation>控制器调试设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="424"/>
-+        <source>每秒 60 帧</source>
++        <source>每秒 50 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3691,7 +3691,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Clear</source>
 -        <translation>清除</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="425"/>
-+        <source>每秒 90 帧</source>
++        <source>每秒 60 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3699,7 +3699,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Defaults</source>
 -        <translation>系统默认</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="426"/>
-+        <source>每秒 120 帧</source>
++        <source>每秒 90 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -3709,8 +3709,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug_tab.ui" line="14"/>
 -        <source>Form</source>
 -        <translation>类型</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="430"/>
-+        <source>保守</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="427"/>
++        <source>每秒 120 帧</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3719,15 +3719,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Debug</source>
 -        <translation>调试</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="431"/>
-+        <source>激进</source>
++        <source>保守</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug_tab.cpp" line="17"/>
 -        <source>CPU</source>
 -        <translation>CPU</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="438"/>
-+        <source>OpenGL GLASM（汇编着色器，仅限 NVIDIA）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="432"/>
++        <source>激进</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -3738,23 +3738,23 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Eden Configuration</source>
 -        <translation>Eden 设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="439"/>
-+        <source>OpenGL SPIR-V（实验性，仅限 AMD 或 Mesa）</source>
++        <source>OpenGL GLASM（汇编着色器，仅限 NVIDIA）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure.ui" line="67"/>
 -        <source>Some settings are only available when a game is not running.</source>
 -        <translation>只有当游戏不在运行时，某些设置项才可用。</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="441"/>
-+        <source>空</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="440"/>
++        <source>OpenGL SPIR-V（实验性，仅限 AMD 或 Mesa）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="69"/>
 -        <source>Applets</source>
 -        <translation>小程序</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="444"/>
-+        <source>快速</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="442"/>
++        <source>空</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3763,7 +3763,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Audio</source>
 -        <translation>声音</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="445"/>
-+        <source>平衡</source>
++        <source>快速</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3772,17 +3772,16 @@ index 242e49ebfa..23689c1866 100644
 -        <source>CPU</source>
 -        <translation>CPU</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="446"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="458"/>
-+        <source>精确</source>
++        <source>平衡</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="72"/>
 -        <source>Debug</source>
 -        <translation>调试</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="450"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="529"/>
-+        <source>默认</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="447"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="459"/>
++        <source>精确</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3790,8 +3789,8 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Filesystem</source>
 -        <translation>文件系统</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="451"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="459"/>
-+        <source>快速（低精度）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="530"/>
++        <source>默认</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3800,7 +3799,8 @@ index 242e49ebfa..23689c1866 100644
 -        <source>General</source>
 -        <translation>通用</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="452"/>
-+        <source>安全（最稳定）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="460"/>
++        <source>快速（低精度）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3808,8 +3808,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="179"/>
 -        <source>Graphics</source>
 -        <translation>图形</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="460"/>
-+        <source>偏执（禁用绝大多数优化项）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="453"/>
++        <source>安全（最稳定）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3817,15 +3817,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>GraphicsAdvanced</source>
 -        <translation>高级图形选项</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="461"/>
-+        <source>调试</source>
++        <source>偏执（禁用绝大多数优化项）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="77"/>
 -        <source>GraphicsExtra</source>
 -        <translation>图形增强</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="465"/>
-+        <source>动态编译</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="462"/>
++        <source>调试</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3833,7 +3833,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Hotkeys</source>
 -        <translation>热键</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="466"/>
-+        <source>本机代码执行</source>
++        <source>动态编译</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3841,8 +3841,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="181"/>
 -        <source>Controls</source>
 -        <translation>控制</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="470"/>
-+        <source>无边框窗口</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="467"/>
++        <source>本机代码执行</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3850,15 +3850,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Profiles</source>
 -        <translation>用户配置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="471"/>
-+        <source>独占全屏</source>
++        <source>无边框窗口</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="81"/>
 -        <source>Network</source>
 -        <translation>网络</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="475"/>
-+        <source>无视频输出</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="472"/>
++        <source>独占全屏</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3867,7 +3867,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>System</source>
 -        <translation>系统</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="476"/>
-+        <source>CPU 视频解码</source>
++        <source>无视频输出</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3875,15 +3875,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Game List</source>
 -        <translation>游戏列表</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="477"/>
-+        <source>GPU 视频解码</source>
++        <source>CPU 视频解码</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="84"/>
 -        <source>Web</source>
 -        <translation>网络</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="482"/>
-+        <source>0.25X（180p/270p）「实验性」</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="478"/>
++        <source>GPU 视频解码</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -3894,7 +3894,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Form</source>
 -        <translation>类型</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="483"/>
-+        <source>0.5X（360p/540p）「实验性」</source>
++        <source>0.25X（180p/270p）「实验性」</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3902,7 +3902,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Filesystem</source>
 -        <translation>文件系统</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="484"/>
-+        <source>0.75X（540p/810p）「实验性」</source>
++        <source>0.5X（360p/540p）「实验性」</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3910,7 +3910,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Storage Directories</source>
 -        <translation>存储目录</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="485"/>
-+        <source>1X（720p/1080p）</source>
++        <source>0.75X（540p/810p）「实验性」</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3918,7 +3918,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>NAND</source>
 -        <translation>NAND</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="486"/>
-+        <source>1.25X（900p/1350p）「实验性」</source>
++        <source>1X（720p/1080p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3931,7 +3931,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>...</source>
 -        <translation>...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="487"/>
-+        <source>1.5X（1080p/1620p）「实验性」</source>
++        <source>1.25X（900p/1350p）「实验性」</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3939,7 +3939,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>SD Card</source>
 -        <translation>SD 卡</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="488"/>
-+        <source>2X（1440p/2160p）</source>
++        <source>1.5X（1080p/1620p）「实验性」</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3947,7 +3947,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Save Data</source>
 -        <translation>存档</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="489"/>
-+        <source>3X（2160p/3240p）</source>
++        <source>2X（1440p/2160p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3955,7 +3955,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Gamecard</source>
 -        <translation>游戏卡带</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="490"/>
-+        <source>4X（2880p/4320p）</source>
++        <source>3X（2160p/3240p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3963,7 +3963,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Path</source>
 -        <translation>路径</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="491"/>
-+        <source>5X（3600p/5400p）</source>
++        <source>4X（2880p/4320p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3971,7 +3971,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Inserted</source>
 -        <translation>已插入</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="492"/>
-+        <source>6X（4320p/6480p）</source>
++        <source>5X（3600p/5400p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3979,7 +3979,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Current Game</source>
 -        <translation>当前游戏</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="493"/>
-+        <source>7X（5040p/7560p）</source>
++        <source>6X（4320p/6480p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -3987,15 +3987,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Patch Manager</source>
 -        <translation>补丁管理</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="494"/>
-+        <source>8X（5760p/8640p）</source>
++        <source>7X（5040p/7560p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.ui" line="169"/>
 -        <source>Dump Decompressed NSOs</source>
 -        <translation>转储已解压的 NSO 文件</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="498"/>
-+        <source>Nearest（近邻取样）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="495"/>
++        <source>8X（5760p/8640p）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4003,7 +4003,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Dump ExeFS</source>
 -        <translation>转储 ExeFS</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="499"/>
-+        <source>Bilinear（双线性过滤）</source>
++        <source>Nearest（近邻取样）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4011,7 +4011,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Mod Load Root</source>
 -        <translation>Mod 加载根目录</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="500"/>
-+        <source>Bicubic（双三线过滤）</source>
++        <source>Bilinear（双线性过滤）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4019,7 +4019,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Dump Root</source>
 -        <translation>转储根目录</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="501"/>
-+        <source>Gaussian（高斯模糊）</source>
++        <source>Bicubic（双三线过滤）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4027,7 +4027,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Caching</source>
 -        <translation>缓存</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="502"/>
-+        <source>Lanczos（兰佐斯）</source>
++        <source>Gaussian（高斯模糊）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4035,7 +4035,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Cache Game List Metadata</source>
 -        <translation>缓存游戏列表数据</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="503"/>
-+        <source>ScaleForce（强制缩放）</source>
++        <source>Lanczos（兰佐斯）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4043,7 +4043,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Reset Metadata Cache</source>
 -        <translation>重置缓存数据</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="504"/>
-+        <source>FSR（AMD 超级分辨率锐画技术）</source>
++        <source>ScaleForce（强制缩放）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4051,7 +4051,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Emulated NAND Directory...</source>
 -        <translation>选择模拟 NAND 目录...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="505"/>
-+        <source>Area（区域插值）</source>
++        <source>FSR（AMD 超级分辨率锐画技术）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4059,7 +4059,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Emulated SD Directory...</source>
 -        <translation>选择模拟 SD 卡目录...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="506"/>
-+        <source>MMPX（近邻取样-像素风格）</source>
++        <source>Area（区域插值）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4068,7 +4068,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Save Data Directory...</source>
 -        <translation>选择存档目录...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="507"/>
-+        <source>Zero-Tangent（零-切线）</source>
++        <source>MMPX（近邻取样-像素风格）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4076,7 +4076,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Gamecard Path...</source>
 -        <translation>选择游戏卡带路径...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="508"/>
-+        <source>B-Spline（B-样条）</source>
++        <source>Zero-Tangent（零-切线）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4084,7 +4084,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Dump Directory...</source>
 -        <translation>选择转储目录...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="509"/>
-+        <source>Mitchell（米切尔）</source>
++        <source>B-Spline（B-样条）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4092,24 +4092,24 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Select Mod Load Directory...</source>
 -        <translation>选择 Mod 载入目录...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="510"/>
-+        <source>Spline-1（样条-1）</source>
++        <source>Mitchell（米切尔）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="149"/>
 -        <source>Save Data Directory</source>
 -        <translation>选择存档目录</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="514"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="536"/>
-+        <source>无</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="511"/>
++        <source>Spline-1（样条-1）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="150"/>
 -        <source>Choose an action for the save data directory:</source>
 -        <translation>为存档目录选择一个操作：</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="520"/>
-+        <source>16:9（默认）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="515"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="537"/>
++        <source>无</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4117,7 +4117,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Set Custom Path</source>
 -        <translation>设置自定义路径</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="521"/>
-+        <source>4:3（强制）</source>
++        <source>16:9（默认）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4125,7 +4125,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Reset to NAND</source>
 -        <translation>重置 NAND</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="522"/>
-+        <source>21:9（强制）</source>
++        <source>4:3（强制）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4139,7 +4139,7 @@ index 242e49ebfa..23689c1866 100644
 -WARNING: This will overwrite any conflicting saves in the new location!</source>
 -        <translation>保存存档同时在旧位置和新位置。旧: %1新: %2是否要将存档从旧位置迁移到新位置？警告：此操作将会覆盖新位置中任何冲突的存档！</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="523"/>
-+        <source>16:10（强制）</source>
++        <source>21:9（强制）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4150,32 +4150,32 @@ index 242e49ebfa..23689c1866 100644
 -To: %2</source>
 -        <translation>你是否要迁移存档位置？来自: %1将到: %2</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="524"/>
-+        <source>拉伸到窗口</source>
++        <source>16:10（强制）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="225"/>
 -        <source>Migrate Save Data</source>
 -        <translation>迁移存档</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="530"/>
-+        <source>2X</source>
-+        <translation type="unfinished">2X</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="525"/>
++        <source>拉伸到窗口</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="232"/>
 -        <source>Migrating save data...</source>
 -        <translation>迁移存档...</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="531"/>
-+        <source>4X</source>
-+        <translation type="unfinished">4X</translation>
++        <source>2X</source>
++        <translation type="unfinished">2X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="232"/>
 -        <source>Cancel</source>
 -        <translation>取消</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="532"/>
-+        <source>8X</source>
-+        <translation type="unfinished">8X</translation>
++        <source>4X</source>
++        <translation type="unfinished">4X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="240"/>
@@ -4183,16 +4183,16 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Migration Failed</source>
 -        <translation>迁移失败</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="533"/>
-+        <source>16X</source>
-+        <translation type="unfinished">16X</translation>
++        <source>8X</source>
++        <translation type="unfinished">8X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="241"/>
 -        <source>Failed to create destination directory.</source>
 -        <translation>创建目标目录失败。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="534"/>
-+        <source>32X</source>
-+        <translation type="unfinished">32X</translation>
++        <source>16X</source>
++        <translation type="unfinished">16X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="253"/>
@@ -4200,16 +4200,16 @@ index 242e49ebfa..23689c1866 100644
 -%1</source>
 -        <translation>迁移存档数据失败：%1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="535"/>
-+        <source>64X</source>
-+        <translation type="unfinished">64X</translation>
++        <source>32X</source>
++        <translation type="unfinished">32X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="259"/>
 -        <source>Migration Complete</source>
 -        <translation>迁移完成</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="547"/>
-+        <source>中文</source>
-+        <translation type="unfinished"></translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="536"/>
++        <source>64X</source>
++        <translation type="unfinished">64X</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="260"/>
@@ -4217,8 +4217,8 @@ index 242e49ebfa..23689c1866 100644
 -
 -Would you like to delete the old save data?</source>
 -        <translation>存档已成功迁移。是否要删除旧存档数据？</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="552"/>
-+        <source>台湾中文</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="548"/>
++        <source>中文</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4228,8 +4228,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_general.ui" line="14"/>
 -        <source>Form</source>
 -        <translation>类型</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="556"/>
-+        <source>简体中文</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="553"/>
++        <source>台湾中文</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4238,32 +4238,31 @@ index 242e49ebfa..23689c1866 100644
 -        <source>General</source>
 -        <translation>通用</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="557"/>
-+        <source>繁体中文（正體中文）</source>
++        <source>简体中文</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.ui" line="82"/>
 -        <source>Reset All Settings</source>
 -        <translation>重置所有设置项</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="568"/>
-+        <source>中国</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="558"/>
++        <source>繁体中文（正體中文）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.cpp" line="87"/>
 -        <source>Eden</source>
 -        <translation>Eden</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="570"/>
-+        <source>台湾</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="569"/>
++        <source>中国</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.cpp" line="88"/>
 -        <source>This reset all settings and remove all per-game configurations. This will not delete game directories, profiles, or input profiles. Proceed?</source>
 -        <translation>将重置模拟器所有设置并删除所有游戏的单独设置。这不会删除游戏目录、个人文件及输入配置文件。是否继续？</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="576"/>
-+        <source>自动（%1）</source>
-+        <comment>Auto select time zone</comment>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="571"/>
++        <source>台湾</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4273,17 +4272,18 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_graphics.ui" line="14"/>
 -        <source>Form</source>
 -        <translation>类型</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="580"/>
-+        <source>默认（%1）</source>
-+        <comment>Default time zone</comment>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="577"/>
++        <source>自动（%1）</source>
++        <comment>Auto select time zone</comment>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_graphics.ui" line="17"/>
 -        <source>Graphics</source>
 -        <translation>图形</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="582"/>
-+        <source>CET</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="581"/>
++        <source>默认（%1）</source>
++        <comment>Default time zone</comment>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4291,7 +4291,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>API Settings</source>
 -        <translation>API 设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="583"/>
-+        <source>CST6CDT</source>
++        <source>CET</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4299,7 +4299,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Graphics Settings</source>
 -        <translation>图形设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="584"/>
-+        <source>Cuba</source>
++        <source>CST6CDT</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4307,7 +4307,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Background Color:</source>
 -        <translation>背景颜色:</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="585"/>
-+        <source>EET</source>
++        <source>Cuba</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4316,7 +4316,7 @@ index 242e49ebfa..23689c1866 100644
 -        <comment>FSR sharpening percentage (e.g. 50%)</comment>
 -        <translation>%</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="586"/>
-+        <source>Egypt</source>
++        <source>EET</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4324,7 +4324,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Off</source>
 -        <translation>关闭</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="587"/>
-+        <source>Eire</source>
++        <source>Egypt</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4332,7 +4332,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>VSync Off</source>
 -        <translation>垂直同步关</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="588"/>
-+        <source>EST</source>
++        <source>Eire</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4340,7 +4340,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Recommended</source>
 -        <translation>推荐</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="589"/>
-+        <source>EST5EDT</source>
++        <source>EST</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4348,7 +4348,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>On</source>
 -        <translation>开启</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="590"/>
-+        <source>GB</source>
++        <source>EST5EDT</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4356,7 +4356,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>VSync On</source>
 -        <translation>垂直同步开</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="591"/>
-+        <source>GB-Eire</source>
++        <source>GB</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4367,7 +4367,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Form</source>
 -        <translation>类型</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="592"/>
-+        <source>GMT</source>
++        <source>GB-Eire</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4375,7 +4375,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Advanced</source>
 -        <translation>高级</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="593"/>
-+        <source>GMT+0</source>
++        <source>GMT</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4383,7 +4383,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Advanced Graphics Settings</source>
 -        <translation>高级图形选项</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="594"/>
-+        <source>GMT-0</source>
++        <source>GMT+0</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4394,7 +4394,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Form</source>
 -        <translation>来自</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="595"/>
-+        <source>GMT0</source>
++        <source>GMT-0</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4402,7 +4402,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Extras</source>
 -        <translation>额外</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="596"/>
-+        <source>Greenwich</source>
++        <source>GMT0</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4410,23 +4410,23 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Hacks</source>
 -        <translation>Hacks</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="597"/>
-+        <source>香港</source>
++        <source>Greenwich</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_graphics_extensions.ui" line="29"/>
 -        <source>Changing these options from their default may cause issues. Novitii cavete!</source>
 -        <translation>更改这些选项可能会导致问题。新手小心！</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="614"/>
-+        <source>中国标准时间</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="598"/>
++        <source>香港</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_graphics_extensions.ui" line="62"/>
 -        <source>Vulkan Extensions</source>
 -        <translation>Vulkan 扩展</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="616"/>
-+        <source>台湾时间</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="615"/>
++        <source>中国标准时间</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4434,16 +4434,16 @@ index 242e49ebfa..23689c1866 100644
 -        <source>%</source>
 -        <comment>Sample Shading percentage (e.g. 50%)</comment>
 -        <translation>%</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="618"/>
-+        <source>新加坡</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="617"/>
++        <source>台湾时间</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_graphics_extensions.cpp" line="67"/>
 -        <source>Extended Dynamic State is disabled on macOS due to MoltenVK compatibility issues that cause black screens.</source>
 -        <translation>由于 MoltenVK 兼容性问题会导致黑屏,macOS 上已禁用扩展动态状态。</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="629"/>
-+        <source>单声道</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="619"/>
++        <source>新加坡</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4454,7 +4454,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Hotkey Settings</source>
 -        <translation>热键设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="630"/>
-+        <source>立体声</source>
++        <source>单声道</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4462,15 +4462,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Hotkeys</source>
 -        <translation>热键</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="631"/>
-+        <source>环绕声</source>
++        <source>立体声</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.ui" line="25"/>
 -        <source>Double-click on a binding to change it.</source>
 -        <translation>双击已绑定的项目以改变设定。</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="635"/>
-+        <source>4GB DRAM（默认）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="632"/>
++        <source>环绕声</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4478,15 +4478,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Clear All</source>
 -        <translation>全部清除</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="636"/>
-+        <source>6GB DRAM（不安全）</source>
++        <source>4GB DRAM（默认）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.ui" line="52"/>
 -        <source>Restore Defaults</source>
 -        <translation>恢复默认</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="638"/>
-+        <source>10GB DRAM（不安全）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="637"/>
++        <source>6GB DRAM（不安全）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4494,15 +4494,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Action</source>
 -        <translation>作用</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="639"/>
-+        <source>12GB DRAM（不安全）</source>
++        <source>10GB DRAM（不安全）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.cpp" line="115"/>
 -        <source>Hotkey</source>
 -        <translation>热键</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="643"/>
-+        <source>主机模式</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="640"/>
++        <source>12GB DRAM（不安全）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4510,7 +4510,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Controller Hotkey</source>
 -        <translation>控制器热键</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="644"/>
-+        <source>掌机模式</source>
++        <source>主机模式</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4519,9 +4519,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.cpp" line="421"/>
 -        <source>Conflicting Key Sequence</source>
 -        <translation>按键冲突</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="648"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="661"/>
-+        <source>关闭</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="645"/>
++        <source>掌机模式</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4530,7 +4529,8 @@ index 242e49ebfa..23689c1866 100644
 -        <source>The entered key sequence is already assigned to: %1</source>
 -        <translation>输入的按键序列已分配给: %1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="649"/>
-+        <source>Boost（1700MHz）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="662"/>
++        <source>关闭</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4538,15 +4538,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>[waiting]</source>
 -        <translation>[请按键]</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="650"/>
-+        <source>Fast（2000MHz）</source>
++        <source>Boost（1700MHz）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.cpp" line="271"/>
 -        <source>Invalid</source>
 -        <translation>无效</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="655"/>
-+        <source>总是询问（默认）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="651"/>
++        <source>Fast（2000MHz）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4554,7 +4554,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Invalid hotkey settings</source>
 -        <translation>无效的热键设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="656"/>
-+        <source>仅当游戏不希望停止时</source>
++        <source>总是询问（默认）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4562,16 +4562,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>An error occurred. Please report this issue on github.</source>
 -        <translation>发生错误。请在 GitHub 提交 Issue。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="657"/>
-+        <source>从不询问</source>
++        <source>仅当游戏不希望停止时</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.cpp" line="384"/>
 -        <source>Restore Default</source>
 -        <translation>恢复默认</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="662"/>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="686"/>
-+        <source>中（256）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="658"/>
++        <source>从不询问</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4580,15 +4579,16 @@ index 242e49ebfa..23689c1866 100644
 -        <translation>清除</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="663"/>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="687"/>
-+        <source>高（512）</source>
++        <source>中（256）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_hotkeys.cpp" line="406"/>
 -        <source>Conflicting Button Sequence</source>
 -        <translation>键位冲突</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="667"/>
-+        <source>非常小（16 MB）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="664"/>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="688"/>
++        <source>高（512）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4596,7 +4596,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>The default button sequence is already assigned to: %1</source>
 -        <translation>默认的按键序列已分配给: %1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="668"/>
-+        <source>小（32 MB）</source>
++        <source>非常小（16 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4604,7 +4604,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>The default key sequence is already assigned to: %1</source>
 -        <translation>默认的按键序列已分配给: %1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="669"/>
-+        <source>正常（128 MB）</source>
++        <source>小（32 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4615,7 +4615,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>ConfigureInput</source>
 -        <translation>输入设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="670"/>
-+        <source>大（256 MB）</source>
++        <source>正常（128 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4624,7 +4624,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 1</source>
 -        <translation>玩家 1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="671"/>
-+        <source>非常大（512 MB）</source>
++        <source>大（256 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4632,8 +4632,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="50"/>
 -        <source>Player 2</source>
 -        <translation>玩家 2</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="675"/>
-+        <source>非常低（4 MB）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="672"/>
++        <source>非常大（512 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4642,7 +4642,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 3</source>
 -        <translation>玩家 3</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="676"/>
-+        <source>低（8 MB）</source>
++        <source>非常低（4 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4651,7 +4651,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 4</source>
 -        <translation>玩家 4</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="677"/>
-+        <source>正常（16 MB）</source>
++        <source>低（8 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4660,7 +4660,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 5</source>
 -        <translation>玩家 5</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="678"/>
-+        <source>中（32 MB）</source>
++        <source>正常（16 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4669,7 +4669,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 6</source>
 -        <translation>玩家 6</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="679"/>
-+        <source>高（64 MB）</source>
++        <source>中（32 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4677,8 +4677,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="90"/>
 -        <source>Player 7</source>
 -        <translation>玩家 7</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="683"/>
-+        <source>非常低（32）</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="680"/>
++        <source>高（64 MB）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4687,7 +4687,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 8</source>
 -        <translation>玩家 8</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="684"/>
-+        <source>低（64）</source>
++        <source>非常低（32）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4696,15 +4696,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Advanced</source>
 -        <translation>高级</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="685"/>
-+        <source>正常（128）</source>
++        <source>低（64）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="138"/>
 -        <source>Console Mode</source>
 -        <translation>控制台模式</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="692"/>
-+        <source>禁用</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="686"/>
++        <source>正常（128）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4712,7 +4712,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Docked</source>
 -        <translation>主机模式</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="693"/>
-+        <source>扩展动态状态 1</source>
++        <source>禁用</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4720,7 +4720,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Handheld</source>
 -        <translation>掌机模式</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="694"/>
-+        <source>扩展动态状态 2</source>
++        <source>扩展动态状态 1</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4728,7 +4728,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Vibration</source>
 -        <translation>震动</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="695"/>
-+        <source>扩展动态状态 3</source>
++        <source>扩展动态状态 2</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4736,8 +4736,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="261"/>
 -        <source>Configure</source>
 -        <translation>设置</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="700"/>
-+        <source>树状视图</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="696"/>
++        <source>扩展动态状态 3</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4745,30 +4745,30 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Motion</source>
 -        <translation>体感</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="701"/>
-+        <source>网格视图</source>
++        <source>树状视图</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="296"/>
 -        <source>Controllers</source>
 -        <translation>控制器</translation>
-+        <source>Hongkong</source>
-+        <translation type="vanished">香港</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="702"/>
++        <source>网格视图</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="324"/>
 -        <source>1</source>
 -        <translation>1</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="598"/>
-+        <source>HST</source>
-+        <translation type="unfinished"></translation>
++        <source>Hongkong</source>
++        <translation type="vanished">香港</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="365"/>
 -        <source>2</source>
 -        <translation>2</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="599"/>
-+        <source>Iceland</source>
++        <source>HST</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4776,7 +4776,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>3</source>
 -        <translation>3</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="600"/>
-+        <source>Iran</source>
++        <source>Iceland</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4784,7 +4784,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>4</source>
 -        <translation>4</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="601"/>
-+        <source>Israel</source>
++        <source>Iran</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4792,15 +4792,15 @@ index 242e49ebfa..23689c1866 100644
 -        <source>5</source>
 -        <translation>5</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="602"/>
-+        <source>Jamaica</source>
++        <source>Israel</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input.ui" line="405"/>
 -        <source>6</source>
 -        <translation>6</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="604"/>
-+        <source>Kwajalein</source>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="603"/>
++        <source>Jamaica</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4808,7 +4808,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>7</source>
 -        <translation>7</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="605"/>
-+        <source>Libya</source>
++        <source>Kwajalein</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4816,7 +4816,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>8</source>
 -        <translation>8</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="606"/>
-+        <source>MET</source>
++        <source>Libya</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4824,7 +4824,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Connected</source>
 -        <translation>已连接</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="607"/>
-+        <source>MST</source>
++        <source>MET</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4832,7 +4832,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Defaults</source>
 -        <translation>系统默认</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="608"/>
-+        <source>MST7MDT</source>
++        <source>MST</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4840,7 +4840,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Clear</source>
 -        <translation>清除</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="609"/>
-+        <source>Navajo</source>
++        <source>MST7MDT</source>
 +        <translation type="unfinished"></translation>
      </message>
 -</context>
@@ -4851,7 +4851,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Configure Input</source>
 -        <translation>输入设置</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="610"/>
-+        <source>NZ</source>
++        <source>Navajo</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4859,7 +4859,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Joycon Colors</source>
 -        <translation>Joycon 颜色</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="611"/>
-+        <source>NZ-CHAT</source>
++        <source>NZ</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4867,7 +4867,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 1</source>
 -        <translation>玩家 1</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="612"/>
-+        <source>Poland</source>
++        <source>NZ-CHAT</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4882,7 +4882,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>L Body</source>
 -        <translation>左侧主体</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="613"/>
-+        <source>Portugal</source>
++        <source>Poland</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4896,8 +4896,9 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2296"/>
 -        <source>L Button</source>
 -        <translation>左侧按键</translation>
-+        <source>PRC</source>
-+        <translation type="vanished">中国标准时间</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="614"/>
++        <source>Portugal</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="295"/>
@@ -4910,9 +4911,8 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2372"/>
 -        <source>R Body</source>
 -        <translation>右侧主体</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="615"/>
-+        <source>PST8PDT</source>
-+        <translation type="unfinished"></translation>
++        <source>PRC</source>
++        <translation type="vanished">中国标准时间</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="350"/>
@@ -4925,38 +4925,38 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2427"/>
 -        <source>R Button</source>
 -        <translation>右侧按键</translation>
-+        <source>ROC</source>
-+        <translation type="vanished">台湾时间</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="616"/>
++        <source>PST8PDT</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="411"/>
 -        <source>Player 2</source>
 -        <translation>玩家 2</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="617"/>
-+        <source>ROK</source>
-+        <translation type="unfinished"></translation>
++        <source>ROC</source>
++        <translation type="vanished">台湾时间</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="715"/>
 -        <source>Player 3</source>
 -        <translation>玩家 3</translation>
-+        <source>Singapore</source>
-+        <translation type="vanished">新加坡</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="618"/>
++        <source>ROK</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="1001"/>
 -        <source>Player 4</source>
 -        <translation>玩家 4</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="619"/>
-+        <source>Turkey</source>
-+        <translation type="unfinished"></translation>
++        <source>Singapore</source>
++        <translation type="vanished">新加坡</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="1326"/>
 -        <source>Player 5</source>
 -        <translation>玩家 5</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="620"/>
-+        <source>UCT</source>
++        <source>Turkey</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4964,7 +4964,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 6</source>
 -        <translation>玩家 6</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="621"/>
-+        <source>Universal</source>
++        <source>UCT</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4972,7 +4972,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 7</source>
 -        <translation>玩家 7</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="622"/>
-+        <source>UTC</source>
++        <source>Universal</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4980,7 +4980,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Player 8</source>
 -        <translation>玩家 8</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="623"/>
-+        <source>W-SU</source>
++        <source>UTC</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4988,7 +4988,7 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Emulated Devices</source>
 -        <translation>模拟设备</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="624"/>
-+        <source>WET</source>
++        <source>W-SU</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4996,36 +4996,37 @@ index 242e49ebfa..23689c1866 100644
 -        <source>Keyboard</source>
 -        <translation>键盘</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="625"/>
-+        <source>Zulu</source>
++        <source>WET</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2558"/>
 -        <source>Mouse</source>
 -        <translation>鼠标</translation>
-+        <source>Mono</source>
-+        <translation type="vanished">单声道</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="626"/>
++        <source>Zulu</source>
++        <translation type="unfinished"></translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2565"/>
 -        <source>Touchscreen</source>
 -        <translation>触摸屏</translation>
-+        <source>Stereo</source>
-+        <translation type="vanished">立体声</translation>
++        <source>Mono</source>
++        <translation type="vanished">单声道</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2588"/>
 -        <source>Advanced</source>
 -        <translation>高级选项</translation>
-+        <source>Surround</source>
-+        <translation type="vanished">环绕声</translation>
++        <source>Stereo</source>
++        <translation type="vanished">立体声</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2595"/>
 -        <source>Debug Controller</source>
 -        <translation>控制器调试</translation>
-+        <source>4GB DRAM (Default)</source>
-+        <translation type="vanished">4GB DRAM（默认）</translation>
++        <source>Surround</source>
++        <translation type="vanished">环绕声</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2602"/>
@@ -5034,37 +5035,37 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2756"/>
 -        <source>Configure</source>
 -        <translation>设置</translation>
-+        <source>6GB DRAM (Unsafe)</source>
-+        <translation type="vanished">6GB DRAM（不安全）</translation>
++        <source>4GB DRAM (Default)</source>
++        <translation type="vanished">4GB DRAM（默认）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2609"/>
 -        <source>Ring Controller</source>
 -        <translation>健身环控制器</translation>
-+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="637"/>
-+        <source>8GB DRAM</source>
-+        <translation>8GB DRAM</translation>
++        <source>6GB DRAM (Unsafe)</source>
++        <translation type="vanished">6GB DRAM（不安全）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2623"/>
 -        <source>Infrared Camera</source>
 -        <translation>红外摄像头</translation>
-+        <source>10GB DRAM (Unsafe)</source>
-+        <translation type="vanished">10GB DRAM（不安全）</translation>
++        <location filename="../../src/qt_common/config/shared_translation.cpp" line="638"/>
++        <source>8GB DRAM</source>
++        <translation>8GB DRAM</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2640"/>
 -        <source>Other</source>
 -        <translation>其他</translation>
-+        <source>12GB DRAM (Unsafe)</source>
-+        <translation type="vanished">12GB DRAM（不安全）</translation>
++        <source>10GB DRAM (Unsafe)</source>
++        <translation type="vanished">10GB DRAM（不安全）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2652"/>
 -        <source>Emulate Analog with Keyboard Input</source>
 -        <translation>使用键盘输入映射模拟摇杆</translation>
-+        <source>Docked</source>
-+        <translation type="vanished">主机模式</translation>
++        <source>12GB DRAM (Unsafe)</source>
++        <translation type="vanished">12GB DRAM（不安全）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2659"/>
@@ -5072,64 +5073,64 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2717"/>
 -        <source>Requires restarting Eden</source>
 -        <translation>需要重启 Eden</translation>
-+        <source>Handheld</source>
-+        <translation type="vanished">掌机模式</translation>
++        <source>Docked</source>
++        <translation type="vanished">主机模式</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2668"/>
 -        <source>Enable XInput 8 player support (disables web applet)</source>
 -        <translation>启用 XInput 8 输入支持 (禁用 web 小程序)</translation>
-+        <source>Off</source>
-+        <translation type="vanished">关闭</translation>
++        <source>Handheld</source>
++        <translation type="vanished">掌机模式</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2681"/>
 -        <source>Enable UDP controllers (not needed for motion)</source>
 -        <translation>启用 UDP 控制器 (无需体感)</translation>
-+        <source>Boost (1700MHz)</source>
-+        <translation type="vanished">Boost（1700MHz）</translation>
++        <source>Off</source>
++        <translation type="vanished">关闭</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2694"/>
 -        <source>Controller navigation</source>
 -        <translation>控制器导航</translation>
-+        <source>Fast (2000MHz)</source>
-+        <translation type="vanished">Fast（2000MHz）</translation>
++        <source>Boost (1700MHz)</source>
++        <translation type="vanished">Boost（1700MHz）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2710"/>
 -        <source>Enable direct JoyCon driver</source>
 -        <translation>启用 JoyCon 直接驱动</translation>
-+        <source>Always ask (Default)</source>
-+        <translation type="vanished">总是询问（默认）</translation>
++        <source>Fast (2000MHz)</source>
++        <translation type="vanished">Fast（2000MHz）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2726"/>
 -        <source>Enable direct Pro Controller driver [EXPERIMENTAL]</source>
 -        <translation>启用 Pro Controller 直接驱动 [实验性]</translation>
-+        <source>Only if game specifies not to stop</source>
-+        <translation type="vanished">仅当游戏不希望停止时</translation>
++        <source>Always ask (Default)</source>
++        <translation type="vanished">总是询问（默认）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2733"/>
 -        <source>Allows unlimited uses of the same Amiibo in games that would otherwise limit you to one use.</source>
 -        <translation>此选项允许您在游戏中无限使用相同的 Amiibo。</translation>
-+        <source>Never ask</source>
-+        <translation type="vanished">从不询问</translation>
++        <source>Only if game specifies not to stop</source>
++        <translation type="vanished">仅当游戏不希望停止时</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2742"/>
 -        <source>Use random Amiibo ID</source>
 -        <translation>使用 Amiibo 随机 ID</translation>
-+        <source>Very Small (16 MB)</source>
-+        <translation type="vanished">非常小（16 MB）</translation>
++        <source>Never ask</source>
++        <translation type="vanished">从不询问</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2749"/>
 -        <source>Motion / Touch</source>
 -        <translation>体感/触摸</translation>
-+        <source>Small (32 MB)</source>
-+        <translation type="vanished">小（32 MB）</translation>
++        <source>Very Small (16 MB)</source>
++        <translation type="vanished">非常小（16 MB）</translation>
      </message>
 -</context>
 -<context>
@@ -5138,13 +5139,18 @@ index 242e49ebfa..23689c1866 100644
 -        <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="14"/>
 -        <source>Form</source>
 -        <translation>类型</translation>
-+        <source>Normal (128 MB)</source>
-+        <translation type="vanished">正常（128 MB）</translation>
++        <source>Small (32 MB)</source>
++        <translation type="vanished">小（32 MB）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="17"/>
 -        <source>Graphics</source>
 -        <translation>图形</translation>
++        <source>Normal (128 MB)</source>
++        <translation type="vanished">正常（128 MB）</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="28"/>
 +        <source>Large (256 MB)</source>
 +        <translation type="vanished">大（256 MB）</translation>
 +    </message>
@@ -6828,10 +6834,10 @@ index 242e49ebfa..23689c1866 100644
 +        <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="17"/>
 +        <source>Graphics</source>
 +        <translation>图形</translation>
-     </message>
-     <message>
-         <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="28"/>
-@@ -3775,5864 +5185,6809 @@ Would you like to delete the old save data?</source>
++    </message>
++    <message>
++        <location filename="../../src/yuzu/configuration/configure_input_per_game.ui" line="28"/>
+         <source>Input Profiles</source>
          <translation>输入配置文件</translation>
      </message>
      <message>
@@ -17329,7 +17335,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
  </context>
  <context>
-@@ -9671,9 +12026,9 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9671,9 +12031,9 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1656"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1857"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2054"/>
@@ -17341,7 +17347,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="519"/>
-@@ -9684,7 +12039,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9684,7 +12044,7 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1661"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1862"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2059"/>
@@ -17350,7 +17356,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Dual Joycons</source>
          <translation>双 Joycons 手柄</translation>
      </message>
-@@ -9697,7 +12052,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9697,7 +12057,7 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1666"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1867"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2064"/>
@@ -17359,7 +17365,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Left Joycon</source>
          <translation>左 Joycon 手柄</translation>
      </message>
-@@ -9710,7 +12065,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9710,7 +12070,7 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1671"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="1872"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2069"/>
@@ -17368,7 +17374,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Right Joycon</source>
          <translation>右 Joycon 手柄</translation>
      </message>
-@@ -9739,7 +12094,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9739,7 +12099,7 @@ This is recommended if you want to share data between emulators.</source>
      <message>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="932"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2303"/>
@@ -17377,7 +17383,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Handheld</source>
          <translation>掌机模式</translation>
      </message>
-@@ -9787,7 +12142,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9787,7 +12147,7 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2349"/>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2395"/>
          <source>Configure</source>
@@ -17386,7 +17392,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2359"/>
-@@ -9797,7 +12152,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9797,7 +12157,7 @@ This is recommended if you want to share data between emulators.</source>
      <message>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2405"/>
          <source>Profiles</source>
@@ -17395,7 +17401,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_controller.ui" line="2432"/>
-@@ -9860,32 +12215,32 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9860,32 +12220,32 @@ This is recommended if you want to share data between emulators.</source>
          <translation>控制器数量不足</translation>
      </message>
      <message>
@@ -17434,7 +17440,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Sega Genesis</source>
          <translation>世嘉创世纪</translation>
      </message>
-@@ -9897,7 +12252,7 @@ This is recommended if you want to share data between emulators.</source>
+@@ -9897,7 +12257,7 @@ This is recommended if you want to share data between emulators.</source>
          <location filename="../../src/yuzu/applets/qt_error.cpp" line="43"/>
          <location filename="../../src/yuzu/applets/qt_error.cpp" line="58"/>
          <source>Error Code: %1-%2 (0x%3)</source>
@@ -17443,7 +17449,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_error.cpp" line="34"/>
-@@ -9956,7 +12311,7 @@ Please try again or contact the developer of the software.</source>
+@@ -9956,7 +12316,7 @@ Please try again or contact the developer of the software.</source>
      <message>
          <location filename="../../src/yuzu/applets/qt_profile_select.cpp" line="175"/>
          <source>Profile Icon Editor</source>
@@ -17452,7 +17458,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_profile_select.cpp" line="178"/>
-@@ -10006,7 +12361,7 @@ Please try again or contact the developer of the software.</source>
+@@ -10006,7 +12366,7 @@ Please try again or contact the developer of the software.</source>
      <message>
          <location filename="../../src/yuzu/applets/qt_profile_select.cpp" line="224"/>
          <source>Send save data for which user?</source>
@@ -17461,7 +17467,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/applets/qt_profile_select.cpp" line="228"/>
-@@ -10031,7 +12386,7 @@ Please try again or contact the developer of the software.</source>
+@@ -10031,7 +12391,7 @@ Please try again or contact the developer of the software.</source>
          <source>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
  &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
  p, li { white-space: pre-wrap; }
@@ -17470,7 +17476,7 @@ index 242e49ebfa..23689c1866 100644
  &lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
          <translation>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
  &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
-@@ -10040,13 +12395,13 @@ p, li { white-space: pre-wrap; }
+@@ -10040,13 +12400,13 @@ p, li { white-space: pre-wrap; }
  &lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
      </message>
      <message>
@@ -17487,7 +17493,7 @@ index 242e49ebfa..23689c1866 100644
          <source>Cancel</source>
          <translation>取消</translation>
      </message>
-@@ -10056,16 +12411,16 @@ p, li { white-space: pre-wrap; }
+@@ -10056,16 +12416,16 @@ p, li { white-space: pre-wrap; }
      <message>
          <location filename="../../src/yuzu/ryujinx_dialog.ui" line="14"/>
          <source>Ryujinx Link</source>
@@ -17507,7 +17513,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
      <message>
          <location filename="../../src/yuzu/ryujinx_dialog.ui" line="40"/>
-@@ -10083,14 +12438,14 @@ By selecting &quot;From Eden&quot;, previous save data stored in Ryujinx will be
+@@ -10083,14 +12443,14 @@ By selecting &quot;From Eden&quot;, previous save data stored in Ryujinx will be
          <translation>取消</translation>
      </message>
      <message>
@@ -17526,7 +17532,7 @@ index 242e49ebfa..23689c1866 100644
      </message>
  </context>
  <context>
-@@ -10106,27 +12461,27 @@ By selecting &quot;From Eden&quot;, previous save data stored in Ryujinx will be
+@@ -10106,27 +12466,27 @@ By selecting &quot;From Eden&quot;, previous save data stored in Ryujinx will be
      <message>
          <location filename="../../src/yuzu/set_play_time_dialog.ui" line="14"/>
          <source>Set Play Time Data</source>
@@ -17563,7 +17569,7 @@ index 242e49ebfa..23689c1866 100644
 \ No newline at end of file
 +</TS>
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index a0c4779b73..4d6a835789 100644
+index a0c4779b73..3e40bb5965 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -6,13 +6,13 @@
@@ -17891,8 +17897,8 @@ index a0c4779b73..4d6a835789 100644
 +              "消除 ASTC 解码带来的卡顿，但可能会出现图形故障。"));
 +    INSERT(Settings, astc_recompression, tr("ASTC 纹理重压缩方式："),
 +           tr("大多数 GPU 不支持 ASTC 纹理，"
-+              "必须解压缩为中间格式：RGBA8。\n"
-+              "BC1/BC3：中间格式将被重新压缩为 BC1 或 BC3 格式，"
++              "必须解压缩为中间格式（RGBA8）。\n"
++              "中间格式将被重新压缩为 BCn（BC1/BC3/BC7）格式，"
 +              "节省显存但会降低图像质量。"));
 +    INSERT(Settings, frame_pacing_mode, tr("帧平滑模式（仅限 Vulkan）："),
 +           tr("控制模拟器如何管理帧的步调和节奏，"
@@ -18049,10 +18055,10 @@ index a0c4779b73..4d6a835789 100644
 +    INSERT(Settings, fix_bloom_effects, tr("删除绽放效果"), tr("移除某些游戏中绽放效果的渲染。"));
 +
 +    INSERT(Settings, rescale_hack, tr("启用旧式缩放通道"),
-+           tr("通过依赖旧式缩放通道这个变通方案可能会修复某些游戏中的图形故障。\n"
-+              "修复《路易吉洋馆3》中的"
-+              "线条伪影（AMD/Intel GPU）"
-+              "或灰色纹理闪烁（Nvidia GPU）。"));
++           tr("通过依赖旧式缩放通道这个变通方案，"
++              "可能会修复某些游戏中的图形故障。\n"
++              "例如线条伪影或"
++              "灰色纹理闪烁等。"));
  
      // Renderer (Extensions)
 -    INSERT(Settings, dyna_state, tr("Extended Dynamic State"),
@@ -18189,7 +18195,7 @@ index a0c4779b73..4d6a835789 100644
      std::unique_ptr<ComboboxTranslationMap> translations =
          std::make_unique<ComboboxTranslationMap>();
      const auto& tr = [&](const char* text, const char* context = "") {
-@@ -391,146 +391,149 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -391,146 +391,150 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
      // Intentionally skipping VSyncMode to let the UI fill that one out
      translations->insert({Settings::EnumMetadata<Settings::AppletMode>::Index(),
                            {
@@ -18222,6 +18228,7 @@ index a0c4779b73..4d6a835789 100644
 -             PAIR(AstcRecompression, Bc1, tr("BC1 (Low quality)")),
 -             PAIR(AstcRecompression, Bc3, tr("BC3 (Medium quality)")),
 +             PAIR(AstcRecompression, Uncompressed, tr("不压缩（最高质量）")),
++             PAIR(AstcRecompression, Bc7, tr("BC7（高等质量，仅限 Vulkan）")),
 +             PAIR(AstcRecompression, Bc3, tr("BC3（中等质量）")),
 +             PAIR(AstcRecompression, Bc1, tr("BC1（低等质量）")),
           }});
@@ -18417,7 +18424,7 @@ index a0c4779b73..4d6a835789 100644
                            }});
      translations->insert(
          {Settings::EnumMetadata<Settings::Language>::Index(),
-@@ -541,17 +544,17 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -541,17 +545,17 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
               PAIR(Language, German, tr("German (Deutsch)")),
               PAIR(Language, Italian, tr("Italian (italiano)")),
               PAIR(Language, Spanish, tr("Spanish (español)")),
@@ -18439,7 +18446,7 @@ index a0c4779b73..4d6a835789 100644
               PAIR(Language, PortugueseBrazilian, tr("Brazilian Portuguese (português do Brasil)")),
               PAIR(Language, Polish, tr("Polish (polska)")),
               PAIR(Language, Thai, tr("Thai (แบบไทย)")),
-@@ -562,19 +565,19 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -562,19 +566,19 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                                PAIR(Region, Usa, tr("USA")),
                                PAIR(Region, Europe, tr("Europe")),
                                PAIR(Region, Australia, tr("Australia")),
@@ -18463,7 +18470,7 @@ index a0c4779b73..4d6a835789 100644
                    .arg(QString::fromStdString(Common::TimeZone::GetDefaultTimeZone()))},
               PAIR(TimeZone, Cet, tr("CET")),
               PAIR(TimeZone, Cst6Cdt, tr("CST6CDT")),
-@@ -591,7 +594,7 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -591,7 +595,7 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
               PAIR(TimeZone, GmtMinusZero, tr("GMT-0")),
               PAIR(TimeZone, GmtZero, tr("GMT0")),
               PAIR(TimeZone, Greenwich, tr("Greenwich")),
@@ -18472,7 +18479,7 @@ index a0c4779b73..4d6a835789 100644
               PAIR(TimeZone, Hst, tr("HST")),
               PAIR(TimeZone, Iceland, tr("Iceland")),
               PAIR(TimeZone, Iran, tr("Iran")),
-@@ -608,11 +611,11 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -608,11 +612,11 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
               PAIR(TimeZone, NzChat, tr("NZ-CHAT")),
               PAIR(TimeZone, Poland, tr("Poland")),
               PAIR(TimeZone, Portugal, tr("Portugal")),
@@ -18487,7 +18494,7 @@ index a0c4779b73..4d6a835789 100644
               PAIR(TimeZone, Turkey, tr("Turkey")),
               PAIR(TimeZone, Uct, tr("UCT")),
               PAIR(TimeZone, Universal, tr("Universal")),
-@@ -623,79 +626,79 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
+@@ -623,79 +627,79 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
           }});
      translations->insert({Settings::EnumMetadata<Settings::AudioMode>::Index(),
                            {
