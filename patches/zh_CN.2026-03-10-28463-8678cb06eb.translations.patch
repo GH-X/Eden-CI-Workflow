@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index 242e49ebfa..0db67dfe4a 100644
+index 242e49ebfa..b8449f275e 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -3622,7 +3622,7 @@ index 242e49ebfa..0db67dfe4a 100644
 -        <source>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</source>
 -        <translation>启用此选项会将最新的音频命令列表输出到控制台。只影响使用音频渲染器的游戏。</translation>
 +        <location filename="../../src/qt_common/config/shared_translation.cpp" line="414"/>
-+        <source>BC7（高等质量，仅限 Vulkan）</source>
++        <source>BC7（高等质量）</source>
 +        <translation type="unfinished"></translation>
      </message>
      <message>
@@ -17569,7 +17569,7 @@ index 242e49ebfa..0db67dfe4a 100644
 \ No newline at end of file
 +</TS>
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index a0c4779b73..3e40bb5965 100644
+index a0c4779b73..45dd9bf9d4 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -6,13 +6,13 @@
@@ -18228,7 +18228,7 @@ index a0c4779b73..3e40bb5965 100644
 -             PAIR(AstcRecompression, Bc1, tr("BC1 (Low quality)")),
 -             PAIR(AstcRecompression, Bc3, tr("BC3 (Medium quality)")),
 +             PAIR(AstcRecompression, Uncompressed, tr("不压缩（最高质量）")),
-+             PAIR(AstcRecompression, Bc7, tr("BC7（高等质量，仅限 Vulkan）")),
++             PAIR(AstcRecompression, Bc7, tr("BC7（高等质量）")),
 +             PAIR(AstcRecompression, Bc3, tr("BC3（中等质量）")),
 +             PAIR(AstcRecompression, Bc1, tr("BC1（低等质量）")),
           }});

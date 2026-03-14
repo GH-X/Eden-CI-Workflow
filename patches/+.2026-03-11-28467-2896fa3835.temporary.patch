@@ -398,8 +398,22 @@ index c2a14858dd..9b9ed39d66 100644
  }};
  // clang-format on
  
+diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
+index 958988f27e..88cc165215 100644
+--- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
++++ b/src/video_core/renderer_opengl/gl_texture_cache.cpp
+@@ -455,6 +455,9 @@ OGLTexture MakeImage(const VideoCommon::ImageInfo& info, GLenum gl_internal_form
+     case Settings::AstcRecompression::Bc3:
+         return is_srgb ? GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT : GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+         break;
++    case Settings::AstcRecompression::Bc7:
++        return is_srgb ? GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM : GL_COMPRESSED_RGBA_BPTC_UNORM;
++        break;
+     default:
+         return is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+     }
 diff --git a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
-index 930f06daf6..184b4952f7 100644
+index 024c72b38e..3191e9f588 100644
 --- a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
 +++ b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
 @@ -245,12 +245,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
@@ -421,7 +435,7 @@ index 930f06daf6..184b4952f7 100644
      }
      // Transcode on hardware that doesn't support BCn natively
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 5d55cf551b..e1c3a4c528 100644
+index cd8f948d8b..da548de6de 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
 @@ -174,9 +174,18 @@ bool Swapchain::AcquireNextImage() {
