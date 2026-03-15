@@ -5,6 +5,7 @@
 
 # shellcheck disable=SC1091
 
+ROOTDIR="$PWD"
 . ".ci/common/project.sh"
 ARTIFACTS_DIR="$ROOTDIR/artifacts"
 
