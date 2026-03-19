@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 8cd55bcdd3..bf9a98fa46 100644
+index 8cd55bcdd3..a616e7b10b 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -82,12 +82,18 @@ index 8cd55bcdd3..bf9a98fa46 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -460,8 +460,13 @@ struct Values {
+@@ -455,13 +455,18 @@ struct Values {
+ #ifdef ANDROID
+                                                             AstcDecodeMode::Cpu,
+ #else
+-                                                            AstcDecodeMode::Gpu,
++                                                            AstcDecodeMode::Cpu,
+ #endif
                                                              "accelerate_astc",
                                                              Category::RendererAdvanced};
  
 +    SwitchableSetting<AstcRecompression, true> astc_recompression{linkage,
-+                                                                  AstcRecompression::Bc7,
++                                                                  AstcRecompression::Uncompressed,
 +                                                                  "astc_recompression",
 +                                                                  Category::RendererAdvanced};
 +
@@ -97,7 +103,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -470,28 +475,23 @@ struct Values {
+@@ -470,28 +475,25 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -106,6 +112,8 @@ index 8cd55bcdd3..bf9a98fa46 100644
 -                                                                  "astc_recompression",
 -                                                                  Category::RendererAdvanced};
 -
++    SwitchableSetting<bool> aggressive_garbage_collection{linkage, true, "aggressive_garbage_collection",
++                                                  Category::RendererAdvanced};
  
      SwitchableSetting<bool> sync_memory_operations{linkage,
 -                                                   false,
@@ -130,7 +138,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
          Specialization::Default};
  
      SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -513,7 +513,7 @@ struct Values {
+@@ -513,7 +515,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
@@ -139,7 +147,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -532,7 +532,7 @@ struct Values {
+@@ -532,7 +534,7 @@ struct Values {
  
      // Renderer Hacks //
      SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
@@ -148,7 +156,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
                                                    "fast_gpu_time",
                                                    Category::RendererHacks,
                                                    Specialization::Default,
-@@ -546,6 +546,13 @@ struct Values {
+@@ -546,6 +548,13 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -162,7 +170,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -554,41 +561,35 @@ struct Values {
+@@ -554,41 +563,35 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -175,7 +183,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
      SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
                                                       Category::RendererHacks};
  
-+    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, true, "gpu_unswizzle_enabled",
++    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 +                                                  Category::RendererHacks};
 +
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
@@ -211,7 +219,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -633,13 +634,15 @@ struct Values {
+@@ -633,13 +636,15 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -230,7 +238,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -659,8 +662,6 @@ struct Values {
+@@ -659,8 +664,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -239,7 +247,7 @@ index 8cd55bcdd3..bf9a98fa46 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -668,7 +669,7 @@ struct Values {
+@@ -668,7 +671,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
@@ -398,6 +406,36 @@ index c2a14858dd..9b9ed39d66 100644
  }};
  // clang-format on
  
+diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
+index 014b4a318e..b676bf9c0c 100644
+--- a/src/video_core/buffer_cache/buffer_cache.h
++++ b/src/video_core/buffer_cache/buffer_cache.h
+@@ -37,8 +37,8 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+     }
+ 
+     const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-    const s64 min_spacing_expected = device_local_memory - 1_GiB;
+-    const s64 min_spacing_critical = device_local_memory - 512_MiB;
++    const s64 min_spacing_expected = device_local_memory - 1_GiB - 768_MiB;
++    const s64 min_spacing_critical = device_local_memory - 1_GiB - 512_MiB;
+     const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+     const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+     const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
+index 08524bd854..9d261d4b17 100644
+--- a/src/video_core/buffer_cache/buffer_cache_base.h
++++ b/src/video_core/buffer_cache/buffer_cache_base.h
+@@ -187,8 +187,8 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
+     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+ #endif
+ 
+-    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB;
+-    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB;
++    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 256_MiB;
++    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 512_MiB;
+ 
+     // Debug Flags.
+ 
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 958988f27e..88cc165215 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
@@ -471,39 +509,64 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..59baf90221 100644
+index 71210ffe6e..4a29cddd43 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -70,14 +70,16 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -70,16 +70,13 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
              (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
                       DEFAULT_CRITICAL_MEMORY));
          minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
 -
 -        lowmemorydevice = false;
      } else {
-         expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
-         critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
+-        expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
+-        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
++        expected_memory = DEFAULT_EXPECTED_MEMORY;
++        critical_memory = DEFAULT_CRITICAL_MEMORY;
          minimum_memory = 0;
-+    }
- 
+-
 -        lowmemorydevice = true;
-+    switch (Settings::values.vram_usage_mode.GetValue()) {
-+        case Settings::VramUsageMode::Conservative:    lowmemorydevice = true; break;
-+        case Settings::VramUsageMode::Aggressive:      lowmemorydevice = false; break;
-+        default:                                       lowmemorydevice = true;
      }
  
++    lowmemorydevice = Settings::values.aggressive_garbage_collection.GetValue();
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -89,7 +91,7 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
-             case Settings::GpuUnswizzleSize::Normal:       gpu_unswizzle_maxsize = 128_MiB; break;
-             case Settings::GpuUnswizzleSize::Large:        gpu_unswizzle_maxsize = 256_MiB; break;
-             case Settings::GpuUnswizzleSize::VeryLarge:    gpu_unswizzle_maxsize = 512_MiB; break;
--            default:                                       gpu_unswizzle_maxsize = 128_MiB; break;
-+            default:                                       gpu_unswizzle_maxsize = 128_MiB;
+ 
+     if (gpu_unswizzle_enabled) {
+@@ -138,12 +135,6 @@ void TextureCache<P>::RunGarbageCollector() {
+         --num_iterations;
+         auto& image = slot_images[image_id];
+ 
+-        // Never delete recently allocated sparse textures (within 3 frames)
+-        const bool is_recently_allocated = image.allocation_tick >= frame_tick - 3;
+-        if (is_recently_allocated && image.info.is_sparse) {
+-            return false;
+-        }
+-
+         if (True(image.flags & ImageFlagBits::IsDecoding)) {
+             // This image is still being decoded, deleting it will invalidate the slot
+             // used by the async decoder thread.
+@@ -151,8 +142,7 @@ void TextureCache<P>::RunGarbageCollector() {
          }
  
-         switch (Settings::values.gpu_unswizzle_stream_size.GetValue()) {
-@@ -1196,10 +1198,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+         // Prioritize large sparse textures for cleanup
+-        const bool is_large_sparse = lowmemorydevice &&
+-                                     image.info.is_sparse &&
++        const bool is_large_sparse = image.info.is_sparse &&
+                                      image.guest_size_bytes >= 256_MiB;
+ 
+         if (!aggressive_mode && !is_large_sparse &&
+@@ -201,9 +191,8 @@ void TextureCache<P>::RunGarbageCollector() {
+         lru_cache.ForEachItemBelow(frame_tick, [&](ImageId image_id) {
+             auto& image = slot_images[image_id];
+             // Only target sparse textures that are old enough
++            // Never delete recently allocated sparse textures (within 3 frames)
+             if (lowmemorydevice &&
+-                image.info.is_sparse &&
+-                image.guest_size_bytes >= 256_MiB &&
+                 image.allocation_tick < frame_tick - 3) {
+                 LOG_DEBUG(HW_GPU, "GC targeting old sparse texture at 0x{:X} ({} MiB, age: {} frames)",
+                          image.gpu_addr, image.guest_size_bytes / (1024 * 1024),
+@@ -1196,10 +1185,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -514,20 +577,61 @@ index 71210ffe6e..59baf90221 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1208,6 +1206,7 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1208,6 +1193,9 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          return;
      }
      if (True(image.flags & ImageFlagBits::AsynchronousDecode)) {
-+        RunGarbageCollector();
++        if (lowmemorydevice) {
++            RunGarbageCollector();
++        }
          QueueAsyncDecode(image, image_id);
          return;
      }
-@@ -1221,7 +1220,7 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1209,9 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
 -
-+        RunGarbageCollector();
++        if (lowmemorydevice) {
++            RunGarbageCollector();
++        }
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
+@@ -1510,11 +1500,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+         return;
+     }
+ 
+-    if(current_unswizzle_frame > 0) {
+-        current_unswizzle_frame--;
+-        return;
+-    }
+-
+     PendingUnswizzle& task = unswizzle_queue.front();
+     Image& image = slot_images[task.image_id];
+ 
+@@ -1575,9 +1560,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+         runtime.FreeDeferredStagingBuffer(task.staging_buffer);
+         image.flags &= ~ImageFlagBits::IsDecoding;
+         unswizzle_queue.pop_front();
+-
+-        // Wait 4 frames to process the next entry
+-        current_unswizzle_frame = 4u;
+     }
+ }
+ 
+diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
+index 4b4061f21d..48c985ea0e 100644
+--- a/src/video_core/texture_cache/texture_cache_base.h
++++ b/src/video_core/texture_cache/texture_cache_base.h
+@@ -118,8 +118,8 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
+     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+ #endif
+ 
+-    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 125_MiB;
+-    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 625_MiB;
++    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 256_MiB;
++    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 768_MiB;
+     static constexpr size_t GC_EMERGENCY_COUNTS = 2;
+ 
+     using Runtime = typename P::Runtime;
