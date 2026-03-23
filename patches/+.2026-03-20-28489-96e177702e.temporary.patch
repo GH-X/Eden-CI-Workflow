@@ -513,7 +513,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..3646bab76f 100644
+index 71210ffe6e..e945c67697 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -69,17 +69,12 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -550,7 +550,7 @@ index 71210ffe6e..3646bab76f 100644
 +        return true;
 +    }
 +
-+    bool target_sparse_texture = false;
++    bool targetsparsetexture = false;
      bool high_priority_mode = false;
      bool aggressive_mode = false;
      u64 ticks_to_destroy = 0;
@@ -566,7 +566,7 @@ index 71210ffe6e..3646bab76f 100644
      };
  
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
-+    const auto Cleanup = [this, &high_priority_mode,
++    const auto Cleanup = [this, &targetsparsetexture, &high_priority_mode,
                            &aggressive_mode](ImageId image_id) {
 -        if (num_iterations == 0) {
 -            return true;
@@ -593,7 +593,7 @@ index 71210ffe6e..3646bab76f 100644
 -
 -        if (!aggressive_mode && !is_large_sparse &&
 -            True(image.flags & ImageFlagBits::CostlyLoad)) {
-+        if (!target_sparse_texture &&
++        if (!targetsparsetexture &&
 +            !aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) {
              return false;
          }
@@ -601,13 +601,13 @@ index 71210ffe6e..3646bab76f 100644
          const bool must_download =
              image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
 -        if (!high_priority_mode && !is_large_sparse && must_download) {
-+        if (!target_sparse_texture &&
++        if (!targetsparsetexture &&
 +            !high_priority_mode && must_download) {
              return false;
          }
  
 -        if (must_download && !is_large_sparse) {
-+        if (!target_sparse_texture &&
++        if (!targetsparsetexture &&
 +            must_download) {
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
@@ -646,7 +646,7 @@ index 71210ffe6e..3646bab76f 100644
                  LOG_DEBUG(HW_GPU, "GC targeting old sparse texture at 0x{:X} ({} MiB, age: {} frames)",
                           image.gpu_addr, image.guest_size_bytes / (1024 * 1024),
                           frame_tick - image.allocation_tick);
-+                target_sparse_texture = true;
++                targetsparsetexture = true;
                  return Cleanup(image_id);
              }
              return false;
@@ -659,7 +659,7 @@ index 71210ffe6e..3646bab76f 100644
 -    // If pressure is still too high, prune aggressively.
 -    if (total_used_memory >= critical_memory) {
 -        Configure(true);
-+    if (!target_sparse_texture) {
++    if (!targetsparsetexture) {
 +        Configure();
          lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
      }
