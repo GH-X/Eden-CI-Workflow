@@ -513,7 +513,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..e945c67697 100644
+index 71210ffe6e..2b12497fae 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -69,17 +69,12 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -542,12 +542,12 @@ index 71210ffe6e..e945c67697 100644
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
 +    if (sameaddressallocations) {
-+        return true;
++        return;
 +    }
 +
 +    if (largesparsetexture && othertexture) {
 +        othertexture = false;
-+        return true;
++        return;
 +    }
 +
 +    bool targetsparsetexture = false;
