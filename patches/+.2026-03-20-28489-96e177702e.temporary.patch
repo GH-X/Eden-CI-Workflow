@@ -513,7 +513,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..2b12497fae 100644
+index 71210ffe6e..d61ef41a5d 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -69,17 +69,12 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -560,9 +560,10 @@ index 71210ffe6e..2b12497fae 100644
 +    const auto Configure = [&]() {
          high_priority_mode = total_used_memory >= expected_memory;
 -        aggressive_mode = allow_aggressive && total_used_memory >= critical_memory;
-+        aggressive_mode = total_used_memory >= critical_memory;
-         ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
+-        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
++        aggressive_mode = total_used_memory >= critical_memory;
++        ticks_to_destroy = aggressive_mode ? 100ULL : high_priority_mode ? 250ULL : 500ULL;
      };
  
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
@@ -612,7 +613,7 @@ index 71210ffe6e..2b12497fae 100644
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
              image.DownloadMemory(map, copies);
-@@ -180,48 +170,34 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -180,47 +170,32 @@ void TextureCache<P>::RunGarbageCollector() {
          }
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
@@ -651,6 +652,7 @@ index 71210ffe6e..2b12497fae 100644
              }
              return false;
          });
++        largesparsetexture = false;
      }
  
 -    Configure(false);
@@ -659,23 +661,20 @@ index 71210ffe6e..2b12497fae 100644
 -    // If pressure is still too high, prune aggressively.
 -    if (total_used_memory >= critical_memory) {
 -        Configure(true);
-+    if (!targetsparsetexture) {
++    if (othertexture) {
 +        Configure();
          lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
++        othertexture = false;
      }
-+
-+    largesparsetexture = false;
-+    othertexture = false;
  }
  
- template <class P>
-@@ -230,9 +206,12 @@ void TextureCache<P>::TickFrame() {
+@@ -230,9 +205,12 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
 -    if (total_used_memory > minimum_memory) {
 +
-+    if (!largesparsetexture) {
++    if (!sameaddressallocations && !largesparsetexture && !othertexture) {
 +        othertexture = true;
          RunGarbageCollector();
      }
@@ -683,7 +682,7 @@ index 71210ffe6e..2b12497fae 100644
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1196,10 +1175,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1196,10 +1174,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -694,7 +693,7 @@ index 71210ffe6e..2b12497fae 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1196,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1195,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -702,7 +701,7 @@ index 71210ffe6e..2b12497fae 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1484,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1483,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -714,7 +713,7 @@ index 71210ffe6e..2b12497fae 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1544,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1543,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -724,7 +723,7 @@ index 71210ffe6e..2b12497fae 100644
      }
  }
  
-@@ -1622,6 +1588,7 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1622,6 +1587,7 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
  
      // For large sparse textures, aggressively clean up old allocations at same address
      if (lowmemorydevice && info.is_sparse && CalculateGuestSizeInBytes(info) >= 256_MiB) {
@@ -732,7 +731,7 @@ index 71210ffe6e..2b12497fae 100644
          const auto alloc_it = image_allocs_table.find(gpu_addr);
          if (alloc_it != image_allocs_table.end()) {
              const ImageAllocId alloc_id = alloc_it->second;
-@@ -1650,6 +1617,7 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1650,6 +1616,7 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
                  DeleteImage(old_id, true);
              }
          }
@@ -740,10 +739,11 @@ index 71210ffe6e..2b12497fae 100644
      }
  
      const ImageId image_id = JoinImages(info, gpu_addr, *cpu_addr);
-@@ -1670,22 +1638,13 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
+@@ -1669,23 +1636,15 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
+     const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
  
      // Proactive cleanup for large sparse texture allocations
-     if (lowmemorydevice && new_info.is_sparse && size_bytes >= 256_MiB) {
+-    if (lowmemorydevice && new_info.is_sparse && size_bytes >= 256_MiB) {
 -        const u64 estimated_alloc_size = size_bytes;
 -
 -        if (total_used_memory + estimated_alloc_size >= critical_memory) {
@@ -760,6 +760,8 @@ index 71210ffe6e..2b12497fae 100644
 -                RunGarbageCollector();
 -            }
 -        }
++    if (!sameaddressallocations && !largesparsetexture && !othertexture &&
++        lowmemorydevice && new_info.is_sparse && size_bytes >= 256_MiB) {
 +        largesparsetexture = true;
 +        LOG_DEBUG(HW_GPU, "Large sparse texture allocation ({} MiB) - running aggressive GC. "
 +                  "Current memory: {} MiB, Critical: {} MiB",
