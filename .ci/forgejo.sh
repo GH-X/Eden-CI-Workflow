@@ -96,7 +96,7 @@ parse_payload() {
 
 	TRIES=0
 	TIMEOUT=5
-	while ! curl -sSfL "$FORGEJO_CLONE_URL" >/dev/null 2>&1; do
+	while ! curl -fL "$FORGEJO_CLONE_URL" >/dev/null 2>&1; do
 		echo "Repository $FORGEJO_CLONE_URL is unreachable."
 		echo "Check URL or authentication."
 
@@ -233,7 +233,7 @@ parse_payload() {
 }
 
 clone_repository() {
-	if ! curl -sSfL "$FORGEJO_CLONE_URL" >/dev/null 2>&1; then
+	if ! curl -fL "$FORGEJO_CLONE_URL" >/dev/null 2>&1; then
 		echo "Repository $FORGEJO_CLONE_URL is not reachable."
 		echo "Check URL or authentication."
 		echo
