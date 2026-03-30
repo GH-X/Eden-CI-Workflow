@@ -7,8 +7,8 @@
 
 # shellcheck disable=SC1091
 
-WORKFLOW_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-. "$WORKFLOW_DIR/.ci/common/project.sh"
+ROOTDIR="$PWD"
+. "$ROOTDIR/.ci/common/project.sh"
 
 FORGEJO_LENV=${FORGEJO_LENV:-"forgejo.env"}
 touch "$FORGEJO_LENV"
@@ -23,8 +23,8 @@ _release_field() {
 }
 
 parse_payload() {
-	DEFAULT_JSON=".ci/default.json"
-	RELEASE_JSON=".ci/release.json"
+	DEFAULT_JSON="$ROOTDIR/.ci/default.json"
+	RELEASE_JSON="$ROOTDIR/.ci/release.json"
 	PAYLOAD_JSON="payload.json"
 
 	if [ ! -f "$PAYLOAD_JSON" ]; then
@@ -140,7 +140,7 @@ parse_payload() {
 
 		FORGEJO_PR_NUMBER=$(jq -r '.number' $PAYLOAD_JSON)
 		FORGEJO_PR_URL=$(jq -r '.url' $PAYLOAD_JSON)
-		FORGEJO_PR_TITLE=$(.ci/common/field.py field="title" default_msg="No title provided" pull_request_number="$FORGEJO_PR_NUMBER")
+		FORGEJO_PR_TITLE=$(python3 "$ROOTDIR/.ci/common/field.py" field="title" default_msg="No title provided" pull_request_number="$FORGEJO_PR_NUMBER")
 
 		{
 			echo "FORGEJO_PR_NUMBER=$FORGEJO_PR_NUMBER"
@@ -170,7 +170,7 @@ parse_payload() {
 		;;
 	nightly)
 		FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
-		FORGEJO_REF=$(.ci/common/field.py field="sha")
+		FORGEJO_REF=$("$ROOTDIR/.ci/common/field.py" field="sha")
 
 		_host="$RELEASE_NIGHTLY_HOST"
 		_repo="$RELEASE_NIGHTLY_REPO"
@@ -190,7 +190,7 @@ parse_payload() {
 		;;
 	push | test)
 		FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" $DEFAULT_JSON)
-		FORGEJO_REF=$(.ci/common/field.py field="sha")
+		FORGEJO_REF=$("$ROOTDIR/.ci/common/field.py" field="sha")
 
 		_host="$RELEASE_MASTER_HOST"
 		_repo="$RELEASE_MASTER_REPO"
@@ -266,7 +266,7 @@ clone_repository() {
 
 	echo "$FORGEJO_BRANCH" > GIT-REFSPEC
 	git rev-parse --short=10 HEAD > GIT-COMMIT
-	{ git describe --tags HEAD --abbrev=0 || cat "$WORKFLOW_DIR/WORKFLOW-TAG"; } > GIT-TAG
+	{ git describe --tags HEAD --abbrev=0 || cat "$ROOTDIR/WORKFLOW-TAG"; } > GIT-TAG
 
 	if [ "$1" = "tag" ]; then
 		cp GIT-TAG GIT-RELEASE
