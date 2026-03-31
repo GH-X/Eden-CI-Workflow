@@ -23,11 +23,13 @@ pacman -Syu --noconfirm --overwrite "*" \
 	glslang \
 	inetutils \
 	jq \
+    kvantum \
 	libva \
 	libvdpau \
 	libvpx \
 	lld \
 	llvm \
+    lxqt-qtplugin \
 	mbedtls \
 	mold \
 	nasm \
