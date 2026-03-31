@@ -7,25 +7,22 @@
 
 ROOTDIR="$PWD"
 . "$ROOTDIR/.ci/common/project.sh"
-ARTIFACTS_DIR="$ROOTDIR/artifacts"
 
 FJ_HOST="$RELEASE_HOST"
 FJ_REPO="$RELEASE_REPO"
 
-sed -i "s|$RELEASE_HOST/$RELEASE_REPO|$FJ_HOST/$FJ_REPO|g" "$ROOTDIR/changelog.md"
+sed -i "s|$RELEASE_HOST/$RELEASE_REPO/releases/download|$B2_BUCKET.$B2_URL/$B2_DIR|g" "$ROOTDIR/changelog.md"
 git clone --depth 1 https://git.crueter.xyz/scripts/fj.git
 
 echo "-- Creating Release"
 "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	create -b "$ROOTDIR/changelog.md" -n "$PROJECT_PRETTYNAME $FORGEJO_REF" -d
+	create -b "$ROOTDIR/changelog.md" -n "$PROJECT_PRETTYNAME $FORGEJO_REF"
 
 echo "-- Uploading Assets"
 
-# Cloudflare sucks, so we upload twice just to ensure we don't get blocked.
-"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	upload -g "$ARTIFACTS_DIR"/*
+# shellcheck disable=SC2046
 
 "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	upload -g "$ARTIFACTS_DIR"/*
+	external $(cat "$ROOTDIR"/urls.txt)
 
-export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/$FORGEJO_REF"
+export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/tag/$FORGEJO_REF"
