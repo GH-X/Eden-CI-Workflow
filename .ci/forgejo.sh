@@ -205,7 +205,8 @@ parse_payload() {
 		_ref="${FORGEJO_REF}"
 
 		# if last nightly was the same ref as this one, exit early
-		_last_sha=$(curl "https://api.github.com/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
+		# TODO(crueter): gh/fj handling
+		_last_sha=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
 
 		if [ "$_last_sha" = "$_ref" ]; then
 			echo "current ref $_ref is same as last nightly $_last_sha, skipping"
