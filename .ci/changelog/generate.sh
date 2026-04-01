@@ -138,8 +138,10 @@ win_matrix() {
 	win_field MSVC msvc-standard
 
 	if falsy "$DISABLE_MINGW"; then
-		msys "MinGW" gcc clang standard "May have additional bugs/glitches"
-		opts && tagged && msys "MinGW PGO" clang clang pgo || true
+		msys "MinGW" gcc clang standard
+		if opts && tagged; then
+			msys "MinGW PGO" clang clang pgo
+		fi
 	fi
 }
 
@@ -155,14 +157,9 @@ if truthy "$EXPLAIN_TARGETS"; then
 	- **aarch64/arm64**: For devices that use the armv8-a instruction set; e.g. Snapdragon X, all Android devices, and Apple Silicon Macs.
 	- **amd64**: For devices that use the amd64 (aka x86_64) instruction set; this is exclusively used by Intel and AMD CPUs and is only found on desktops.
 
-	**Compilers**
+	### PGO
 
-	- **MSVC**: The default compiler for Windows. This is the most stable experience, but may lack in performance compared to any of the following alternatives.
-	- **GCC**: The standard GNU compiler; this is the default for Linux and will provide the most stable experience.
-	- **PGO**: These are built with Clang, and use PGO. PGO (profile-guided optimization) uses data from prior compilations
-		to determine the "hotspots" found within the codebase. Using these hotspots,
-		it can allocate more resources towards these heavily-used areas, and thus generally see improved performance to the tune of ~10-50%,
-		depending on the specific game, hardware, and platform. Do note that additional instabilities may occur.
+	PGO builds usually perform ~10-30% better than standard builds, and are thus generally recommended for all users.
 	EOF
 fi
 
