@@ -42,8 +42,10 @@ jobs:
 
           if [ "${{ inputs.devel }}" = "false" ]; then
             TARGETS="[$OPT, $LEG, $STD, $CHR]"
-          else
+          elif [ "${{ inputs.build-id }}" == "pull_request" ]; then
             TARGETS="[$STD, $CHR]"
+          else
+            TARGETS="[$STD]"
           fi
 
           echo $TARGETS
