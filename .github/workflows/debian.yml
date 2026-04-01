@@ -40,7 +40,7 @@ jobs:
             arch: aarch64
 
     env:
-      TARGET: ${{ matrix.arch }}
+      TARGET: package-${{ matrix.arch }}
       DEBIAN_VERSION: 12
       COMPILER: gcc
 
