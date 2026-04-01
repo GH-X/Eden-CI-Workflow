@@ -10,6 +10,7 @@
 
 ROOTDIR="$PWD"
 . "$ROOTDIR/.ci/common/project.sh"
+ARTIFACTS_DIR="$ROOTDIR"/artifacts
 
 _external="$1"
 external() {
