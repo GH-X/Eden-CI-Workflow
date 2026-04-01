@@ -196,9 +196,9 @@ if [ "$1" = "tag" ]; then
 	These are statically linked Linux executables for the \`eden-room\` binary.
 
 	EOF
-fi
 
-room_matrix
+	room_matrix
+fi
 
 # TODO: setup files
 cat << EOF
