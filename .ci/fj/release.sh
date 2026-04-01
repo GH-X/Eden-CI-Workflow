@@ -77,7 +77,7 @@ fi
 
 if [ "$SEND_STATUS" = "1" ]; then
     _header "Sending Release status"
-    "$ROOTDIR/.ci/status/status.sh" --release "$FJ_URL"
+    "$ROOTDIR"/.ci/status/status.py --release "$FJ_URL"
 fi
 
 ## PR Number ##
