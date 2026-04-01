@@ -26,4 +26,5 @@ if [ "$DEBIAN_VERSION" -ge 13 ]; then
         libasound2t64 libboost-context-dev libboost-fiber-dev
 fi
 
-apt install "$@"
+apt update
+apt install -y "$@"
