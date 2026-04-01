@@ -119,7 +119,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.os.arch }}-${{ matrix.compiler.program }}-${{ matrix.compiler.target }}
-          path: ./artifacts/*.AppImage*
+          path: ./artifacts/*.AppImage
           archive: false
 
       - name: Upload zsync
