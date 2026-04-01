@@ -15,21 +15,32 @@ sed -i "s|$RELEASE_HOST/$RELEASE_REPO/releases/download|$B2_BUCKET.$B2_URL/$B2_D
 git clone --depth 1 https://git.crueter.xyz/scripts/fj.git
 
 echo "-- Creating Release"
-"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	create -b "$ROOTDIR/changelog.md" -n "$PROJECT_PRETTYNAME $FORGEJO_REF"
+"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$ARTIFACT_REF" \
+	create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r
 
 echo "-- Uploading Assets"
 
 # shellcheck disable=SC2046
 
-"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
+"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$ARTIFACT_REF" \
 	external $(cat "$ROOTDIR"/urls.txt)
 
-export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/tag/$FORGEJO_REF"
+export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/tag/$ARTIFACT_REF"
 
 if [ -n "$GITHUB_STEP_SUMMARY" ]; then
     {
         echo "## Release Summary"
         echo "- View Release on Forgejo: [$GITHUB_TITLE]($FJ_URL)"
     } >> "$GITHUB_STEP_SUMMARY"
+fi
+
+# PR numbered release.
+
+echo
+echo "----- PR RELEASE -----"
+echo
+
+if [ "$RELEASE_PR" = 1 ]; then
+    "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_PR_NUMBER" \
+        create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r
 fi
