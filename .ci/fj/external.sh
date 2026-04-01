@@ -26,3 +26,10 @@ echo "-- Uploading Assets"
 	external $(cat "$ROOTDIR"/urls.txt)
 
 export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/tag/$FORGEJO_REF"
+
+if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+    {
+        echo "## Release Summary"
+        echo "- View Release on Forgejo: [$GITHUB_TITLE]($FJ_URL)"
+    } >> "$GITHUB_STEP_SUMMARY"
+fi
