@@ -267,7 +267,11 @@ if falsy "$DISABLE_ANDROID"; then
 	EOF
 
 	android Standard "standard" "The standard build. Most users should use this."
-	android ChromeOS "chromeos" "For devices running Chrome/FydeOS, AVD emulators, or certain Intel Atom Android devices."
+
+	if tagged || [ "$1" = "pull_request" ]; then
+		android ChromeOS "chromeos" "For devices running Chrome/FydeOS, AVD emulators, or certain Intel Atom Android devices."
+	fi
+
 	if tagged; then
 		android "Genshin Spoof" "optimized" "Spoofs Eden as Genshin Impact, which may enable optimizations/frame generation on some flagship devices."
 		android Legacy "legacy" "For Adreno A6xx and other older GPUs--e.g. Snapdragon 865 and older"
