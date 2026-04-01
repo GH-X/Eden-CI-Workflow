@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/workflows/setup
@@ -61,7 +61,7 @@ jobs:
 
       - name: Start VM (${{ matrix.os.name }})
         if: matrix.os.platform == 'freebsd'
-        uses: vmactions/freebsd-vm@v1.3.9
+        uses: vmactions/freebsd-vm@v1
         with:
           arch: ${{ matrix.os.vm-arch }}
           usesh: true
