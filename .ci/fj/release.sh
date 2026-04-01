@@ -42,8 +42,9 @@ git clone --depth 1 https://git.crueter.xyz/scripts/fj.git
 ## make release ##
 _header "Creating Release"
 
+# thanks, ANSI
 "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$GITHUB_TAG" \
-	create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r
+	create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r || true
 
 ## Uploading ##
 
