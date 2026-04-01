@@ -24,9 +24,11 @@ find "$ROOTDIR" \( \
 		-name '*unknown-linux-musl*' \
     \) -not -path "*artifacts*" -exec cp {} "$ARTIFACTS_DIR" \;
 
-sudo apt-get install -y mktorrent
-_dir="${PROJECT_PRETTYNAME}-${ARTIFACT_REF}"
-ln -s "$ARTIFACTS_DIR" "${_dir}"
-mktorrent -p -a udp://tracker.opentrackr.org:1337/announce -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "${_dir}/"
+if [ "$DEVEL" = false ]; then
+	sudo apt-get install -y mktorrent
+	_dir="${PROJECT_PRETTYNAME}-${ARTIFACT_REF}"
+	ln -s "$ARTIFACTS_DIR" "${_dir}"
+	mktorrent -p -a udp://tracker.opentrackr.org:1337/announce -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "${_dir}/"
+fi
 
 ls -lh "$ARTIFACTS_DIR"
