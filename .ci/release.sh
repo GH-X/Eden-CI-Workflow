@@ -55,7 +55,7 @@ if [ "$RELEASE_B2" = "true" ]; then
         fi
         _end
     fi
-elif fj; then
+elif fj && [ "$RELEASE_FJ" = "1" ]; then
     # the darkest days are upon us...
     _group "Forgejo Release"
     "$ROOTDIR"/.ci/fj/release.sh false
