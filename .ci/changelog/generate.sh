@@ -285,14 +285,6 @@ In order to run the app, you *may* need to go to System Settings -> Privacy & Se
 | ---- | ----------- |
 | [macOS](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-macOS-${ARTIFACT_REF}.tar.gz) | For Apple Silicon (M1, M2, etc)|
 
-## Source
-
-Contains all source code, submodules, and CPM cache at the time of release.
-This can be extracted with \`tar xf ${PROJECT_PRETTYNAME}-Source-${GITHUB_TAG}.tar.zst\`.
-
-| File | Description |
-| ---- | ----------- |
-| [tar.zst](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-Source-${ARTIFACT_REF}.tar.zst) | Source as a zstd-compressed tarball (Windows: use Git Bash or MSYS2) |
 EOF
 
 if [ "$1" = "tag" ]; then
