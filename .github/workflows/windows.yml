@@ -29,30 +29,8 @@ env:
   BUILD_ID: ${{ inputs.build-id }}
 
 jobs:
-  win-matrix:
-    name: "Generate Windows compilers"
-    runs-on: ubuntu-latest
-    outputs:
-      compiler: ${{ steps.set.outputs.compiler }}
-    steps:
-      - id: set
-        run: |
-          PGO='{"program": "clang", "target": "pgo"}'
-          CLANG='{"program": "clang", "target": "standard"}'
-          MSVC='{"program": "msvc", "target": "standard"}'
-
-          if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
-            COMPILER="[${MSVC}]"
-          else
-            COMPILER="[${MSVC}]"
-          fi
-
-          echo $COMPILER
-          echo "compiler=${COMPILER}" >> $GITHUB_OUTPUT
-
   windows:
     name: "Windows ${{ matrix.os.arch }} ${{ matrix.compiler.program }} ${{ matrix.compiler.target }}"
-    needs: [win-matrix]
     runs-on: ${{ matrix.os.runs-on }}
     strategy:
       fail-fast: false
@@ -60,7 +38,9 @@ jobs:
         os:
           - runs-on: windows-latest
             arch: amd64
-        compiler: ${{ fromJson(needs.win-matrix.outputs.compiler) }}
+        compiler:
+          - program: msvc
+            target: standard
 
     env:
       TARGET: ${{ matrix.os.arch }}
@@ -87,24 +67,9 @@ jobs:
         with:
           arch: ${{ matrix.os.arch }}
 
-      - name: Install LLVM/Clang
-        if: matrix.compiler.program == 'clang'
-        uses: Eden-CI/install-llvm-action@v1
-        with:
-          version: "21.1.4"
-          env: true
-
-      - name: Check LLVM/Clang
-        if: matrix.compiler.program == 'clang'
-        shell: bash
-        run: |
-          echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
-          "C:/Program Files/LLVM/bin/clang-cl" --version
-
       - name: Install Vulkan SDK
         shell: powershell
-        run: |
-          ./.ci/windows/install-vulkan-sdk.ps1
+        run: ./.ci/windows/install-vulkan-sdk.ps1
 
       - name: Configure
         shell: bash
