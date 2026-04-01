@@ -42,11 +42,14 @@ jobs:
           persist-credentials: false
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7.0.0
+        uses: actions/download-artifact@v8
+        with:
+          skip-decompress: true
+          merge-multiple: true
 
       - name: Load environments
         run: |
-          export FORGEJO_LENV=forgejo-env/forgejo.env
+          export FORGEJO_LENV=forgejo.env
           [ -f "$FORGEJO_LENV" ] || exit 0
 
           . ./.ci/fj/load-env.sh
@@ -95,7 +98,8 @@ jobs:
 
       - name: Upload changelog
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: changelog
           path: changelog.md
+          archive: false
