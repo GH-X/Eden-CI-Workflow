@@ -189,3 +189,5 @@ jobs:
     name: "musl room"
     needs: [clone]
     uses: ./.github/workflows/room.yml
+    with:
+      build-id: ${{ inputs.build-id }}
