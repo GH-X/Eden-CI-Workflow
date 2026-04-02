@@ -33,11 +33,6 @@ if [ "$DEVEL" = 'true' ]; then
 	sed -i "s|Name=${PROJECT_PRETTYNAME}|Name=${PROJECT_PRETTYNAME} Nightly|" "$DESKTOP"
 fi
 
-# shellcheck disable=SC2153
-if [ "$BUILD_ID" = nightly ]; then
-	UPINFO="gh-releases-zsync|Eden-CI|Nightly|latest|*-${FULL_ARCH}.AppImage.zsync"
-fi
-
 export UPINFO
 
 # cleanup
@@ -56,7 +51,7 @@ echo "-- Generating AppImage... --"
 
 if [ "$DEVEL" = 'true' ]; then
     rm -f "$OUTPATH/$OUTNAME.zsync"
-elif [ "$BUILD_ID" = "tag" ]; then
+else
     mv "$OUTPATH/$OUTNAME.zsync" "$OUTPATH/${_zsync}"
 fi
 
