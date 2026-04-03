@@ -10,14 +10,12 @@ BUILDDIR="${BUILDDIR:-$ROOTDIR/build}"
 ARTIFACTS_DIR="$ROOTDIR/artifacts"
 
 # shellcheck disable=SC1091
-WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
-. "$WORKFLOW_DIR/.ci/common/project.sh"
+. "$ROOTDIR/.ci/common/project.sh"
 
-VERSION=$(cat "$ROOTDIR/GIT-TAG" 2>/dev/null || cat "$WORKFLOW_DIR/WORKFLOW-TAG")
-PKG_NAME="${PROJECT_PRETTYNAME}-FreeBSD-${ARTIFACT_REF}-${ARCH}"
+PACKAGE_TARGET="${PROJECT_PRETTYNAME}-FreeBSD-${ARTIFACT_REF}-${TARGET}.tar.zst"
 PKG_DIR="$ROOTDIR/install/usr"
 
-echo "Making '$VERSION' build"
+echo "Making '$ARTIFACT_REF' build"
 
 mkdir -p "$PKG_DIR/lib/qt6"
 
@@ -54,7 +52,7 @@ wayland-shell-integration
 for sub in $QT6_PLUGIN_SUBDIRS; do
 	if [ -d "$QT6_PLUGINS/$sub" ]; then
 		mkdir -p "$PKG_DIR/lib/qt6/plugins/$sub"
-		cp -r "$QT6_PLUGINS/$sub"/* "$PKG_DIR/lib/qt6/plugins/$sub/"
+		find "$QT6_PLUGINS/$sub" -maxdepth 1 -type f -exec cp {} "$PKG_DIR/lib/qt6/plugins/$sub/" \;
 	fi
 done
 
@@ -67,12 +65,12 @@ strip "$PKG_DIR/bin/${PROJECT_REPO}"
 find "$PKG_DIR/lib" -type f -name '*.so*' -exec strip {} \;
 
 # Create a launcher for the pack
-cp "$WORKFLOW_DIR/.ci/freebsd/launch.sh" "$PKG_DIR"
+cp "$ROOTDIR/.ci/freebsd/launch.sh" "$PKG_DIR"
 chmod +x "$PKG_DIR/launch.sh"
 
 # Pack for upload
 mkdir -p "$ARTIFACTS_DIR"
 cd "$PKG_DIR"
-tar --zstd -cvf "$ARTIFACTS_DIR/$PKG_NAME.tar.zst" .
+tar --zstd -cvf "$ARTIFACTS_DIR/$PACKAGE_TARGET" .
 
-echo "FreeBSD package created at: $ARTIFACTS_DIR/$PKG_NAME.tar.zst"
+echo "FreeBSD package created at: $ARTIFACTS_DIR/$PACKAGE_TARGET"

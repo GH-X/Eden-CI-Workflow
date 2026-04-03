@@ -1,4 +1,5 @@
 name: Setup
+description: Setup ccache, repo, etc
 
 inputs:
   key:
@@ -12,27 +13,26 @@ runs:
   using: composite
   steps:
     - name: Install sccache
-      uses: Eden-CI/sccache-action@v0.0.1
+      uses: Eden-CI/sccache-action@master
       with:
         disable_annotations: true
 
     - name: Download Forgejo environment
-      uses: actions/download-artifact@v7.0.0
+      uses: actions/download-artifact@v8
       with:
-        name: forgejo-env
+        name: forgejo.env
 
     - name: Load payload environment
       shell: bash
       run: . ./.ci/fj/load-env.sh
 
     - name: Clone
-      uses: actions/download-artifact@v7.0.0
+      uses: actions/download-artifact@v8
       with:
         name: eden
 
     - name: Set up CPM cache
       uses: actions/cache@v5.0.1
       with:
-        path: |
-          ${{ github.workspace }}/.cache
+        path: ${{ github.workspace }}/.cache
         key: ${{ inputs.key }}-cpm-${{ inputs.version }}

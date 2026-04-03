@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/workflows/setup
@@ -50,7 +50,7 @@ jobs:
         run: ./.ci/macos/deps.sh
 
       - name: Configure
-        run: .ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH} --debug-find-pkg=OpenSSL --debug-find-pkg=WrapOpenSSLHeaders
+        run: ./.ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH} --debug-find-pkg=OpenSSL --debug-find-pkg=WrapOpenSSLHeaders
 
       - name: Build
         run: cmake --build build
@@ -59,7 +59,8 @@ jobs:
         run: ./.ci/macos/package.sh
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: macos
+          archive: false
           path: artifacts/*

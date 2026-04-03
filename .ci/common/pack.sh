@@ -6,13 +6,14 @@
 # shellcheck disable=SC2043
 
 ROOTDIR="$PWD"
-WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
 ARTIFACTS_DIR="$ROOTDIR/artifacts"
 
 # shellcheck disable=SC1091
-. "$WORKFLOW_DIR/.ci/common/project.sh"
+. "$ROOTDIR/.ci/common/project.sh"
 
 mkdir -p "$ARTIFACTS_DIR"
+
+rm -f eden.zip
 
 find "$ROOTDIR" \( \
 	    -name '*.deb' -o \
@@ -23,6 +24,13 @@ find "$ROOTDIR" \( \
 		-name '*.apk' -o \
 		-name '*.tar.gz' -o \
 		-name '*unknown-linux-musl*' \
-    \) -exec cp {} "$ARTIFACTS_DIR" \;
+    \) -not -path "*artifacts*" -exec cp {} "$ARTIFACTS_DIR" \;
+
+if [ "$DEVEL" = false ]; then
+	sudo apt-get install -y mktorrent
+	_dir="${PROJECT_PRETTYNAME}-${ARTIFACT_REF}"
+	ln -s "$ARTIFACTS_DIR" "${_dir}"
+	mktorrent -p -a udp://tracker.opentrackr.org:1337/announce -o "$ARTIFACTS_DIR/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent" "${_dir}/"
+fi
 
 ls -lh "$ARTIFACTS_DIR"

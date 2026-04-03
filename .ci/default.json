@@ -8,5 +8,10 @@
     "host": "github.com",
     "repository": "eden-emulator/mirror",
     "branch": "master"
+  },
+  {
+    "host": "codeberg.org",
+    "repository": "eden-emu/eden",
+    "branch": "master"
   }
 ]

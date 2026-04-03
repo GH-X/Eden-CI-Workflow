@@ -4,28 +4,88 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # shellcheck disable=SC1091
+# shellcheck disable=SC2046
 
-. ".ci/common/project.sh"
-ARTIFACTS_DIR="$ROOTDIR/artifacts"
+# TODO(crueter): DEDUP
 
-DEFAULT_JSON=".ci/default.json"
-FJ_HOST=$(jq -r ".[0].host" $DEFAULT_JSON)
-FJ_REPO=$(jq -r ".[0].repository" $DEFAULT_JSON)
+ROOTDIR="$PWD"
+. "$ROOTDIR/.ci/common/project.sh"
+ARTIFACTS_DIR="$ROOTDIR"/artifacts
 
-sed -i "s|$RELEASE_HOST/$RELEASE_REPO|$FJ_HOST/$FJ_REPO|g" "$ROOTDIR/changelog.md"
+_external="$1"
+external() {
+    [ "$_external" = "true" ]
+}
+
+_header() {
+    echo
+    echo "----- $* -----"
+    echo
+}
+
+FJ_HOST="$RELEASE_HOST"
+FJ_REPO="$RELEASE_REPO"
+
+## Make changelog ##
+if external; then
+    _find="$RELEASE_HOST/$RELEASE_REPO/releases/download"
+    _replace="$B2_BUCKET.$B2_URL/$B2_DIR"
+else
+    _find="$RELEASE_HOST/$RELEASE_REPO"
+    _replace="$FJ_HOST/$FJ_REPO"
+fi
+
+sed -i "s|$_find|$_replace|g" "$ROOTDIR/changelog.md"
+
+## fjcli ##
 git clone --depth 1 https://git.crueter.xyz/scripts/fj.git
 
-echo "-- Creating Release"
-"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	create -b "$ROOTDIR/changelog.md" -n "$PROJECT_PRETTYNAME $FORGEJO_REF" -d
+## make release ##
+_header "Creating Release"
 
-echo "-- Uploading Assets"
+# thanks, ANSI
+"$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$GITHUB_TAG" \
+	create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r || true
 
-# Cloudflare sucks, so we upload twice just to ensure we don't get blocked.
-"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	upload -g "$ARTIFACTS_DIR"/*
+## Uploading ##
 
-"$WORKFLOW_DIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_REF" \
-	upload -g "$ARTIFACTS_DIR"/*
+_header "Uploading Assets"
 
-export FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/$FORGEJO_REF"
+if external; then
+    "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$GITHUB_TAG" \
+        external $(cat "$ROOTDIR"/urls.txt)
+else
+    # Cloudflare sucks, so we upload twice just to ensure we don't get blocked.
+    "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$GITHUB_TAG" \
+        upload -g "$ARTIFACTS_DIR"/*
+
+    "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$GITHUB_TAG" \
+        upload -g "$ARTIFACTS_DIR"/*
+fi
+
+## Summary ##
+
+FJ_URL="https://$FJ_HOST/$FJ_REPO/releases/tag/$GITHUB_TAG"
+
+if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+    {
+        echo "## Release Summary"
+        echo "- View Release on Forgejo: [$GITHUB_TITLE]($FJ_URL)"
+    } >> "$GITHUB_STEP_SUMMARY"
+fi
+
+## Release Status ##
+
+if [ "$SEND_STATUS" = "1" ]; then
+    _header "Sending Release status"
+    python3 "$ROOTDIR"/.ci/common/status.py --release "$FJ_URL"
+fi
+
+## PR Number ##
+
+if [ "$RELEASE_PR" = 1 ]; then
+    _header "PR RELEASE"
+
+    "$ROOTDIR/fj/fj.sh" -k "$FJ_TOKEN" -r "$FJ_REPO" -u "$FJ_HOST" release -t "$FORGEJO_PR_NUMBER" \
+        create -b "$ROOTDIR/changelog.md" -n "$GITHUB_TITLE" -a -r || true
+fi

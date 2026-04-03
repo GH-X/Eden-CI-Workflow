@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -59,14 +59,15 @@ jobs:
       # Clone step is still changing forgejo.env, due to a bug on Forgejo, send after it
       # <https://codeberg.org/forgejo/forgejo/issues/9601>
       - name: Upload payload environment
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
-          name: forgejo-env
+          name: forgejo.env
+          archive: false
           path: forgejo.env
 
       - name: Send pending status
         if: ${{ (inputs.build-id) == 'master' || (inputs.build-id) == 'pull_request' }}
-        run: python3 .ci/common/status.py --pending
+        run: python3 ./.ci/common/status.py --pending
 
       - name: Apply Temporary Patch
         if: ${{ env.TEMP_PATCH_NUMBER != '' }}
@@ -84,7 +85,7 @@ jobs:
           rm -rf eden/.git* eden/.ci eden/.github
 
       - name: Upload cloned repo
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: eden
           include-hidden-files: true
@@ -93,34 +94,38 @@ jobs:
             eden/.patch
 
   source:
+    if: ${{ inputs.build-id == 'pull_request' }}
     name: "Source Pack"
     runs-on: ubuntu-latest
     needs: [clone]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
 
-      - name: Clone
-        uses: actions/download-artifact@v7.0.0
+      - name: Download Forgejo environment
+        uses: actions/download-artifact@v8
+        with:
+          name: forgejo.env
 
       - name: Load payload environment
-        run: FORGEJO_LENV=forgejo-env/forgejo.env . .ci/fj/load-env.sh
+        shell: bash
+        run: . ./.ci/fj/load-env.sh
+
+      - name: Clone
+        uses: actions/download-artifact@v8
+        with:
+          name: eden
+
+      - name: Load payload environment
+        run: . ./.ci/fj/load-env.sh
 
       - name: Build
         run: ./.ci/source/build.sh
 
-      - name: Package
-        run: ./.ci/source/package.sh
-
-      - name: Upload source
-        uses: actions/upload-artifact@v6.0.0
-        with:
-          name: source
-          path: ./*.tar.zst
-
   deb:
-    name: ".deb builds"
+    if: ${{ inputs.build-id == 'pull_request' || inputs.build-id == 'test' }}
+    name: "Debian"
     needs: [clone]
     uses: ./.github/workflows/debian.yml
     with:
@@ -183,6 +188,7 @@ jobs:
     secrets: inherit
 
   freebsd:
+    if: ${{ inputs.build-id == 'pull_request' || inputs.build-id == 'test' }}
     name: "FreeBSD"
     needs: [clone]
     uses: ./.github/workflows/freebsd.yml
@@ -193,6 +199,9 @@ jobs:
     secrets: inherit
 
   room:
+    if: ${{ inputs.build-id == 'pull_request' || inputs.build-id == 'tag' || inputs.build-id == 'test' }}
     name: "musl room"
     needs: [clone]
     uses: ./.github/workflows/room.yml
+    with:
+      build-id: ${{ inputs.build-id }}

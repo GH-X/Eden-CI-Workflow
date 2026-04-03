@@ -5,8 +5,8 @@
 
 # shellcheck disable=SC1091
 
-WORKFLOW_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$0")/../.." && pwd)
-. "$WORKFLOW_DIR/.ci/common/project.sh"
+ROOTDIR="$PWD"
+. "$ROOTDIR/.ci/common/project.sh"
 
 opts() {
 	falsy "$DISABLE_OPTS"
@@ -31,7 +31,7 @@ pull_request)
 	echo "([Master Build]($MASTER_RELEASE_URL?q=$FORGEJO_PR_MERGE_BASE&expanded=true))"
 	echo
 	echo "## Changelog"
-	.ci/common/field.py field="body" default_msg="No changelog provided" pull_request_number="$FORGEJO_PR_NUMBER"
+	python3 "$ROOTDIR/.ci/common/field.py" field="body" default_msg="No changelog provided" pull_request_number="$FORGEJO_PR_NUMBER"
 	;;
 tag)
 	echo "## Changelog"
@@ -59,7 +59,7 @@ android() {
 	DESCRIPTION="$3"
 
 	echo -n "| "
-	echo -n "[Android $TYPE](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-Android-${ARTIFACT_REF}-${FLAVOR}.apk) | "
+	echo -n "[$TYPE](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-Android-${ARTIFACT_REF}-${FLAVOR}.apk) | "
 	echo "$DESCRIPTION |"
 }
 
@@ -102,28 +102,6 @@ linux_matrix() {
 	falsy "$DISABLE_ARM" && linux_field aarch64 "aarch64"
 }
 
-deb_field() {
-	BUILD="$1"
-	NOTES="${2}"
-	NAME="${BUILD//-/ }"
-
-	echo -n "| $NAME | "
-
-	ARCHES=amd64
-	tagged && ARCHES="$ARCHES aarch64"
-	for ARCH in $ARCHES; do
-		echo -n "[$ARCH](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-$BUILD-${ARTIFACT_REF}-${ARCH}.deb) | "
-	done
-
-	echo "$NOTES"
-}
-
-deb_matrix() {
-    deb_field Ubuntu-24.04 "Not compatible with Ubuntu 25.04 or later"
-	deb_field Debian-12 "Drivers may be old"
-	deb_field Debian-13
-}
-
 room_matrix() {
 	for arch in aarch64 x86_64; do
 		echo "- [$arch](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/eden-room-$arch-unknown-linux-musl)"
@@ -160,32 +138,29 @@ win_matrix() {
 	win_field MSVC msvc-standard
 
 	if falsy "$DISABLE_MINGW"; then
-		msys "MinGW" gcc clang standard "May have additional bugs/glitches"
-		opts && tagged && msys "MinGW PGO" clang clang pgo || true
+		msys "MinGW" gcc clang standard
+		if opts && tagged; then
+			msys "MinGW PGO" clang clang pgo
+		fi
 	fi
 }
 
 echo "# Packages"
 
 if truthy "$EXPLAIN_TARGETS"; then
-cat << EOF
+	cat <<-EOF
 
-## Targets
+	## Targets
 
-Each build is optimized for a specific architecture and uses a specific compiler.
+	Each build is optimized for a specific architecture and uses a specific compiler.
 
-- **aarch64/arm64**: For devices that use the armv8-a instruction set; e.g. Snapdragon X, all Android devices, and Apple Silicon Macs.
-- **amd64**: For devices that use the amd64 (aka x86_64) instruction set; this is exclusively used by Intel and AMD CPUs and is only found on desktops.
+	- **aarch64/arm64**: For devices that use the armv8-a instruction set; e.g. Snapdragon X, all Android devices, and Apple Silicon Macs.
+	- **amd64**: For devices that use the amd64 (aka x86_64) instruction set; this is exclusively used by Intel and AMD CPUs and is only found on desktops.
 
-**Compilers**
+	### PGO
 
-- **MSVC**: The default compiler for Windows. This is the most stable experience, but may lack in performance compared to any of the following alternatives.
-- **GCC**: The standard GNU compiler; this is the default for Linux and will provide the most stable experience.
-- **PGO**: These are built with Clang, and use PGO. PGO (profile-guided optimization) uses data from prior compilations
-	to determine the "hotspots" found within the codebase. Using these hotspots,
-	it can allocate more resources towards these heavily-used areas, and thus generally see improved performance to the tune of ~10-50%,
-	depending on the specific game, hardware, and platform. Do note that additional instabilities may occur.
-EOF
+	PGO builds usually perform ~10-30% better than standard builds, and are thus generally recommended for all users.
+	EOF
 fi
 
 cat << EOF
@@ -196,50 +171,34 @@ Linux packages are distributed via AppImage.
 EOF
 
 if opts && tagged; then
-cat << EOF
-[zsync](https://zsync.moria.org.uk/) files are provided for easier updating, such as via
-[AM](https://github.com/ivan-hc/AM).
+	cat <<-EOF
+	[zsync](https://zsync.moria.org.uk/) files are provided for easier updating, such as via
+	[AM](https://github.com/ivan-hc/AM).
 
-| Build Type | GCC | PGO | Notes |
-|------------|-----|-----|-------|
-EOF
+	| Build Type | GCC | PGO | Notes |
+	|------------|-----|-----|-------|
+	EOF
 else
-cat << EOF
+	cat <<-EOF
 
-| Build Type | GCC | Notes |
-|------------|-----|-------|
-EOF
+	| Build Type | GCC | Notes |
+	|------------|-----|-------|
+	EOF
 fi
 
 linux_matrix
 
-cat << EOF
+if [ "$1" = "tag" ]; then
+    cat <<-EOF
 
-### Debian/Ubuntu
+	### Room Executables
 
-Debian/Ubuntu targets are \`.deb\` files, which can be installed via \`sudo dpkg -i <package>.deb\`.
+	These are statically linked Linux executables for the \`eden-room\` binary.
 
-EOF
+	EOF
 
-if tagged; then
-	echo "| Target | amd64 | aarch64 | Notes |"
-	echo "|--------|-------|---------|-------|"
-else
-	echo "| Target | amd64 | Notes |"
-	echo "|--------|-------|-------|"
+	room_matrix
 fi
-
-deb_matrix
-
-cat <<EOF
-
-### Room Executables
-
-These are statically linked Linux executables for the \`eden-room\` binary.
-
-EOF
-
-room_matrix
 
 # TODO: setup files
 cat << EOF
@@ -256,23 +215,27 @@ EOF
 win_matrix
 
 if falsy "$DISABLE_ANDROID"; then
-	cat << EOF
+	cat <<-EOF
 
-## Android
+	## Android
 
-| Build  | Description |
-|--------|-------------|
-EOF
+	| Build  | Description |
+	|--------|-------------|
+	EOF
 
-	android Standard "standard" "Single APK for all supported Android devices (most users should use this)"
-	android x86_64 "chromeos" "For devices running Chrome/FydeOS, AVD emulators, or certain Intel Atom Android devices."
+	android Standard "standard" "The standard build. Most users should use this."
+
+	if tagged || [ "$1" = "pull_request" ]; then
+		android ChromeOS "chromeos" "For devices running Chrome/FydeOS, AVD emulators, or certain Intel Atom Android devices."
+	fi
+
 	if tagged; then
-		android Optimized "optimized" "For any Android device that has Frame Generation or any other per-device feature"
-		android Legacy "legacy" "For Adreno A6xx and other older GPUs"
+		android "Genshin Spoof" "optimized" "Spoofs Eden as Genshin Impact, which may enable optimizations/frame generation on some flagship devices."
+		android Legacy "legacy" "For Adreno A6xx and other older GPUs--e.g. Snapdragon 865 and older"
 	fi
 fi
 
-cat << EOF
+cat <<EOF
 
 ## macOS
 
@@ -283,13 +246,15 @@ In order to run the app, you *may* need to go to System Settings -> Privacy & Se
 | ---- | ----------- |
 | [macOS](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-macOS-${ARTIFACT_REF}.tar.gz) | For Apple Silicon (M1, M2, etc)|
 
-## Source
-
-Contains all source code, submodules, and CPM cache at the time of release.
-This can be extracted with \`tar xf ${PROJECT_PRETTYNAME}-Source-${GITHUB_TAG}.tar.zst\`.
-
-| File | Description |
-| ---- | ----------- |
-| [tar.zst](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-Source-${ARTIFACT_REF}.tar.zst) | Source as a zstd-compressed tarball (Windows: use Git Bash or MSYS2) |
-
 EOF
+
+if [ "$1" = "tag" ]; then
+	cat <<-EOF
+	## Torrent
+
+	A torrent containing all artifacts. To use this, simply download the torrent and import it into your favorite torrent client (BitTorrent only!),
+	and artifacts will be downloaded automatically.
+
+	- [Torrent](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent)
+	EOF
+fi

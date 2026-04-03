@@ -33,7 +33,7 @@ Options:
 
 Extra arguments are passed to CMake (e.g. -DCMAKE_OPTION_NAME=VALUE)
 Set the CCACHE variable to "true" to enable build caching.
-The APK and AAB will be output into "$ARTIFACTS_DIR".
+The APK will be output into "$ARTIFACTS_DIR".
 
 EOF
 
@@ -113,8 +113,7 @@ echo "-- building..."
     -Dorg.gradle.parallel="${CCACHE}" \
     -Dorg.gradle.workers.max="${NUM_JOBS}" \
     -PYUZU_ANDROID_ARGS="$*" \
-	-Pnightly=$NIGHTLY \
-    --info
+	-Pnightly=$NIGHTLY
 
 if [ -n "${ANDROID_KEYSTORE_B64}" ]; then
     rm "${ANDROID_KEYSTORE_FILE}"
@@ -123,10 +122,9 @@ fi
 cd "$ARTIFACTS_DIR"
 
 mv ./*.apk "${PROJECT_PRETTYNAME}-Android-${ARTIFACT_REF}-${TARGET_LOWER}.apk"
-mv ./*.aab "${PROJECT_PRETTYNAME}-Android-${ARTIFACT_REF}-${TARGET_LOWER}.aab"
 
 cd "$ROOTDIR"
 
-echo "-- Done! APK and AAB artifacts are in ${ARTIFACTS_DIR}"
+echo "-- Done! APK artifact is in ${ARTIFACTS_DIR}"
 
 ls -l "${ARTIFACTS_DIR}/"
