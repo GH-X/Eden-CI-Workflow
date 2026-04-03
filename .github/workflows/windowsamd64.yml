@@ -29,30 +29,8 @@ env:
   BUILD_ID: ${{ inputs.build-id }}
 
 jobs:
-  win-matrix:
-    name: "Generate Windows compilers"
-    runs-on: ubuntu-latest
-    outputs:
-      compiler: ${{ steps.set.outputs.compiler }}
-    steps:
-      - id: set
-        run: |
-          PGO='{"program": "clang", "target": "pgo"}'
-          CLANG='{"program": "clang", "target": "standard"}'
-          MSVC='{"program": "msvc", "target": "standard"}'
-
-          if [ "${{ inputs.devel }}" != "true" ] || [ "${{ inputs.force_pgo }}" = "true" ]; then
-            COMPILER="[${MSVC}]"
-          else
-            COMPILER="[${MSVC}]"
-          fi
-
-          echo $COMPILER
-          echo "compiler=${COMPILER}" >> $GITHUB_OUTPUT
-
   windows:
     name: "Windows ${{ matrix.os.arch }} ${{ matrix.compiler.program }} ${{ matrix.compiler.target }}"
-    needs: [win-matrix]
     runs-on: ${{ matrix.os.runs-on }}
     strategy:
       fail-fast: false
@@ -60,7 +38,9 @@ jobs:
         os:
           - runs-on: windows-latest
             arch: amd64
-        compiler: ${{ fromJson(needs.win-matrix.outputs.compiler) }}
+        compiler:
+          - program: msvc
+            target: standard
 
     env:
       TARGET: ${{ matrix.os.arch }}
@@ -70,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/workflows/setup
@@ -80,39 +60,23 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+        uses: Eden-CI/msvc-dev-cmd@master
         with:
           arch: ${{ matrix.os.arch }}
 
-      - name: Install LLVM/Clang
-        if: matrix.compiler.program == 'clang'
-        uses: Eden-CI/install-llvm-action@v1
-        with:
-          version: "21.1.4"
-          env: true
-
-      - name: Check LLVM/Clang
-        if: matrix.compiler.program == 'clang'
-        shell: bash
-        run: |
-          echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
-          "C:/Program Files/LLVM/bin/clang-cl" --version
-
       - name: Install Vulkan SDK
         shell: powershell
-        run: |
-          ./.ci/windows/install-vulkan-sdk.ps1
+        run: ./.ci/windows/install-vulkan-sdk.ps1
 
       - name: Configure
         shell: bash
         run: |
           git config --global core.autocrlf off
           dos2unix .patch/boost/*
-          .ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH}
+          ./.ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH}
 
       - name: Build
         shell: bash
@@ -125,7 +89,8 @@ jobs:
           ARCH: ${{ env.FORGEJO_NREV }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: windows-${{ env.ARCH }}-eden-${{ env.FORGEJO_NREV }}
           path: artifacts/*
+          archive: false

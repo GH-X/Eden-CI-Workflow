@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -50,8 +50,7 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       # for some amazing reason you can't pass env vars to reusable workflows
       - name: Setup Outputs
@@ -63,41 +62,37 @@ jobs:
 
       - name: Clone
         shell: bash
-        run: |
-          ./.ci/forgejocustom.sh --clone ${{ inputs.build-id }}
+        run: ./.ci/forgejocustom.sh --clone ${{ inputs.build-id }}
 
       - name: ReLoad payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Apply Temporary Patch
         shell: bash
-        run: |
-          ./patchwindows.sh
+        run: ./patchwindows.sh
 
       - name: ReLoad payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Summary
         shell: bash
-        run: |
-          ./.ci/fj/summarycustom.sh ${{ inputs.build-id }}
+        run: ./.ci/fj/summarycustom.sh ${{ inputs.build-id }}
 
       - name: Cleanup
         run: |
           rm -rf eden/.ci eden/.github
 
       - name: Upload payload environment
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: forgejo-env
+          archive: false
           path: forgejo.env
 
       - name: Upload cloned repo
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: eden
           include-hidden-files: true

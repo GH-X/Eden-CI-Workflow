@@ -38,14 +38,11 @@ jobs:
       - id: set
         run: |
           AMD64='"runs-on": "windows-latest", "arch": "amd64", "msystem": "MINGW64"'
-          UCRT64='"runs-on": "windows-latest", "arch": "amd64", "msystem": "UCRT64"'
-          AMDCLANG64='"runs-on": "windows-latest", "arch": "amd64", "msystem": "CLANG64"'
           ARM64='"runs-on": "windows-11-arm", "arch": "arm64", "msystem": "CLANGARM64"'
 
           PGO='"program": "clang", "target": "pgo"'
           CLANG='"program": "clang", "target": "standard"'
           GCC='"program": "gcc", "target": "standard"'
-          UCRT='"program": "gcc", "target": "ucrt"'
 
           target() {
             arch="$1"
@@ -55,8 +52,6 @@ jobs:
           }
 
           amd_gcc="$(target "$AMD64" "$GCC")"
-          ucrt_gcc="$(target "$UCRT64" "$UCRT")"
-          amd_clang="$(target "$AMDCLANG64" "$CLANG")"
           amd_pgo="$(target "$AMD64" "$PGO")"
           arm_clang="$(target "$ARM64" "$CLANG")"
           arm_pgo="$(target "$ARM64" "$PGO")"
@@ -89,7 +84,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/workflows/setup
@@ -99,8 +94,7 @@ jobs:
 
       - name: Load payload environment
         shell: bash
-        run: |
-          . ./.ci/fj/load-env.sh
+        run: . ./.ci/fj/load-env.sh
 
       - name: Setup MSYS2
         id: msys2
@@ -125,7 +119,7 @@ jobs:
       - name: Configure
         shell: msys2 {0}
         run: |
-          .ci/common/configure.sh -DCCACHE_PATH=sccache
+          ./.ci/common/configure.sh -DCCACHE_PATH=sccache
         env:
           MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
 
@@ -138,10 +132,11 @@ jobs:
         run: ./.ci/windows/packagecustom.sh
         env:
           MSYS_TOOLCHAIN: ${{ matrix.os.msystem }}
-          ARCH: ${{ env.FORGEJO_NREV }}
+          ARCH: MinGW-${{ env.FORGEJO_NREV }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7
         with:
           name: mingw-${{ env.ARCH }}-eden-${{ env.FORGEJO_NREV }}
+          archive: false
           path: artifacts/*
