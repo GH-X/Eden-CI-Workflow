@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 8cd55bcdd3..8a59ee2bf5 100644
+index 8cd55bcdd3..5b6b408483 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -47,7 +47,23 @@ index 8cd55bcdd3..8a59ee2bf5 100644
                                                      "scaling_filter",
                                                      Category::Renderer,
                                                      Specialization::Default,
-@@ -417,7 +417,7 @@ struct Values {
+@@ -390,8 +390,6 @@ struct Values {
+                                                                      SpirvOptimizeMode::Never,
+                                                                      "optimize_spirv_output",
+                                                                      Category::Renderer};
+-    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
+-                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
+     // *nix platforms may have issues with the borderless windowed fullscreen mode.
+     // Default to exclusive fullscreen on these platforms for now.
+     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
+@@ -412,12 +410,14 @@ struct Values {
+                                           linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
+     SwitchableSetting<u8, false> bg_blue{
+                                          linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
++                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
+ 
+     SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
  #ifdef ANDROID
                                                        GpuAccuracy::Low,
  #else
@@ -145,16 +161,22 @@ index 8cd55bcdd3..8a59ee2bf5 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -532,7 +531,7 @@ struct Values {
+@@ -531,14 +530,6 @@ struct Values {
+ #endif
  
      // Renderer Hacks //
-     SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
+-    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
 -                                                  GpuOverclock::Medium,
-+                                                  GpuOverclock::Normal,
-                                                   "fast_gpu_time",
-                                                   Category::RendererHacks,
-                                                   Specialization::Default,
-@@ -546,6 +545,13 @@ struct Values {
+-                                                  "fast_gpu_time",
+-                                                  Category::RendererHacks,
+-                                                  Specialization::Default,
+-                                                        true,
+-                                                        true};
+-
+     SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
+                                                         false,
+                                                         "skip_cpu_inner_invalidation",
+@@ -546,6 +537,13 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -168,7 +190,7 @@ index 8cd55bcdd3..8a59ee2bf5 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -554,41 +560,35 @@ struct Values {
+@@ -554,41 +552,43 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -207,7 +229,14 @@ index 8cd55bcdd3..8a59ee2bf5 100644
  
 -    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 -                                                  Category::RendererHacks};
--
++    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
++                                                  GpuOverclock::Normal,
++                                                  "fast_gpu_time",
++                                                  Category::RendererHacks,
++                                                  Specialization::Default,
++                                                        true,
++                                                        true};
+ 
      SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
  #if defined (ANDROID) || defined (__APPLE__)
                                             ExtendedDynamicState::Disabled,
@@ -540,7 +569,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..658b81bc48 100644
+index 71210ffe6e..f123b7606c 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -58,25 +58,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -589,30 +618,45 @@ index 71210ffe6e..658b81bc48 100644
          lowmemorydevice = true;
      }
  
-@@ -126,8 +129,8 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -118,31 +121,26 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+ 
+ template <class P>
+ void TextureCache<P>::RunGarbageCollector() {
+-    bool high_priority_mode = false;
++    bool highpriority_mode = false;
+     bool aggressive_mode = false;
+     u64 ticks_to_destroy = 0;
+     size_t num_iterations = 0;
+ 
      const auto Configure = [&](bool allow_aggressive) {
-         high_priority_mode = total_used_memory >= expected_memory;
+-        high_priority_mode = total_used_memory >= expected_memory;
++        highpriority_mode = total_used_memory >= expected_memory;
          aggressive_mode = allow_aggressive && total_used_memory >= critical_memory;
 -        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
-+        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 30ULL : 60ULL;
-+        num_iterations = aggressive_mode ? 60 : (high_priority_mode ? 30 : 10);
++        ticks_to_destroy = aggressive_mode ? 10ULL : (highpriority_mode ? 30ULL : 60ULL);
++        num_iterations = aggressive_mode ? 60 : (highpriority_mode ? 30 : 10);
      };
  
-     const auto Cleanup = [this, &num_iterations, &high_priority_mode,
-@@ -138,35 +141,19 @@ void TextureCache<P>::RunGarbageCollector() {
+-    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
++    const auto Cleanup = [this, &num_iterations, &highpriority_mode,
+                           &aggressive_mode](ImageId image_id) {
+         if (num_iterations == 0) {
+             return true;
+         }
          --num_iterations;
-         auto& image = slot_images[image_id];
+-        auto& image = slot_images[image_id];
  
 -        // Never delete recently allocated sparse textures (within 3 frames)
 -        const bool is_recently_allocated = image.allocation_tick >= frame_tick - 3;
 -        if (is_recently_allocated && image.info.is_sparse) {
 -            return false;
 -        }
--
++        auto& image = slot_images[image_id];
+ 
          if (True(image.flags & ImageFlagBits::IsDecoding)) {
              // This image is still being decoded, deleting it will invalidate the slot
-             // used by the async decoder thread.
+@@ -150,23 +148,13 @@ void TextureCache<P>::RunGarbageCollector() {
              return false;
          }
  
@@ -638,7 +682,7 @@ index 71210ffe6e..658b81bc48 100644
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
              image.DownloadMemory(map, copies);
-@@ -181,39 +168,17 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -181,39 +169,17 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -651,10 +695,11 @@ index 71210ffe6e..658b81bc48 100644
 -                return false;
 -            }
 -            if (high_priority_mode && total_used_memory < expected_memory) {
-+        } else if (high_priority_mode && total_used_memory < expected_memory) {
++        } else if (highpriority_mode && total_used_memory < expected_memory) {
                  num_iterations >>= 1;
-                 high_priority_mode = false;
+-                high_priority_mode = false;
 -            }
++                highpriority_mode = false;
          }
          return false;
      };
@@ -681,7 +726,7 @@ index 71210ffe6e..658b81bc48 100644
      Configure(false);
      lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
  
-@@ -1196,10 +1161,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1196,10 +1162,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -692,7 +737,7 @@ index 71210ffe6e..658b81bc48 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1182,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1183,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -700,7 +745,7 @@ index 71210ffe6e..658b81bc48 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1470,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1471,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -712,7 +757,7 @@ index 71210ffe6e..658b81bc48 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1530,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1531,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -722,7 +767,7 @@ index 71210ffe6e..658b81bc48 100644
      }
  }
  
-@@ -1667,27 +1619,6 @@ template <class P>
+@@ -1667,27 +1620,6 @@ template <class P>
  ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
      ImageInfo new_info = info;
      const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
