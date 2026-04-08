@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 8cd55bcdd3..a616e7b10b 100644
+index 8cd55bcdd3..5e42a97a56 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -38,7 +38,17 @@ index 8cd55bcdd3..a616e7b10b 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -354,7 +354,7 @@ struct Values {
+@@ -342,6 +342,9 @@ struct Values {
+ 
+     // Graphics Settings
+     ResolutionScalingInfo resolution_info{};
++    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
++                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
++
+     SwitchableSetting<ResolutionSetup> resolution_setup{linkage, ResolutionSetup::Res1X,
+                                                         "resolution_setup", Category::Renderer};
+ 
+@@ -354,7 +357,7 @@ struct Values {
                                                    true};
  
      SwitchableSetting<ScalingFilter> scaling_filter{linkage,
@@ -47,7 +57,16 @@ index 8cd55bcdd3..a616e7b10b 100644
                                                      "scaling_filter",
                                                      Category::Renderer,
                                                      Specialization::Default,
-@@ -417,7 +417,7 @@ struct Values {
+@@ -390,8 +393,6 @@ struct Values {
+                                                                      SpirvOptimizeMode::Never,
+                                                                      "optimize_spirv_output",
+                                                                      Category::Renderer};
+-    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
+-                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
+     // *nix platforms may have issues with the borderless windowed fullscreen mode.
+     // Default to exclusive fullscreen on these platforms for now.
+     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
+@@ -417,7 +418,7 @@ struct Values {
  #ifdef ANDROID
                                                        GpuAccuracy::Low,
  #else
@@ -56,7 +75,7 @@ index 8cd55bcdd3..a616e7b10b 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -428,7 +428,7 @@ struct Values {
+@@ -428,7 +429,7 @@ struct Values {
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::Medium};
  
      SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
@@ -65,7 +84,7 @@ index 8cd55bcdd3..a616e7b10b 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -440,14 +440,14 @@ struct Values {
+@@ -440,14 +441,14 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
@@ -82,7 +101,7 @@ index 8cd55bcdd3..a616e7b10b 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -455,13 +455,18 @@ struct Values {
+@@ -455,13 +456,18 @@ struct Values {
  #ifdef ANDROID
                                                              AstcDecodeMode::Cpu,
  #else
@@ -103,7 +122,7 @@ index 8cd55bcdd3..a616e7b10b 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -470,28 +475,25 @@ struct Values {
+@@ -470,28 +476,22 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -112,9 +131,7 @@ index 8cd55bcdd3..a616e7b10b 100644
 -                                                                  "astc_recompression",
 -                                                                  Category::RendererAdvanced};
 -
-+    SwitchableSetting<bool> aggressive_garbage_collection{linkage, true, "aggressive_garbage_collection",
-+                                                  Category::RendererAdvanced};
- 
+-
      SwitchableSetting<bool> sync_memory_operations{linkage,
 -                                                   false,
 +                                                   true,
@@ -138,7 +155,7 @@ index 8cd55bcdd3..a616e7b10b 100644
          Specialization::Default};
  
      SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -513,7 +515,7 @@ struct Values {
+@@ -513,7 +513,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
@@ -147,16 +164,22 @@ index 8cd55bcdd3..a616e7b10b 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -532,7 +534,7 @@ struct Values {
+@@ -531,14 +531,6 @@ struct Values {
+ #endif
  
      // Renderer Hacks //
-     SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
+-    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
 -                                                  GpuOverclock::Medium,
-+                                                  GpuOverclock::Normal,
-                                                   "fast_gpu_time",
-                                                   Category::RendererHacks,
-                                                   Specialization::Default,
-@@ -546,6 +548,13 @@ struct Values {
+-                                                  "fast_gpu_time",
+-                                                  Category::RendererHacks,
+-                                                  Specialization::Default,
+-                                                        true,
+-                                                        true};
+-
+     SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
+                                                         false,
+                                                         "skip_cpu_inner_invalidation",
+@@ -546,6 +538,13 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -170,7 +193,7 @@ index 8cd55bcdd3..a616e7b10b 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -554,41 +563,35 @@ struct Values {
+@@ -554,41 +553,43 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -209,7 +232,14 @@ index 8cd55bcdd3..a616e7b10b 100644
  
 -    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 -                                                  Category::RendererHacks};
--
++    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
++                                                  GpuOverclock::Normal,
++                                                  "fast_gpu_time",
++                                                  Category::RendererHacks,
++                                                  Specialization::Default,
++                                                        true,
++                                                        true};
+ 
      SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
  #if defined (ANDROID) || defined (__APPLE__)
                                             ExtendedDynamicState::Disabled,
@@ -219,7 +249,7 @@ index 8cd55bcdd3..a616e7b10b 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -633,13 +636,15 @@ struct Values {
+@@ -633,13 +634,15 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -238,7 +268,7 @@ index 8cd55bcdd3..a616e7b10b 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -659,8 +664,6 @@ struct Values {
+@@ -659,8 +662,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -247,7 +277,7 @@ index 8cd55bcdd3..a616e7b10b 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -668,7 +671,7 @@ struct Values {
+@@ -668,7 +669,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
@@ -271,71 +301,11 @@ index 638be4127f..ff291eba2b 100644
  ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
  ENUM(VramUsageMode, Conservative, Aggressive);
  ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
-diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
-index c2a14858dd..9b9ed39d66 100644
---- a/src/qt_common/config/uisettings.h
-+++ b/src/qt_common/config/uisettings.h
-@@ -98,18 +98,18 @@ struct Values {
- 
-     Setting<bool> single_window_mode{linkage, true, "singleWindowMode", Category::Ui};
-     Setting<bool> fullscreen{linkage, false, "fullscreen", Category::Ui};
--    Setting<bool> show_filter_bar{linkage, true, "showFilterBar", Category::Ui};
-+    Setting<bool> show_filter_bar{linkage, false, "showFilterBar", Category::Ui};
-     Setting<bool> show_status_bar{linkage, true, "showStatusBar", Category::Ui};
- 
-     SwitchableSetting<ConfirmStop> confirm_before_stopping{linkage,
--                                                           ConfirmStop::Ask_Always,
-+                                                           ConfirmStop::Ask_Never,
-                                                            "confirmStop",
-                                                            Category::UiGeneral,
-                                                            Settings::Specialization::Default,
-                                                            true,
-                                                            true};
- 
--    Setting<bool> first_start{linkage, true, "firstStart", Category::Ui};
-+    Setting<bool> first_start{linkage, false, "firstStart", Category::Ui};
-     Setting<bool> pause_when_in_background{linkage,
-                                            false,
-                                            "pauseWhenInBackground",
-@@ -140,7 +140,7 @@ struct Values {
-                                       true,
-                                       true};
- 
--    Setting<bool> check_for_updates{linkage, true, "check_for_updates", Category::UiGeneral};
-+    Setting<bool> check_for_updates{linkage, false, "check_for_updates", Category::UiGeneral};
- 
-     // Linux/MinGW may support (requires libdl support)
-     SwitchableSetting<bool> enable_gamemode{linkage,
-@@ -207,16 +207,16 @@ struct Values {
- 
-     // Game List
-     Setting<bool> show_add_ons{linkage, true, "show_add_ons", Category::UiGameList};
--    Setting<u32> game_icon_size{linkage, 64, "game_icon_size", Category::UiGameList};
-+    Setting<u32> game_icon_size{linkage, 256, "game_icon_size", Category::UiGameList};
-     Setting<u32> folder_icon_size{linkage, 48, "folder_icon_size", Category::UiGameList};
-     Setting<u8> row_1_text_id{linkage, 3, "row_1_text_id", Category::UiGameList};
--    Setting<u8> row_2_text_id{linkage, 2, "row_2_text_id", Category::UiGameList};
-+    Setting<u8> row_2_text_id{linkage, 0, "row_2_text_id", Category::UiGameList};
-     Setting<Settings::GameListMode> game_list_mode{linkage, Settings::GameListMode::TreeView,
-                                                    "game_list_mode", Category::UiGameList};
-     Setting<bool> show_game_name{linkage, true, "show_game_name", Category::UiGameList};
- 
-     std::atomic_bool is_game_list_reload_pending{false};
--    Setting<bool> cache_game_list{linkage, true, "cache_game_list", Category::UiGameList};
-+    Setting<bool> cache_game_list{linkage, false, "cache_game_list", Category::UiGameList};
-     Setting<bool> favorites_expanded{linkage, true, "favorites_expanded", Category::UiGameList};
-     QVector<u64> favorited_ids;
-     QMap<u64, QDir> ryujinx_link_paths;
-@@ -225,7 +225,7 @@ struct Values {
-     Setting<bool> show_perf_overlay{linkage, false, "show_perf_overlay", Category::UiGameList};
- 
-     // Compatibility List
--    Setting<bool> show_compat{linkage, true, "show_compat", Category::UiGameList};
-+    Setting<bool> show_compat{linkage, false, "show_compat", Category::UiGameList};
- 
-     // Size & File Types Column
-     Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
-@@ -255,39 +255,39 @@ void RestoreWindowState(std::unique_ptr<QtConfig>& qtConfig);
+diff --git a/src/qt_common/config/uisettings.cpp b/src/qt_common/config/uisettings.cpp
+index f4f5688781..45d73a9235 100644
+--- a/src/qt_common/config/uisettings.cpp
++++ b/src/qt_common/config/uisettings.cpp
+@@ -31,39 +31,39 @@ namespace UISettings {
  // UISetting::values.shortcuts, which is alphabetically ordered.
  // clang-format off
  const std::array<Shortcut, 33> default_hotkeys{{
@@ -406,23 +376,116 @@ index c2a14858dd..9b9ed39d66 100644
  }};
  // clang-format on
  
+diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
+index 4549a36345..dd2c0dd47a 100644
+--- a/src/qt_common/config/uisettings.h
++++ b/src/qt_common/config/uisettings.h
+@@ -98,18 +98,18 @@ struct Values {
+ 
+     Setting<bool> single_window_mode{linkage, true, "singleWindowMode", Category::Ui};
+     Setting<bool> fullscreen{linkage, false, "fullscreen", Category::Ui};
+-    Setting<bool> show_filter_bar{linkage, true, "showFilterBar", Category::Ui};
++    Setting<bool> show_filter_bar{linkage, false, "showFilterBar", Category::Ui};
+     Setting<bool> show_status_bar{linkage, true, "showStatusBar", Category::Ui};
+ 
+     SwitchableSetting<ConfirmStop> confirm_before_stopping{linkage,
+-                                                           ConfirmStop::Ask_Always,
++                                                           ConfirmStop::Ask_Never,
+                                                            "confirmStop",
+                                                            Category::UiGeneral,
+                                                            Settings::Specialization::Default,
+                                                            true,
+                                                            true};
+ 
+-    Setting<bool> first_start{linkage, true, "firstStart", Category::Ui};
++    Setting<bool> first_start{linkage, false, "firstStart", Category::Ui};
+     Setting<bool> pause_when_in_background{linkage,
+                                            false,
+                                            "pauseWhenInBackground",
+@@ -140,7 +140,7 @@ struct Values {
+                                       true,
+                                       true};
+ 
+-    Setting<bool> check_for_updates{linkage, true, "check_for_updates", Category::UiGeneral};
++    Setting<bool> check_for_updates{linkage, false, "check_for_updates", Category::UiGeneral};
+ 
+     // Linux/MinGW may support (requires libdl support)
+     SwitchableSetting<bool> enable_gamemode{linkage,
+@@ -207,16 +207,16 @@ struct Values {
+ 
+     // Game List
+     Setting<bool> show_add_ons{linkage, true, "show_add_ons", Category::UiGameList};
+-    Setting<u32> game_icon_size{linkage, 64, "game_icon_size", Category::UiGameList};
++    Setting<u32> game_icon_size{linkage, 256, "game_icon_size", Category::UiGameList};
+     Setting<u32> folder_icon_size{linkage, 48, "folder_icon_size", Category::UiGameList};
+     Setting<u8> row_1_text_id{linkage, 3, "row_1_text_id", Category::UiGameList};
+-    Setting<u8> row_2_text_id{linkage, 2, "row_2_text_id", Category::UiGameList};
++    Setting<u8> row_2_text_id{linkage, 0, "row_2_text_id", Category::UiGameList};
+     Setting<Settings::GameListMode> game_list_mode{linkage, Settings::GameListMode::TreeView,
+                                                    "game_list_mode", Category::UiGameList};
+     Setting<bool> show_game_name{linkage, true, "show_game_name", Category::UiGameList};
+ 
+     std::atomic_bool is_game_list_reload_pending{false};
+-    Setting<bool> cache_game_list{linkage, true, "cache_game_list", Category::UiGameList};
++    Setting<bool> cache_game_list{linkage, false, "cache_game_list", Category::UiGameList};
+     Setting<bool> favorites_expanded{linkage, true, "favorites_expanded", Category::UiGameList};
+     QVector<u64> favorited_ids;
+     QMap<u64, QDir> ryujinx_link_paths;
+@@ -225,7 +225,7 @@ struct Values {
+     Setting<bool> show_perf_overlay{linkage, false, "show_perf_overlay", Category::UiGameList};
+ 
+     // Compatibility List
+-    Setting<bool> show_compat{linkage, true, "show_compat", Category::UiGameList};
++    Setting<bool> show_compat{linkage, false, "show_compat", Category::UiGameList};
+ 
+     // Size & File Types Column
+     Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index 014b4a318e..b676bf9c0c 100644
+index 014b4a318e..6111327113 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
-@@ -37,8 +37,8 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+@@ -31,23 +31,27 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+     immediately_free = (Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive);
+ #endif
+     if (!runtime.CanReportMemoryUsage()) {
+-        minimum_memory = DEFAULT_EXPECTED_MEMORY;
+-        critical_memory = DEFAULT_CRITICAL_MEMORY;
++        minimum_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100);
++        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
+         return;
      }
  
      const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
 -    const s64 min_spacing_expected = device_local_memory - 1_GiB;
 -    const s64 min_spacing_critical = device_local_memory - 512_MiB;
-+    const s64 min_spacing_expected = device_local_memory - 1_GiB - 768_MiB;
-+    const s64 min_spacing_critical = device_local_memory - 1_GiB - 512_MiB;
++    const u64 local_memory = static_cast<u64>(device_local_memory);
++    const s64 max_expected = device_local_memory - 2_GiB - 512_MiB;
++    const s64 max_critical = device_local_memory - 1_GiB - 512_MiB;
      const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
-     const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
-     const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+-    const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+-    const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+-    minimum_memory = static_cast<u64>(
+-        (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
+-                 DEFAULT_EXPECTED_MEMORY));
+-    critical_memory = static_cast<u64>(
+-        (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+-                 DEFAULT_CRITICAL_MEMORY));
++    const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100;
++    const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
++    if (local_memory > 4_GiB) {
++        minimum_memory = static_cast<u64>(max_expected);
++        critical_memory = static_cast<u64>(max_critical);
++    } else {
++        minimum_memory = static_cast<u64>(
++            (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
++        critical_memory = static_cast<u64>(
++            (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
++    }
+ }
+ 
+ template <class P>
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index 08524bd854..9d261d4b17 100644
+index 08524bd854..5e222c2821 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
 @@ -187,8 +187,8 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
@@ -431,8 +494,8 @@ index 08524bd854..9d261d4b17 100644
  
 -    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB;
 -    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB;
-+    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 256_MiB;
-+    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 512_MiB;
++    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB + 256_MiB;
++    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 512_MiB + 768_MiB;
  
      // Debug Flags.
  
@@ -451,7 +514,7 @@ index 958988f27e..88cc165215 100644
          return is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
      }
 diff --git a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
-index 024c72b38e..3191e9f588 100644
+index 930f06daf6..184b4952f7 100644
 --- a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
 +++ b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
 @@ -245,12 +245,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
@@ -473,7 +536,7 @@ index 024c72b38e..3191e9f588 100644
      }
      // Transcode on hardware that doesn't support BCn natively
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index cd8f948d8b..da548de6de 100644
+index 5d55cf551b..e1c3a4c528 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
 @@ -174,9 +174,18 @@ bool Swapchain::AcquireNextImage() {
@@ -509,64 +572,164 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..4a29cddd43 100644
+index 71210ffe6e..f123b7606c 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -70,16 +70,13 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
-             (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
-                      DEFAULT_CRITICAL_MEMORY));
-         minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
+@@ -58,25 +58,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+ 
+     if constexpr (HAS_DEVICE_MEMORY_INFO) {
+         const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-        const s64 min_spacing_expected = device_local_memory - 1_GiB;
+-        const s64 min_spacing_critical = device_local_memory - 512_MiB;
++        const u64 local_memory = static_cast<u64>(device_local_memory);
++        const s64 max_expected = device_local_memory - 2_GiB;
++        const s64 max_critical = device_local_memory - 1_GiB;
+         const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-        const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+-        const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+-        expected_memory = static_cast<u64>(
+-            (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
+-                     DEFAULT_EXPECTED_MEMORY));
+-        critical_memory = static_cast<u64>(
+-            (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+-                     DEFAULT_CRITICAL_MEMORY));
+-        minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
 -
 -        lowmemorydevice = false;
++        const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
++        const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100;
++        if (local_memory > 4_GiB) {
++            expected_memory = static_cast<u64>(max_expected);
++            critical_memory = static_cast<u64>(max_critical);
++            minimum_memory = static_cast<u64>(1_GiB);
++        } else {
++            expected_memory = static_cast<u64>(
++                (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
++            critical_memory = static_cast<u64>(
++                (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
++            minimum_memory = static_cast<u64>(device_local_memory - critical_memory);
++            lowmemorydevice = true;
++        }
      } else {
 -        expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
 -        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
-+        expected_memory = DEFAULT_EXPECTED_MEMORY;
-+        critical_memory = DEFAULT_CRITICAL_MEMORY;
-         minimum_memory = 0;
+-        minimum_memory = 0;
 -
--        lowmemorydevice = true;
++        expected_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
++        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100);
++        minimum_memory = static_cast<u64>(TARGET_THRESHOLD - critical_memory);
+         lowmemorydevice = true;
      }
  
-+    lowmemorydevice = Settings::values.aggressive_garbage_collection.GetValue();
-     const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
+@@ -118,31 +121,26 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
-     if (gpu_unswizzle_enabled) {
-@@ -138,12 +135,6 @@ void TextureCache<P>::RunGarbageCollector() {
+ template <class P>
+ void TextureCache<P>::RunGarbageCollector() {
+-    bool high_priority_mode = false;
++    bool highpriority_mode = false;
+     bool aggressive_mode = false;
+     u64 ticks_to_destroy = 0;
+     size_t num_iterations = 0;
+ 
+     const auto Configure = [&](bool allow_aggressive) {
+-        high_priority_mode = total_used_memory >= expected_memory;
++        highpriority_mode = total_used_memory >= expected_memory;
+         aggressive_mode = allow_aggressive && total_used_memory >= critical_memory;
+-        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
+-        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
++        ticks_to_destroy = aggressive_mode ? 10ULL : (highpriority_mode ? 30ULL : 60ULL);
++        num_iterations = aggressive_mode ? 60 : (highpriority_mode ? 30 : 10);
+     };
+ 
+-    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
++    const auto Cleanup = [this, &num_iterations, &highpriority_mode,
+                           &aggressive_mode](ImageId image_id) {
+         if (num_iterations == 0) {
+             return true;
+         }
          --num_iterations;
-         auto& image = slot_images[image_id];
+-        auto& image = slot_images[image_id];
  
 -        // Never delete recently allocated sparse textures (within 3 frames)
 -        const bool is_recently_allocated = image.allocation_tick >= frame_tick - 3;
 -        if (is_recently_allocated && image.info.is_sparse) {
 -            return false;
 -        }
--
++        auto& image = slot_images[image_id];
+ 
          if (True(image.flags & ImageFlagBits::IsDecoding)) {
              // This image is still being decoded, deleting it will invalidate the slot
-             // used by the async decoder thread.
-@@ -151,8 +142,7 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -150,23 +148,13 @@ void TextureCache<P>::RunGarbageCollector() {
+             return false;
          }
  
-         // Prioritize large sparse textures for cleanup
+-        // Prioritize large sparse textures for cleanup
 -        const bool is_large_sparse = lowmemorydevice &&
 -                                     image.info.is_sparse &&
-+        const bool is_large_sparse = image.info.is_sparse &&
-                                      image.guest_size_bytes >= 256_MiB;
+-                                     image.guest_size_bytes >= 256_MiB;
+-
+-        if (!aggressive_mode && !is_large_sparse &&
+-            True(image.flags & ImageFlagBits::CostlyLoad)) {
++        if (!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) {
+             return false;
+         }
  
-         if (!aggressive_mode && !is_large_sparse &&
-@@ -201,9 +191,8 @@ void TextureCache<P>::RunGarbageCollector() {
-         lru_cache.ForEachItemBelow(frame_tick, [&](ImageId image_id) {
-             auto& image = slot_images[image_id];
-             // Only target sparse textures that are old enough
-+            // Never delete recently allocated sparse textures (within 3 frames)
-             if (lowmemorydevice &&
+         const bool must_download =
+             image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
+-        if (!high_priority_mode && !is_large_sparse && must_download) {
+-            return false;
+-        }
+-
+-        if (must_download && !is_large_sparse) {
++        if (!aggressive_mode && must_download) {
+             auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
+             const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
+             image.DownloadMemory(map, copies);
+@@ -181,39 +169,17 @@ void TextureCache<P>::RunGarbageCollector() {
+         UnregisterImage(image_id);
+         DeleteImage(image_id, image.scale_tick > frame_tick + 5);
+ 
+-        if (total_used_memory < critical_memory) {
+-            if (aggressive_mode) {
+-                // Sink the aggresiveness.
++        if (aggressive_mode && total_used_memory < critical_memory) {
+                 num_iterations >>= 2;
+                 aggressive_mode = false;
+-                return false;
+-            }
+-            if (high_priority_mode && total_used_memory < expected_memory) {
++        } else if (highpriority_mode && total_used_memory < expected_memory) {
+                 num_iterations >>= 1;
+-                high_priority_mode = false;
+-            }
++                highpriority_mode = false;
+         }
+         return false;
+     };
+ 
+-    // Aggressively clear massive sparse textures
+-    if (total_used_memory >= expected_memory) {
+-        lru_cache.ForEachItemBelow(frame_tick, [&](ImageId image_id) {
+-            auto& image = slot_images[image_id];
+-            // Only target sparse textures that are old enough
+-            if (lowmemorydevice &&
 -                image.info.is_sparse &&
 -                image.guest_size_bytes >= 256_MiB &&
-                 image.allocation_tick < frame_tick - 3) {
-                 LOG_DEBUG(HW_GPU, "GC targeting old sparse texture at 0x{:X} ({} MiB, age: {} frames)",
-                          image.gpu_addr, image.guest_size_bytes / (1024 * 1024),
-@@ -1196,10 +1185,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+-                image.allocation_tick < frame_tick - 3) {
+-                LOG_DEBUG(HW_GPU, "GC targeting old sparse texture at 0x{:X} ({} MiB, age: {} frames)",
+-                         image.gpu_addr, image.guest_size_bytes / (1024 * 1024),
+-                         frame_tick - image.allocation_tick);
+-                return Cleanup(image_id);
+-            }
+-            return false;
+-        });
+-    }
+-
++    // Try to remove anything old enough and not high priority.
+     Configure(false);
+     lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
+ 
+@@ -1196,10 +1162,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -577,28 +740,15 @@ index 71210ffe6e..4a29cddd43 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1208,6 +1193,9 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
-         return;
-     }
-     if (True(image.flags & ImageFlagBits::AsynchronousDecode)) {
-+        if (lowmemorydevice) {
-+            RunGarbageCollector();
-+        }
-         QueueAsyncDecode(image, image_id);
-         return;
-     }
-@@ -1221,7 +1209,9 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1183,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
 -
-+        if (lowmemorydevice) {
-+            RunGarbageCollector();
-+        }
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1500,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1471,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -610,7 +760,7 @@ index 71210ffe6e..4a29cddd43 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1560,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1531,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -620,8 +770,36 @@ index 71210ffe6e..4a29cddd43 100644
      }
  }
  
+@@ -1667,27 +1620,6 @@ template <class P>
+ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
+     ImageInfo new_info = info;
+     const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
+-
+-    // Proactive cleanup for large sparse texture allocations
+-    if (lowmemorydevice && new_info.is_sparse && size_bytes >= 256_MiB) {
+-        const u64 estimated_alloc_size = size_bytes;
+-
+-        if (total_used_memory + estimated_alloc_size >= critical_memory) {
+-            LOG_DEBUG(HW_GPU, "Large sparse texture allocation ({} MiB) - running aggressive GC. "
+-                       "Current memory: {} MiB, Critical: {} MiB",
+-                       size_bytes / (1024 * 1024),
+-                       total_used_memory / (1024 * 1024),
+-                       critical_memory / (1024 * 1024));
+-            RunGarbageCollector();
+-
+-            // If still over threshold after GC, try one more aggressive pass
+-            if (total_used_memory + estimated_alloc_size >= critical_memory) {
+-                LOG_DEBUG(HW_GPU, "Still critically low on memory, running second GC pass");
+-                RunGarbageCollector();
+-            }
+-        }
+-    }
+-
+     const bool broken_views = runtime.HasBrokenTextureViewFormats();
+     const bool native_bgr = runtime.HasNativeBgr();
+     join_overlap_ids.clear();
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index 4b4061f21d..48c985ea0e 100644
+index 4b4061f21d..0df4761546 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
 @@ -118,8 +118,8 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
@@ -635,3 +813,11 @@ index 4b4061f21d..48c985ea0e 100644
      static constexpr size_t GC_EMERGENCY_COUNTS = 2;
  
      using Runtime = typename P::Runtime;
+@@ -538,7 +538,6 @@ private:
+     std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
+ 
+     std::deque<PendingUnswizzle> unswizzle_queue;
+-    u8 current_unswizzle_frame;
+ 
+     // Join caching
+     boost::container::small_vector<ImageId, 4> join_overlap_ids;
