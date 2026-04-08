@@ -50,13 +50,13 @@ jobs:
         run: ./.ci/macos/deps.sh
 
       - name: Configure
-        run: ./.ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH} --debug-find-pkg=OpenSSL --debug-find-pkg=WrapOpenSSLHeaders
+        run: ./.ci/common/configure.sh -DCCACHE_PATH=${SCCACHE_PATH}
 
       - name: Build
         run: cmake --build build
 
       - name: Package
-        run: ./.ci/macos/package.sh
+        run: ./.ci/macos/dmg.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
