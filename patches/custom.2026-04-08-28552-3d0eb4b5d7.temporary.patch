@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 8cd55bcdd3..5e42a97a56 100644
+index bec1e93e79..2fc8152de1 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -20,7 +20,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                        "cpu_accuracy", Category::Cpu};
      SwitchableSetting<CpuClock> fast_cpu_time{linkage,
                                                CpuClock::Off,
-@@ -317,7 +317,7 @@ struct Values {
+@@ -315,7 +315,7 @@ struct Values {
  #endif
                                          "cpuopt_unsafe_host_mmu",
                                          Category::CpuUnsafe};
@@ -29,7 +29,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                       Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_reduce_fp_error{
                                                            linkage, true, "cpuopt_unsafe_reduce_fp_error", Category::CpuUnsafe};
-@@ -328,7 +328,7 @@ struct Values {
+@@ -326,7 +326,7 @@ struct Values {
      SwitchableSetting<bool> cpuopt_unsafe_fastmem_check{
                                                          linkage, true, "cpuopt_unsafe_fastmem_check", Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_ignore_global_monitor{
@@ -38,17 +38,7 @@ index 8cd55bcdd3..5e42a97a56 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -342,6 +342,9 @@ struct Values {
- 
-     // Graphics Settings
-     ResolutionScalingInfo resolution_info{};
-+    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
-+                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
-+
-     SwitchableSetting<ResolutionSetup> resolution_setup{linkage, ResolutionSetup::Res1X,
-                                                         "resolution_setup", Category::Renderer};
- 
-@@ -354,7 +357,7 @@ struct Values {
+@@ -352,7 +352,7 @@ struct Values {
                                                    true};
  
      SwitchableSetting<ScalingFilter> scaling_filter{linkage,
@@ -57,7 +47,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                      "scaling_filter",
                                                      Category::Renderer,
                                                      Specialization::Default,
-@@ -390,8 +393,6 @@ struct Values {
+@@ -392,8 +392,6 @@ struct Values {
                                                                       SpirvOptimizeMode::Never,
                                                                       "optimize_spirv_output",
                                                                       Category::Renderer};
@@ -66,7 +56,7 @@ index 8cd55bcdd3..5e42a97a56 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -417,7 +418,7 @@ struct Values {
+@@ -419,7 +417,7 @@ struct Values {
  #ifdef ANDROID
                                                        GpuAccuracy::Low,
  #else
@@ -75,7 +65,7 @@ index 8cd55bcdd3..5e42a97a56 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -428,7 +429,7 @@ struct Values {
+@@ -430,7 +428,7 @@ struct Values {
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::Medium};
  
      SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
@@ -84,7 +74,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -440,14 +441,14 @@ struct Values {
+@@ -442,24 +440,29 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
@@ -101,13 +91,9 @@ index 8cd55bcdd3..5e42a97a56 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -455,13 +456,18 @@ struct Values {
- #ifdef ANDROID
-                                                             AstcDecodeMode::Cpu,
- #else
+     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
 -                                                            AstcDecodeMode::Gpu,
 +                                                            AstcDecodeMode::Cpu,
- #endif
                                                              "accelerate_astc",
                                                              Category::RendererAdvanced};
  
@@ -122,7 +108,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -470,28 +476,22 @@ struct Values {
+@@ -468,28 +471,22 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -155,7 +141,7 @@ index 8cd55bcdd3..5e42a97a56 100644
          Specialization::Default};
  
      SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -513,7 +513,7 @@ struct Values {
+@@ -511,7 +508,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
@@ -164,7 +150,7 @@ index 8cd55bcdd3..5e42a97a56 100644
                                                    "enable_buffer_history",
                                                    Category::RendererAdvanced,
                                                    Specialization::Default,
-@@ -531,14 +531,6 @@ struct Values {
+@@ -529,14 +526,6 @@ struct Values {
  #endif
  
      // Renderer Hacks //
@@ -179,7 +165,7 @@ index 8cd55bcdd3..5e42a97a56 100644
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -546,6 +538,13 @@ struct Values {
+@@ -544,6 +533,16 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -190,10 +176,13 @@ index 8cd55bcdd3..5e42a97a56 100644
 +    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
 +                                                     Category::RendererHacks};
 +
++    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
++                                                           linkage, false, "use_asynchronous_gpu_emulation", Category::RendererHacks};
++
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -554,41 +553,43 @@ struct Values {
+@@ -552,35 +551,37 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -241,7 +230,9 @@ index 8cd55bcdd3..5e42a97a56 100644
 +                                                        true};
  
      SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
- #if defined (ANDROID) || defined (__APPLE__)
+ #if defined(ANDROID)
+@@ -588,7 +589,7 @@ struct Values {
+ #elif defined(__APPLE__)
                                             ExtendedDynamicState::Disabled,
  #else
 -                                           ExtendedDynamicState::EDS2,
@@ -249,7 +240,7 @@ index 8cd55bcdd3..5e42a97a56 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -633,13 +634,15 @@ struct Values {
+@@ -631,13 +632,15 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -268,7 +259,7 @@ index 8cd55bcdd3..5e42a97a56 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -659,8 +662,6 @@ struct Values {
+@@ -657,8 +660,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -277,7 +268,7 @@ index 8cd55bcdd3..5e42a97a56 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -668,7 +669,7 @@ struct Values {
+@@ -666,7 +667,7 @@ struct Values {
  #ifdef ANDROID
                                                     ConsoleMode::Handheld,
  #else
@@ -499,6 +490,19 @@ index 08524bd854..5e222c2821 100644
  
      // Debug Flags.
  
+diff --git a/src/video_core/host1x/ffmpeg/ffmpeg.cpp b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+index 486fd9365c..88a064d509 100644
+--- a/src/video_core/host1x/ffmpeg/ffmpeg.cpp
++++ b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+@@ -32,7 +32,7 @@ constexpr std::array PreferredGpuDecoders = {
+     AV_HWDEVICE_TYPE_CUDA,
+     AV_HWDEVICE_TYPE_D3D11VA,
+     AV_HWDEVICE_TYPE_DXVA2,
+-    AV_HWDEVICE_TYPE_D3D12VA,
++//    AV_HWDEVICE_TYPE_D3D12VA,
+ #elif defined(__FreeBSD__)
+     AV_HWDEVICE_TYPE_VDPAU,
+ #elif defined(__APPLE__)
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 958988f27e..88cc165215 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
@@ -535,11 +539,79 @@ index 930f06daf6..184b4952f7 100644
          }
      }
      // Transcode on hardware that doesn't support BCn natively
+diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+index 8518d89eee..acf3aacd37 100644
+--- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+@@ -859,18 +859,17 @@ private:
+             return;
+         }
+         has_flushed_end_pending = true;
+-        // Refresh buffers state before beginning transform feedback so counters are up-to-date
+-        UpdateBuffers();
+         if (!has_started || buffers_count == 0) {
+-            // No counter buffers available: begin without counters
+             scheduler.Record([](vk::CommandBuffer cmdbuf) {
+                 cmdbuf.BeginTransformFeedbackEXT(0, 0, nullptr, nullptr);
+             });
++            UpdateBuffers();
+             return;
+         }
+         scheduler.Record([this, total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
+             cmdbuf.BeginTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
+         });
++        UpdateBuffers();
+     }
+ 
+     void FlushEndTFB() {
+@@ -899,7 +898,6 @@ private:
+     void UpdateBuffers() {
+         last_queries.fill(0);
+         last_queries_stride.fill(1);
+-        streams_mask = 0; // reset previously recorded streams
+         runtime.View3DRegs([this](Maxwell3D& maxwell3d) {
+             buffers_count = 0;
+             out_topology = maxwell3d.draw_manager->GetDrawState().topology;
+@@ -909,10 +907,6 @@ private:
+                     continue;
+                 }
+                 const size_t stream = tf.controls[i].stream;
+-                if (stream >= last_queries_stride.size()) {
+-                    LOG_WARNING(Render_Vulkan, "TransformFeedback stream {} out of range", stream);
+-                    continue;
+-                }
+                 last_queries_stride[stream] = tf.controls[i].stride;
+                 streams_mask |= 1ULL << stream;
+                 buffers_count = std::max<size_t>(buffers_count, stream + 1);
+@@ -1113,21 +1107,16 @@ public:
+ 
+             query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
+             u64 num_vertices = 0;
+-            // Protect against stride == 0 (avoid divide-by-zero). Use fallback stride=1 and warn.
+-            u64 safe_stride = query->stride == 0 ? 1 : query->stride;
+-            if (query->stride == 0) {
+-                LOG_WARNING(Render_Vulkan, "TransformFeedback query has stride 0; using 1 to avoid div-by-zero (addr=0x{:x})", query->dependant_address);
+-            }
+             if (query->dependant_manage) {
+                 auto* dependant_query = tfb_streamer.GetQuery(query->dependant_index);
+-                num_vertices = dependant_query->value / safe_stride;
++                num_vertices = dependant_query->value / query->stride;
+                 tfb_streamer.Free(query->dependant_index);
+             } else {
+                 u8* pointer = device_memory.GetPointer<u8>(query->dependant_address);
+                 if (pointer != nullptr) {
+                     u32 result;
+                     std::memcpy(&result, pointer, sizeof(u32));
+-                    num_vertices = static_cast<u64>(result) / safe_stride;
++                    num_vertices = static_cast<u64>(result) / query->stride;
+                 }
+             }
+             query->value = [&]() -> u64 {
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 5d55cf551b..e1c3a4c528 100644
+index 0e4c274d94..e6fda7fe3c 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-@@ -174,9 +174,18 @@ bool Swapchain::AcquireNextImage() {
+@@ -179,9 +179,18 @@ bool Swapchain::AcquireNextImage() {
      case Settings::FramePacingMode::Target_Auto:
          scheduler.Wait(resource_ticks[image_index]);
          break;
@@ -572,7 +644,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 71210ffe6e..f123b7606c 100644
+index efae825885..8decea206d 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -58,25 +58,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
