@@ -41,9 +41,9 @@ fi
 
 # annoying
 if [ "$DEVEL" = "true" ]; then
-	UPDATES=OFF
+	UPDATES="${UPDATES:-OFF}"
 else
-	UPDATES=ON
+	UPDATES="${UPDATES:-ON}"
 fi
 
 if [ "$BUILD_ID" = nightly ]; then
@@ -53,7 +53,7 @@ fi
 # platform handling
 . "$ROOTDIR/.ci/common/platform.sh"
 
-# sdl/arch handling (targets)
+# SDL/arch handling (targets)
 . "$ROOTDIR/.ci/common/targets.sh"
 
 # compiler handling
@@ -81,7 +81,7 @@ COMMON_FLAGS=(
 	# LTO
 	-DENABLE_LTO="${LTO:-ON}"
 
-	# many distros do not package sirit, so let's bundle it anyways
+	# Many distros do not package sirit, so let's bundle it anyways
 	-DYUZU_USE_BUNDLED_SIRIT="${SIRIT:-ON}"
 
 	# Bundled stuff (only if not building for a pkg)

@@ -56,6 +56,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			PACKAGE=true
 			FFMPEG=OFF
 			OPENSSL=OFF
+			UPDATES=ON
 
 			;;
 		package-aarch64)
@@ -65,6 +66,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			PACKAGE=true
 			FFMPEG=OFF
 			OPENSSL=OFF
+			UPDATES=ON
 
 			# apparently gcc-arm64 on ubuntu dislikes lto
 			LTO=OFF
@@ -116,3 +118,4 @@ export OPENSSL
 export FFMPEG
 export LTO
 export CCACHE
+export UPDATES

@@ -20,7 +20,7 @@ export DESKTOP="$ROOTDIR/dist/dev.eden_emu.eden.desktop"
 export OPTIMIZE_LAUNCH=1
 export DEPLOY_OPENGL=1
 export DEPLOY_VULKAN=1
-export ADD_HOOKS="wayland-is-broken.src.hook"
+export ADD_HOOKS="wayland-is-broken.src.hook:self-updater.bg.hook"
 export OUTPATH="$ARTIFACTS_DIR"
 export OUTNAME="${PROJECT_PRETTYNAME}-Linux-${ARTIFACT_REF}-${FULL_ARCH}.AppImage"
 
