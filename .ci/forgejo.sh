@@ -206,10 +206,12 @@ parse_payload() {
 
 		# if last nightly was the same ref as this one, exit early
 		# TODO(crueter): gh/fj handling
-		_last_sha=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
+		FORGEJO_BEFORE=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
 
-		if [ "$_last_sha" = "$_ref" ]; then
-			echo "current ref $_ref is same as last nightly $_last_sha, skipping"
+		export FORGEJO_BEFORE
+
+		if [ "$FORGEJO_BEFORE" = "$_ref" ]; then
+			echo "current ref $_ref is same as last nightly $FORGEJO_BEFORE, skipping"
 			exit 1
 		fi
 
@@ -322,7 +324,7 @@ clone_repository() {
 		{
 			echo "## Changelog"
 			echo
-			git log "$_last_sha..$FORGEJO_REF" --pretty="$_format" | sed -E "s|$_find|$_replace|"
+			git log "$FORGEJO_BEFORE..$FORGEJO_REF" --pretty="$_format" | sed -E "s|$_find|$_replace|"
 			echo
 		} > "$ROOTDIR"/nightly-changelog.md
 	fi
