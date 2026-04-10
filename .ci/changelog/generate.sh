@@ -38,7 +38,7 @@ tag)
 	DEVEL=false
 	;;
 nightly)
-	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/commits/$FORGEJO_LONGSHA)."
+	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/compare/$FORGEJO_BEFORE..$FORGEJO_LONGSHA)."
 	echo
 	cat nightly-changelog.md
 	DEVEL=false
