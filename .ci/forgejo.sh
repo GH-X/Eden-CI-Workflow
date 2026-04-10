@@ -138,7 +138,6 @@ parse_payload() {
 		FORGEJO_BRANCH=master
 
 		FORGEJO_BEFORE=$(jq -r '.before' $PAYLOAD_JSON)
-		echo "FORGEJO_BEFORE=$FORGEJO_BEFORE" >>"$FORGEJO_LENV"
 
 		_host="$MASTER_FJ_HOST"
 		_repo="$MASTER_FJ_REPO"
@@ -208,8 +207,6 @@ parse_payload() {
 		# TODO(crueter): gh/fj handling
 		FORGEJO_BEFORE=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
 
-		export FORGEJO_BEFORE
-
 		if [ "$FORGEJO_BEFORE" = "$_ref" ]; then
 			echo "current ref $_ref is same as last nightly $FORGEJO_BEFORE, skipping"
 			exit 1
@@ -246,6 +243,7 @@ parse_payload() {
 		echo "FORGEJO_REF=$FORGEJO_REF"
 		echo "FORGEJO_BRANCH=$FORGEJO_BRANCH"
 		echo "FORGEJO_CLONE_URL=$FORGEJO_CLONE_URL"
+		echo "FORGEJO_BEFORE=$FORGEJO_BEFORE"
 
 		echo "RELEASE_HOST=$_host"
 		echo "RELEASE_REPO=$_repo"
