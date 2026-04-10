@@ -39,6 +39,8 @@ tag)
 	;;
 nightly)
 	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/commits/$FORGEJO_LONGSHA)."
+	echo
+	cat nightly-changelog.md
 	DEVEL=false
 	;;
 push | test)

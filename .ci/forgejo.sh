@@ -311,6 +311,22 @@ clone_repository() {
 	FORGEJO_PR_MERGE_BASE=$(git merge-base master HEAD | cut -c1-10)
 	FORGEJO_LONGSHA=$(git rev-parse "$FORGEJO_REF")
 
+	if [ "$1" = "nightly" ]; then
+		# construct changelog
+		# shellcheck disable=SC2016
+		_url="https://$FORGEJO_HOST/$FORGEJO_REPO"
+		_format="- %s [\`%h\`]($_url/commit/%H)%n  - Committed on %as by %an %(trailers:key=Reviewed-on,valueonly=true,separator=)"
+		_find="Committed on (.+) by (.+) .+/pulls/([0-9]+)"
+		_replace="PR #[\3](https://git.eden-emu.dev/eden-emu/eden/pulls/\3) merged on \1 by \2"
+
+		{
+			echo "## Changelog"
+			echo
+			git log "$_last_sha..$FORGEJO_REF" --pretty="$_format" | sed -E "s|$_find|$_replace|"
+			echo
+		} > "$ROOTDIR"/nightly-changelog.md
+	fi
+
 	cd ..
 
 	# slight hack: also add the merge base

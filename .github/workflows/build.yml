@@ -93,6 +93,14 @@ jobs:
             eden/*
             eden/.patch
 
+      - name: Upload nightly changelog
+        if: ${{ inputs.build-id == 'nightly' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: nightly-changelog.md
+          name: nightly-changelog.md
+          archive: false
+
   source:
     if: ${{ inputs.build-id == 'pull_request' }}
     name: "Source Pack"
