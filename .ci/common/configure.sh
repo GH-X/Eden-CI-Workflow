@@ -39,6 +39,11 @@ fi
 
 . "$ROOTDIR/.ci/common/project.sh"
 
+# Disable update checker on linux appimage
+if [ "$PLATFORM" = "linux" ]; then
+	UPDATES="${UPDATES:-OFF}"
+fi
+
 # annoying
 if [ "$DEVEL" = "true" ]; then
 	UPDATES="${UPDATES:-OFF}"
