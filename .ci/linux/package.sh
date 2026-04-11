@@ -36,7 +36,7 @@ _zsync="${PROJECT_PRETTYNAME}-Linux-${FULL_ARCH}.AppImage.zsync"
 UPINFO="zsync|https://${RELEASE_HOST}/${RELEASE_REPO}/releases/download/latest/${_zsync}"
 
 # shellcheck disable=SC2153
-if [ "$BUILD_ID" != 'nightly' ]; then
+if [ "$BUILD_ID" = 'nightly' ]; then
 	sed -i "s|Name=${PROJECT_PRETTYNAME}|Name=${PROJECT_PRETTYNAME} Nightly|" "$DESKTOP"
 fi
 
