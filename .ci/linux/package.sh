@@ -21,9 +21,9 @@ export OPTIMIZE_LAUNCH=1
 export DEPLOY_OPENGL=1
 export DEPLOY_VULKAN=1
 
-ADD_HOOKS="wayland-is-broken.src.hook"
+ADD_HOOKS="wayland-is-broken.hook"
 if [ "$DEVEL" != "true" ]; then
-	ADD_HOOKS="$ADD_HOOKS:self-updater.bg.hook"
+	ADD_HOOKS="$ADD_HOOKS:self-updater.hook"
 fi
 
 export ADD_HOOKS
