@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..2fc8152de1 100644
+index bec1e93e79..2b9268b5e1 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -108,7 +108,7 @@ index bec1e93e79..2fc8152de1 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -468,28 +471,22 @@ struct Values {
+@@ -468,24 +471,18 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -136,11 +136,6 @@ index bec1e93e79..2fc8152de1 100644
                                                    Category::RendererAdvanced};
  
      SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
--        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
-+        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
-         Specialization::Default};
- 
-     SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
 @@ -511,7 +508,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
@@ -165,7 +160,7 @@ index bec1e93e79..2fc8152de1 100644
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -544,6 +533,16 @@ struct Values {
+@@ -544,43 +533,55 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -177,12 +172,14 @@ index bec1e93e79..2fc8152de1 100644
 +                                                     Category::RendererHacks};
 +
 +    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
-+                                                           linkage, false, "use_asynchronous_gpu_emulation", Category::RendererHacks};
++                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::RendererHacks};
 +
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -552,35 +551,37 @@ struct Values {
+ #else
+-                                               false,
++                                               true,
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -190,14 +187,14 @@ index bec1e93e79..2fc8152de1 100644
 -                                                     Category::RendererHacks};
 -
 -    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
--                                                     Category::RendererHacks};
--
-     SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
++    SwitchableSetting<bool> use_asynchronous_shaders{linkage, true, "use_asynchronous_shaders",
                                                       Category::RendererHacks};
  
+-    SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
+-                                                     Category::RendererHacks};
 +    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 +                                                  Category::RendererHacks};
-+
+ 
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
 -                                                  GpuUnswizzleSize::Large,
 +                                                  GpuUnswizzleSize::Normal,
