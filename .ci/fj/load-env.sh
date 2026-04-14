@@ -15,12 +15,6 @@ if [ "$CI" = "true" ]; then
     while IFS= read -r line; do
         echo "$line" >> "$GITHUB_ENV"
     done <"$FORGEJO_LENV"
-else
-    if [ "$(basename -- "$0")" = "load-env.sh" ]; then
-        echo "This script must be called with 'source' or '.' so the variables are exported to the current shell."
-        echo "Example: . .ci/fj/load-env.sh"
-        exit 1
-    fi
 fi
 
 while IFS= read -r line || [ -n "$line" ]; do
