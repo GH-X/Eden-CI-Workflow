@@ -136,7 +136,7 @@ win_matrix() {
 	win_field "Standard" "amd64-msvc-standard" "mingw-arm64-clang-standard"
 
 	if tagged; then
-		win_field "PGO" "mingw-amd64-clang-pgo" "mingw-arm64-clang-pgo"
+		win_field "PGO" "mingw-amd64-clang-pgo" "mingw-arm64-clang-pgo" "Recommended"
 	fi
 }
 
@@ -170,8 +170,8 @@ if opts && tagged; then
 		[zsync](https://zsync.moria.org.uk/) files are provided for easier updating, such as via
 		[AM](https://github.com/ivan-hc/AM).
 
-		| Build Type | Standard | PGO | Notes |
-		|------------|----------|-----|-------|
+		| Build Type | Standard | PGO (Recommended) | Notes |
+		|------------|----------|-----------|-------|
 	EOF
 else
 	cat <<-EOF
@@ -201,7 +201,6 @@ cat <<EOF
 ## Windows
 
 Windows packages are in-place zip files. Setup files are soon to come.
-PGO is recommended if available.
 
 | Build | AMD | ARM | Notes |
 |-------|-----|-----|-------|
