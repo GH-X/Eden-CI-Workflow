@@ -1,5 +1,5 @@
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..2b9268b5e1 100644
+index bec1e93e79..a1347293b0 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -74,15 +74,7 @@ index bec1e93e79..2b9268b5e1 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -442,24 +440,29 @@ struct Values {
-                                                            "vram_usage_mode",
-                                                            Category::RendererAdvanced};
- 
--    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
-+    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
-                                                       "nvdec_emulation", Category::RendererAdvanced};
- 
-     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
+@@ -449,7 +447,7 @@ struct Values {
  #ifdef ANDROID
                                                             AnisotropyMode::Default,
  #else
@@ -91,9 +83,7 @@ index bec1e93e79..2b9268b5e1 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
--                                                            AstcDecodeMode::Gpu,
-+                                                            AstcDecodeMode::Cpu,
+@@ -458,8 +456,13 @@ struct Values {
                                                              "accelerate_astc",
                                                              Category::RendererAdvanced};
  
