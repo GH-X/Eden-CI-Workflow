@@ -20,16 +20,23 @@ export DESKTOP="$ROOTDIR/dist/dev.eden_emu.eden.desktop"
 export OPTIMIZE_LAUNCH=1
 export DEPLOY_OPENGL=1
 export DEPLOY_VULKAN=1
-export ADD_HOOKS="wayland-is-broken.src.hook"
+
+ADD_HOOKS="wayland-is-broken.hook"
+if [ "$DEVEL" != "true" ]; then
+	ADD_HOOKS="$ADD_HOOKS:self-updater.hook"
+fi
+
+export ADD_HOOKS
 export OUTPATH="$ARTIFACTS_DIR"
 export OUTNAME="${PROJECT_PRETTYNAME}-Linux-${ARTIFACT_REF}-${FULL_ARCH}.AppImage"
 
 _zsync="${PROJECT_PRETTYNAME}-Linux-${FULL_ARCH}.AppImage.zsync"
 
 # Thanks, Microsoft.
-UPINFO="zsync|https://${FORGEJO_HOST}/${FORGEJO_REPO}/releases/download/latest/${_zsync}"
+UPINFO="zsync|https://${RELEASE_HOST}/${RELEASE_REPO}/releases/download/latest/${_zsync}"
 
-if [ "$DEVEL" = 'true' ]; then
+# shellcheck disable=SC2153
+if [ "$BUILD_ID" = 'nightly' ]; then
 	sed -i "s|Name=${PROJECT_PRETTYNAME}|Name=${PROJECT_PRETTYNAME} Nightly|" "$DESKTOP"
 fi
 
