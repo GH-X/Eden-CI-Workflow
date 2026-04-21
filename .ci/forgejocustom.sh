@@ -142,7 +142,6 @@ parse_payload() {
 		FORGEJO_BRANCH=master
 
 		FORGEJO_BEFORE=$(jq -r '.before' $PAYLOAD_JSON)
-		echo "FORGEJO_BEFORE=$FORGEJO_BEFORE" >>"$FORGEJO_LENV"
 
 		_host="$MASTER_FJ_HOST"
 		_repo="$MASTER_FJ_REPO"
@@ -210,10 +209,10 @@ parse_payload() {
 
 		# if last nightly was the same ref as this one, exit early
 		# TODO(crueter): gh/fj handling
-		_last_sha=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
+		FORGEJO_BEFORE=$(curl "https://$_host/api/v1/repos/$_repo/releases/latest" | jq -r '.tag_name' | cut -d'.' -f2)
 
-		if [ "$_last_sha" = "$_ref" ]; then
-			echo "current ref $_ref is same as last nightly $_last_sha, skipping"
+		if [ "$FORGEJO_BEFORE" = "$_ref" ]; then
+			echo "current ref $_ref is same as last nightly $FORGEJO_BEFORE, skipping"
 			exit 1
 		fi
 
@@ -268,6 +267,7 @@ parse_payload() {
 		echo "FORGEJO_REF=$FORGEJO_REF"
 		echo "FORGEJO_BRANCH=$FORGEJO_BRANCH"
 		echo "FORGEJO_CLONE_URL=$FORGEJO_CLONE_URL"
+		echo "FORGEJO_BEFORE=$FORGEJO_BEFORE"
 
 		echo "RELEASE_HOST=$_host"
 		echo "RELEASE_REPO=$_repo"
@@ -344,6 +344,22 @@ clone_repository() {
 
 	FORGEJO_PR_MERGE_BASE=$(git merge-base master HEAD | cut -c1-10)
 	FORGEJO_LONGSHA=$(git rev-parse "$FORGEJO_REF")
+
+	if [ "$1" = "nightly" ]; then
+		# construct changelog
+		# shellcheck disable=SC2016
+		_url="https://$FORGEJO_HOST/$FORGEJO_REPO"
+		_format="- %s [\`%h\`]($_url/commit/%H)%n  - Committed on %as by %an %(trailers:key=Reviewed-on,valueonly=true,separator=)"
+		_find="Committed on (.+) by (.+) .+/pulls/([0-9]+)"
+		_replace="PR #[\3](https://git.eden-emu.dev/eden-emu/eden/pulls/\3) merged on \1 by \2"
+
+		{
+			echo "## Changelog"
+			echo
+			git log "$FORGEJO_BEFORE..$FORGEJO_REF" --pretty="$_format" | sed -E "s|$_find|$_replace|"
+			echo
+		} > "$ROOTDIR"/nightly-changelog.md
+	fi
 
 	cd ..
 
