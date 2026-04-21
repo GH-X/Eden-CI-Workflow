@@ -3,6 +3,8 @@
 # SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# required because VM on frebsd actions is outdated as shit
+pkg update
 pkg install -y \
   devel/cmake \
   devel/sdl20 \
