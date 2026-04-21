@@ -1,3 +1,27 @@
+diff --git a/cpmfile.json b/cpmfile.json
+index 1bb29afae4..d8a6cfc348 100644
+--- a/cpmfile.json
++++ b/cpmfile.json
+@@ -87,6 +87,7 @@
+         "bundled": true
+     },
+     "llvm-mingw": {
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/master/cpmfile/clang-rt-builtins.tar.zst",
+         "repo": "eden-emu/llvm-mingw",
+         "git_host": "git.eden-emu.dev",
+         "tag": "%VERSION%",
+diff --git a/externals/cpmfile.json b/externals/cpmfile.json
+index b8472774ae..4767b6c82a 100644
+--- a/externals/cpmfile.json
++++ b/externals/cpmfile.json
+@@ -235,6 +235,7 @@
+         "min_version": "4.1"
+     },
+     "tzdb": {
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/master/cpmfile/230326.tar.gz",
+         "package": "nx_tzdb",
+         "repo": "eden-emu/tzdb_to_nx",
+         "git_host": "git.eden-emu.dev",
 diff --git a/src/common/settings.h b/src/common/settings.h
 index ca61ac906e..373a116500 100644
 --- a/src/common/settings.h

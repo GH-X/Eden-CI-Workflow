@@ -6,9 +6,13 @@ on:
       - 'patches/**'
   workflow_dispatch:
     inputs:
+      giturl:
+        description: 'Specify Clone URL'
+        required: true
+        default: 'https://github.com/eden-emulator/mirror.git'
       commit:
-        description: 'Specify commit (e.g. 311c71146d)'
-        required: false
+        description: 'Specify commit (e.g. 3a823de605)'
+        required: true
         default: 'default'
 
 env:
@@ -25,6 +29,7 @@ jobs:
     with:
       devel: true
       build-id: 'pushed'
+      clone-giturl: 'https://github.com/eden-emulator/mirror.git'
       build-commit: ${{ github.event.head_commit.message }}
     secrets: inherit
 
@@ -38,5 +43,6 @@ jobs:
     with:
       devel: true
       build-id: 'manual'
+      clone-giturl: ${{ github.event.inputs.giturl }}
       build-commit: ${{ github.event.inputs.commit }}
     secrets: inherit

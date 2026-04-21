@@ -11,10 +11,14 @@ on:
         description: 'Development mode (disables update checker)'
         type: string
         required: true
+      clone-giturl:
+        description: 'Specify Clone URL'
+        type: string
+        required: true
       build-commit:
         description: 'Specify commit'
         type: string
-        default: 'default'
+        required: true
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
@@ -46,7 +50,7 @@ jobs:
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           jq . payload.json
           commit=$(echo "${{ inputs.build-commit }}" | awk -F- '{print $NF}' | grep -E "^([A-Za-z0-9]{10,40})$")
-          ./.ci/forgejocustom.sh --parse ${{ inputs.build-id }} $commit
+          ./.ci/forgejocustom.sh --parse ${{ inputs.build-id }} ${{ inputs.clone-giturl }} $commit
 
       - name: Load payload environment
         shell: bash

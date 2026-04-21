@@ -98,15 +98,19 @@ parse_payload() {
 			FALLBACK_IDX=0
 			;;
 	esac
+
 	if [ -z "$FORGEJO_HOST" ]; then
 		FORGEJO_HOST=$(jq -r ".[$FALLBACK_IDX].host" "$DEFAULT_JSON")
 	fi
+	[ "$2" != "" ] && FORGEJO_HOST=$(echo "$2" | awk -F\/ '{print $3}')
 
 	if [ -z "$FORGEJO_REPO" ]; then
 		FORGEJO_REPO=$(jq -r ".[$FALLBACK_IDX].repository" "$DEFAULT_JSON")
 	fi
+	[ "$2" != "" ] && FORGEJO_REPO=$(echo "$2" | awk -F\/ '{print $4"/"$5}' | awk -F\. '{print $1}')
 
 	[ -z "$FORGEJO_CLONE_URL" ] && FORGEJO_CLONE_URL="https://$FORGEJO_HOST/$FORGEJO_REPO.git"
+	[ "$2" != "" ] && FORGEJO_CLONE_URL="$2"
 
 	TRIES=0
 	TIMEOUT=5
@@ -233,8 +237,11 @@ parse_payload() {
 		;;
 	pushed | manual)
 		[ "$FORGEJO_BRANCH" != "" ] || FORGEJO_BRANCH=$(jq -r ".[$FALLBACK_IDX].branch" "$DEFAULT_JSON")
-		FORGEJO_REF=$("$ROOTDIR/.ci/common/field.py" field="sha")
-		[ "$2" != "" ] && FORGEJO_REF="$2"
+		if [ "$3" != "" ]; then
+			FORGEJO_REF="$3"
+		else
+			FORGEJO_REF=$("$ROOTDIR/.ci/common/field.py" field="sha")
+		fi
 
 		_host="$MASTER_FJ_HOST"
 		_repo="$MASTER_FJ_REPO"
@@ -355,7 +362,7 @@ clone_repository() {
 
 case "$1" in
 --parse)
-	parse_payload "$2" "$3"
+	parse_payload "$2" "$3" "$4"
 	;;
 --clone)
 	clone_repository "$2"
