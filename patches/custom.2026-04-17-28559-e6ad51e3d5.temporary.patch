@@ -452,27 +452,23 @@ index 4549a36345..dd2c0dd47a 100644
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index 014b4a318e..1aa878b2f4 100644
+index 014b4a318e..8e3c16ecb2 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
-@@ -31,23 +31,27 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+@@ -30,24 +30,6 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+ #ifdef YUZU_LEGACY
      immediately_free = (Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive);
  #endif
-     if (!runtime.CanReportMemoryUsage()) {
+-    if (!runtime.CanReportMemoryUsage()) {
 -        minimum_memory = DEFAULT_EXPECTED_MEMORY;
 -        critical_memory = DEFAULT_CRITICAL_MEMORY;
-+        minimum_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100);
-+        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
-         return;
-     }
- 
-     const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-        return;
+-    }
+-
+-    const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
 -    const s64 min_spacing_expected = device_local_memory - 1_GiB;
 -    const s64 min_spacing_critical = device_local_memory - 512_MiB;
-+    const u64 local_memory = static_cast<u64>(device_local_memory);
-+    const s64 max_expected = device_local_memory - 2_GiB - 512_MiB;
-+    const s64 max_critical = device_local_memory - 1_GiB - 512_MiB;
-     const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-    const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
 -    const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
 -    const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
 -    minimum_memory = static_cast<u64>(
@@ -481,21 +477,10 @@ index 014b4a318e..1aa878b2f4 100644
 -    critical_memory = static_cast<u64>(
 -        (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
 -                 DEFAULT_CRITICAL_MEMORY));
-+    const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100;
-+    const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
-+    if (local_memory > 4_GiB) {
-+        minimum_memory = static_cast<u64>(max_expected);
-+        critical_memory = static_cast<u64>(max_critical);
-+    } else {
-+        minimum_memory = static_cast<u64>(
-+            (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
-+        critical_memory = static_cast<u64>(
-+            (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
-+    }
  }
  
  template <class P>
-@@ -55,11 +59,20 @@ BufferCache<P>::~BufferCache() = default;
+@@ -55,11 +37,22 @@ BufferCache<P>::~BufferCache() = default;
  
  template <class P>
  void BufferCache<P>::RunGarbageCollector() {
@@ -504,60 +489,84 @@ index 014b4a318e..1aa878b2f4 100644
 -    int num_iterations = aggressive_gc ? 64 : 32;
 -    const auto clean_up = [this, &num_iterations](BufferId buffer_id) {
 -        if (num_iterations == 0) {
-+    if (total_used_memory >= Last_total_used_memory) {
++    if (total_used_memory > Last_total_used_memory) {
 +        --ticks_to_reserve;
-+    } else {
-+        ++ticks_to_reserve;
 +    }
-+    if (ticks_to_reserve < 10ULL) {
-+        ticks_to_reserve = 10ULL;
++    if (ticks_to_reserve < 1ULL) {
++        ticks_to_reserve = 1ULL;
 +    }
 +
 +    const u64 ticks_to_destroy = frame_tick - ticks_to_reserve;
++    const u64 ticks_to_cleanup = ticks_to_destroy - ticks_deleted;
++    if (ticks_to_destroy <= 0ULL || ticks_to_cleanup <= 0ULL) {
++        return;
++    }
 +
-+    const auto clean_up = [this, &ticks_to_destroy](BufferId buffer_id) {
-+        u64 num_iterations = ticks_to_destroy;
++    const auto clean_up = [this, &ticks_to_cleanup](BufferId buffer_id) {
++        u64 num_iterations = ticks_to_cleanup;
 +        if (num_iterations == 0ULL) {
              return true;
          }
          --num_iterations;
-@@ -68,7 +81,11 @@ void BufferCache<P>::RunGarbageCollector() {
+@@ -68,7 +61,13 @@ void BufferCache<P>::RunGarbageCollector() {
          DeleteBuffer(buffer_id);
          return false;
      };
 -    lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, clean_up);
 +
-+    if (ticks_to_destroy > 0ULL) {
-+        lru_cache.ForEachItemBelow(ticks_to_destroy, clean_up);
++    lru_cache.ForEachItemBelow(ticks_to_destroy, clean_up);
++    ticks_deleted += ticks_to_cleanup;
++    if (frame_tick - ticks_deleted < 20ULL) {
++        ++ticks_to_reserve;
 +    }
 +    Last_total_used_memory = total_used_memory;
  }
  
  template <class P>
+@@ -100,9 +99,7 @@ void BufferCache<P>::TickFrame() {
+     if (runtime.CanReportMemoryUsage()) {
+         total_used_memory = runtime.GetDeviceMemoryUsage();
+     }
+-    if (total_used_memory >= minimum_memory) {
+-        RunGarbageCollector();
+-    }
++    RunGarbageCollector();
+     ++frame_tick;
+     delayed_destruction_ring.Tick();
+ 
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index 08524bd854..a1cd6ed2bf 100644
+index 08524bd854..4102536ccc 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
-@@ -187,8 +187,8 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
-     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
- #endif
+@@ -181,15 +181,6 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
+     static constexpr bool SEPARATE_IMAGE_BUFFERS_BINDINGS = P::SEPARATE_IMAGE_BUFFER_BINDINGS;
+     static constexpr bool USE_MEMORY_MAPS_FOR_UPLOADS = P::USE_MEMORY_MAPS_FOR_UPLOADS;
  
+-#ifdef YUZU_LEGACY
+-    static constexpr s64 TARGET_THRESHOLD = 3_GiB;
+-#else
+-    static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+-#endif
+-
 -    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB;
 -    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB;
-+    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB + 256_MiB;
-+    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 512_MiB + 768_MiB;
- 
+-
      // Debug Flags.
  
-@@ -512,6 +512,8 @@ private:
+     static constexpr bool DISABLE_DOWNLOADS = true;
+@@ -512,9 +503,10 @@ private:
      };
      Common::LeastRecentlyUsedCache<LRUItemParams> lru_cache;
      u64 frame_tick = 0;
++    u64 ticks_deleted = 0ULL;
 +    u64 ticks_to_reserve = 40ULL;
 +    u64 Last_total_used_memory = 0;
      u64 total_used_memory = 0;
-     u64 minimum_memory = 0;
-     u64 critical_memory = 0;
+-    u64 minimum_memory = 0;
+-    u64 critical_memory = 0;
+     BufferId inline_buffer_id;
+ #ifdef YUZU_LEGACY
+     bool immediately_free = false;
 diff --git a/src/video_core/host1x/ffmpeg/ffmpeg.cpp b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
 index 486fd9365c..88a064d509 100644
 --- a/src/video_core/host1x/ffmpeg/ffmpeg.cpp
@@ -607,74 +616,6 @@ index 930f06daf6..184b4952f7 100644
          }
      }
      // Transcode on hardware that doesn't support BCn natively
-diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
-index 8518d89eee..acf3aacd37 100644
---- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
-+++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
-@@ -859,18 +859,17 @@ private:
-             return;
-         }
-         has_flushed_end_pending = true;
--        // Refresh buffers state before beginning transform feedback so counters are up-to-date
--        UpdateBuffers();
-         if (!has_started || buffers_count == 0) {
--            // No counter buffers available: begin without counters
-             scheduler.Record([](vk::CommandBuffer cmdbuf) {
-                 cmdbuf.BeginTransformFeedbackEXT(0, 0, nullptr, nullptr);
-             });
-+            UpdateBuffers();
-             return;
-         }
-         scheduler.Record([this, total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
-             cmdbuf.BeginTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
-         });
-+        UpdateBuffers();
-     }
- 
-     void FlushEndTFB() {
-@@ -899,7 +898,6 @@ private:
-     void UpdateBuffers() {
-         last_queries.fill(0);
-         last_queries_stride.fill(1);
--        streams_mask = 0; // reset previously recorded streams
-         runtime.View3DRegs([this](Maxwell3D& maxwell3d) {
-             buffers_count = 0;
-             out_topology = maxwell3d.draw_manager->GetDrawState().topology;
-@@ -909,10 +907,6 @@ private:
-                     continue;
-                 }
-                 const size_t stream = tf.controls[i].stream;
--                if (stream >= last_queries_stride.size()) {
--                    LOG_WARNING(Render_Vulkan, "TransformFeedback stream {} out of range", stream);
--                    continue;
--                }
-                 last_queries_stride[stream] = tf.controls[i].stride;
-                 streams_mask |= 1ULL << stream;
-                 buffers_count = std::max<size_t>(buffers_count, stream + 1);
-@@ -1113,21 +1107,16 @@ public:
- 
-             query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
-             u64 num_vertices = 0;
--            // Protect against stride == 0 (avoid divide-by-zero). Use fallback stride=1 and warn.
--            u64 safe_stride = query->stride == 0 ? 1 : query->stride;
--            if (query->stride == 0) {
--                LOG_WARNING(Render_Vulkan, "TransformFeedback query has stride 0; using 1 to avoid div-by-zero (addr=0x{:x})", query->dependant_address);
--            }
-             if (query->dependant_manage) {
-                 auto* dependant_query = tfb_streamer.GetQuery(query->dependant_index);
--                num_vertices = dependant_query->value / safe_stride;
-+                num_vertices = dependant_query->value / query->stride;
-                 tfb_streamer.Free(query->dependant_index);
-             } else {
-                 u8* pointer = device_memory.GetPointer<u8>(query->dependant_address);
-                 if (pointer != nullptr) {
-                     u32 result;
-                     std::memcpy(&result, pointer, sizeof(u32));
--                    num_vertices = static_cast<u64>(result) / safe_stride;
-+                    num_vertices = static_cast<u64>(result) / query->stride;
-                 }
-             }
-             query->value = [&]() -> u64 {
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
 index 7e31f9cf67..578a870853 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
@@ -712,19 +653,17 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..a90de4f323 100644
+index efae825885..88520e9643 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -58,25 +58,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -57,26 +57,11 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+     void(slot_samplers.insert(runtime, sampler_descriptor));
  
      if constexpr (HAS_DEVICE_MEMORY_INFO) {
-         const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-        const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
 -        const s64 min_spacing_expected = device_local_memory - 1_GiB;
 -        const s64 min_spacing_critical = device_local_memory - 512_MiB;
-+        const u64 local_memory = static_cast<u64>(device_local_memory);
-+        const s64 max_expected = device_local_memory - 2_GiB;
-+        const s64 max_critical = device_local_memory - 1_GiB;
-         const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-        const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
 -        const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
 -        const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
 -        expected_memory = static_cast<u64>(
@@ -736,18 +675,8 @@ index efae825885..a90de4f323 100644
 -        minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
 -
 -        lowmemorydevice = false;
-+        const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
-+        const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100;
-+        if (local_memory > 4_GiB) {
-+            expected_memory = static_cast<u64>(max_expected);
-+            critical_memory = static_cast<u64>(max_critical);
-+            minimum_memory = static_cast<u64>(1_GiB);
-+        } else {
-+            expected_memory = static_cast<u64>(
-+                (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
-+            critical_memory = static_cast<u64>(
-+                (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
-+            minimum_memory = static_cast<u64>(device_local_memory - critical_memory);
++        const u64 device_local_memory = static_cast<u64>(runtime.GetDeviceLocalMemory());
++        if (device_local_memory <= 4_GiB) {
 +            lowmemorydevice = true;
 +        }
      } else {
@@ -755,13 +684,10 @@ index efae825885..a90de4f323 100644
 -        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
 -        minimum_memory = 0;
 -
-+        expected_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
-+        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100);
-+        minimum_memory = static_cast<u64>(TARGET_THRESHOLD - critical_memory);
          lowmemorydevice = true;
      }
  
-@@ -118,31 +121,25 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -118,31 +103,27 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -776,22 +702,24 @@ index efae825885..a90de4f323 100644
 -        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
 -    };
-+    if (total_used_memory >= Last_total_used_memory) {
++    if (total_used_memory > Last_total_used_memory) {
 +        --ticks_to_reserve;
-+    } else {
-+        ++ticks_to_reserve;
 +    }
-+    if (ticks_to_reserve < 10ULL) {
-+        ticks_to_reserve = 10ULL;
++    if (ticks_to_reserve < 1ULL) {
++        ticks_to_reserve = 1ULL;
 +    }
-+
-+    const u64 ticks_to_destroy = frame_tick - ticks_to_reserve;
  
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
 -                          &aggressive_mode](ImageId image_id) {
 -        if (num_iterations == 0) {
-+    const auto Cleanup = [this, &ticks_to_destroy](ImageId image_id) {
-+        u64 num_iterations = ticks_to_destroy;
++    const u64 ticks_to_destroy = frame_tick - ticks_to_reserve;
++    const u64 ticks_to_cleanup = ticks_to_destroy - ticks_deleted;
++    if (ticks_to_destroy <= 0ULL || ticks_to_cleanup <= 0ULL) {
++        return;
++    }
++
++    const auto Cleanup = [this, &ticks_to_cleanup](ImageId image_id) {
++        u64 num_iterations = ticks_to_cleanup;
 +        if (num_iterations == 0ULL) {
              return true;
          }
@@ -807,7 +735,7 @@ index efae825885..a90de4f323 100644
  
          if (True(image.flags & ImageFlagBits::IsDecoding)) {
              // This image is still being decoded, deleting it will invalidate the slot
-@@ -150,23 +147,13 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -150,23 +131,13 @@ void TextureCache<P>::RunGarbageCollector() {
              return false;
          }
  
@@ -818,7 +746,7 @@ index efae825885..a90de4f323 100644
 -
 -        if (!aggressive_mode && !is_large_sparse &&
 -            True(image.flags & ImageFlagBits::CostlyLoad)) {
-+        if (!(total_used_memory >= critical_memory) && True(image.flags & ImageFlagBits::CostlyLoad)) {
++        if (ticks_to_reserve > 10ULL && True(image.flags & ImageFlagBits::CostlyLoad)) {
              return false;
          }
  
@@ -829,11 +757,11 @@ index efae825885..a90de4f323 100644
 -        }
 -
 -        if (must_download && !is_large_sparse) {
-+        if (!(total_used_memory >= critical_memory) && must_download) {
++        if (ticks_to_reserve > 10ULL && must_download) {
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
              image.DownloadMemory(map, copies);
-@@ -181,47 +168,17 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -181,47 +152,15 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -877,18 +805,27 @@ index efae825885..a90de4f323 100644
 -    if (total_used_memory >= critical_memory) {
 -        Configure(true);
 -        lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
-+    if (ticks_to_destroy > 0ULL) {
-+        lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
-+        // If pressure is still too high, Cleanup again.
-+        if (total_used_memory >= critical_memory) {
-+            lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
-+        }
++    lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
++    ticks_deleted += ticks_to_cleanup;
++    if (frame_tick - ticks_deleted < 20ULL) {
++        ++ticks_to_reserve;
      }
 +    Last_total_used_memory = total_used_memory;
  }
  
  template <class P>
-@@ -1196,10 +1153,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -230,9 +169,7 @@ void TextureCache<P>::TickFrame() {
+     if (runtime.CanReportMemoryUsage()) {
+         total_used_memory = runtime.GetDeviceMemoryUsage();
+     }
+-    if (total_used_memory > minimum_memory) {
+-        RunGarbageCollector();
+-    }
++    RunGarbageCollector();
+     sentenced_images.Tick();
+     sentenced_framebuffers.Tick();
+     sentenced_image_view.Tick();
+@@ -1196,10 +1133,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -899,7 +836,7 @@ index efae825885..a90de4f323 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1174,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1154,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -907,7 +844,7 @@ index efae825885..a90de4f323 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1462,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1442,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -919,7 +856,7 @@ index efae825885..a90de4f323 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1522,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1502,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -929,7 +866,7 @@ index efae825885..a90de4f323 100644
      }
  }
  
-@@ -1667,27 +1611,6 @@ template <class P>
+@@ -1667,27 +1591,6 @@ template <class P>
  ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
      ImageInfo new_info = info;
      const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
@@ -958,30 +895,39 @@ index efae825885..a90de4f323 100644
      const bool native_bgr = runtime.HasNativeBgr();
      join_overlap_ids.clear();
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index 4b4061f21d..2e2d01be36 100644
+index 4b4061f21d..50462a9bfe 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
-@@ -118,8 +118,8 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
-     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
- #endif
+@@ -112,14 +112,6 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
  
+     static constexpr size_t UNSET_CHANNEL{(std::numeric_limits<size_t>::max)()};
+ 
+-#ifdef YUZU_LEGACY
+-    static constexpr s64 TARGET_THRESHOLD = 3_GiB;
+-#else
+-    static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+-#endif
+-
 -    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 125_MiB;
 -    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 625_MiB;
-+    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 256_MiB;
-+    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 768_MiB;
      static constexpr size_t GC_EMERGENCY_COUNTS = 2;
  
      using Runtime = typename P::Runtime;
-@@ -474,6 +474,8 @@ private:
+@@ -474,10 +466,10 @@ private:
  
      bool has_deleted_images = false;
      bool is_rescaling = false;
++    u64 ticks_deleted = 0ULL;
 +    u64 ticks_to_reserve = 40ULL;
 +    u64 Last_total_used_memory = 0;
      u64 total_used_memory = 0;
-     u64 minimum_memory;
-     u64 expected_memory;
-@@ -538,7 +540,6 @@ private:
+-    u64 minimum_memory;
+-    u64 expected_memory;
+-    u64 critical_memory;
+     bool lowmemorydevice = false;
+     size_t gpu_unswizzle_maxsize = 0;
+     size_t swizzle_chunk_size = 0;
+@@ -538,7 +530,6 @@ private:
      std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
  
      std::deque<PendingUnswizzle> unswizzle_queue;

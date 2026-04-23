@@ -1,0 +1,1035 @@
+diff --git a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp b/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
+index 866b721a84..74ee182021 100644
+--- a/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
++++ b/src/video_core/renderer_vulkan/fixed_pipeline_state.cpp
+@@ -59,7 +59,7 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
+     raw1 = 0;
+     extended_dynamic_state.Assign(features.has_extended_dynamic_state ? 1 : 0);
+     extended_dynamic_state_2.Assign(features.has_extended_dynamic_state_2 ? 1 : 0);
+-    extended_dynamic_state_2_logic_op.Assign(features.has_extended_dynamic_state_2_logic_op ? 1 : 0);
++    extended_dynamic_state_2_extra.Assign(features.has_extended_dynamic_state_2_extra ? 1 : 0);
+     extended_dynamic_state_3_blend.Assign(features.has_extended_dynamic_state_3_blend ? 1 : 0);
+     extended_dynamic_state_3_enables.Assign(features.has_extended_dynamic_state_3_enables ? 1 : 0);
+     dynamic_vertex_input.Assign(features.has_dynamic_vertex_input ? 1 : 0);
+@@ -179,7 +179,7 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
+             return static_cast<u16>(array.stride.Value());
+         });
+     }
+-    if (!extended_dynamic_state_2_logic_op) {
++    if (!extended_dynamic_state_2_extra) {
+         dynamic_state.Refresh2(regs, topology_, extended_dynamic_state_2);
+     }
+     if (!extended_dynamic_state_3_blend) {
+diff --git a/src/video_core/renderer_vulkan/fixed_pipeline_state.h b/src/video_core/renderer_vulkan/fixed_pipeline_state.h
+index ffc91e9a55..5735e11f31 100644
+--- a/src/video_core/renderer_vulkan/fixed_pipeline_state.h
++++ b/src/video_core/renderer_vulkan/fixed_pipeline_state.h
+@@ -23,8 +23,7 @@ using Maxwell = Tegra::Engines::Maxwell3D::Regs;
+ struct DynamicFeatures {
+     bool has_extended_dynamic_state;
+     bool has_extended_dynamic_state_2;
+-    bool has_extended_dynamic_state_2_logic_op;
+-    bool has_extended_dynamic_state_2_patch_control_points;
++    bool has_extended_dynamic_state_2_extra;
+     bool has_extended_dynamic_state_3_blend;
+     bool has_extended_dynamic_state_3_enables;
+     bool has_dynamic_vertex_input;
+@@ -194,7 +193,7 @@ struct FixedPipelineState {
+         u32 raw1;
+         BitField<0, 1, u32> extended_dynamic_state;
+         BitField<1, 1, u32> extended_dynamic_state_2;
+-        BitField<2, 1, u32> extended_dynamic_state_2_logic_op;
++        BitField<2, 1, u32> extended_dynamic_state_2_extra;
+         BitField<3, 1, u32> extended_dynamic_state_3_blend;
+         BitField<4, 1, u32> extended_dynamic_state_3_enables;
+         BitField<5, 1, u32> dynamic_vertex_input;
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+index d45a57f7bb..5d625c0add 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+@@ -419,9 +419,6 @@ ConditionalRenderingResolvePass::ConditionalRenderingResolvePass(
+ 
+ void ConditionalRenderingResolvePass::Resolve(VkBuffer dst_buffer, VkBuffer src_buffer,
+                                               u32 src_offset, bool compare_to_zero) {
+-    if (!device.IsExtConditionalRendering()) {
+-        return;
+-    }
+     const size_t compare_size = compare_to_zero ? 8 : 24;
+ 
+     compute_pass_descriptor_queue.Acquire();
+@@ -474,14 +471,6 @@ QueriesPrefixScanPass::QueriesPrefixScanPass(
+ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffer,
+                                 VkBuffer src_buffer, size_t number_of_sums,
+                                 size_t min_accumulation_limit, size_t max_accumulation_limit) {
+-    constexpr VkAccessFlags BASE_DST_ACCESS = VK_ACCESS_SHADER_READ_BIT |
+-                                              VK_ACCESS_TRANSFER_READ_BIT |
+-                                              VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+-                                              VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
+-                                              VK_ACCESS_INDEX_READ_BIT |
+-                                              VK_ACCESS_UNIFORM_READ_BIT;
+-    const VkAccessFlags conditional_access =
+-        device.IsExtConditionalRendering() ? VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT : 0;
+     size_t current_runs = number_of_sums;
+     size_t offset = 0;
+     while (current_runs != 0) {
+@@ -498,18 +487,22 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
+ 
+         scheduler.RequestOutsideRenderPassOperationContext();
+         scheduler.Record([this, descriptor_data, min_accumulation_limit, max_accumulation_limit,
+-                          runs_to_do, used_offset, conditional_access](vk::CommandBuffer cmdbuf) {
++                          runs_to_do, used_offset](vk::CommandBuffer cmdbuf) {
+             static constexpr VkMemoryBarrier read_barrier{
+                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                 .pNext = nullptr,
+                 .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                 .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+             };
+-            const VkMemoryBarrier write_barrier{
++            static constexpr VkMemoryBarrier write_barrier{
+                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                 .pNext = nullptr,
+                 .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+-                .dstAccessMask = BASE_DST_ACCESS | conditional_access,
++                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT |
++                                 VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
++                                 VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
++                                 VK_ACCESS_UNIFORM_READ_BIT |
++                                 VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+             };
+             const QueriesPrefixScanPushConstants uniforms{
+                 .min_accumulation_base = static_cast<u32>(min_accumulation_limit),
+diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+index 8f706a02c8..c6fe9c5b5e 100644
+--- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+@@ -270,7 +270,6 @@ GraphicsPipeline::GraphicsPipeline(
+         num_image_elements += Shader::NumDescriptors(info->texture_descriptors);
+         num_image_elements += Shader::NumDescriptors(info->image_descriptors);
+     }
+-    fragment_has_color0_output = stage_infos[NUM_STAGES - 1].stores_frag_color[0];
+     auto func{[this, shader_notify, &render_pass_cache, &descriptor_pool, pipeline_statistics] {
+         DescriptorLayoutBuilder builder{MakeBuilder(device, stage_infos)};
+         uses_push_descriptor = builder.CanUsePushDescriptor();
+@@ -725,18 +724,13 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         .lineWidth = 1.0f,
+         // TODO(alekpop): Transfer from regs
+     };
+-    const bool smooth_lines_supported =
+-        device.IsExtLineRasterizationSupported() && device.SupportsSmoothLines();
+-    const bool stippled_lines_supported =
+-        device.IsExtLineRasterizationSupported() && device.SupportsStippledRectangularLines();
+     VkPipelineRasterizationLineStateCreateInfoEXT line_state{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT,
+         .pNext = nullptr,
+-        .lineRasterizationMode = key.state.smooth_lines != 0 && smooth_lines_supported
++        .lineRasterizationMode = key.state.smooth_lines != 0
+                                      ? VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT
+                                      : VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT,
+-        .stippledLineEnable =
+-            (dynamic.line_stipple_enable && stippled_lines_supported) ? VK_TRUE : VK_FALSE,
++        .stippledLineEnable = dynamic.line_stipple_enable ? VK_TRUE : VK_FALSE,
+         .lineStippleFactor = key.state.line_stipple_factor,
+         .lineStipplePattern = static_cast<uint16_t>(key.state.line_stipple_pattern),
+     };
+@@ -774,8 +768,6 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         provoking_vertex.pNext = std::exchange(rasterization_ci.pNext, &provoking_vertex);
+     }
+ 
+-    const bool supports_alpha_output = fragment_has_color0_output;
+-    const bool alpha_to_one_supported = device.SupportsAlphaToOne();
+     const VkPipelineMultisampleStateCreateInfo multisample_ci{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+         .pNext = nullptr,
+@@ -784,10 +776,8 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         .sampleShadingEnable = Settings::values.sample_shading.GetValue() > 0 ? VK_TRUE : VK_FALSE,
+         .minSampleShading = f32(Settings::values.sample_shading.GetValue()) / 100.0f,
+         .pSampleMask = nullptr,
+-        .alphaToCoverageEnable =
+-            supports_alpha_output && key.state.alpha_to_coverage_enabled != 0 ? VK_TRUE : VK_FALSE,
+-        .alphaToOneEnable = supports_alpha_output && alpha_to_one_supported &&
+-                           key.state.alpha_to_one_enabled != 0 ? VK_TRUE : VK_FALSE,
++        .alphaToCoverageEnable = key.state.alpha_to_coverage_enabled != 0 ? VK_TRUE : VK_FALSE,
++        .alphaToOneEnable = key.state.alpha_to_one_enabled != 0 ? VK_TRUE : VK_FALSE,
+     };
+     const VkPipelineDepthStencilStateCreateInfo depth_stencil_ci{
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+@@ -852,7 +842,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+         VK_DYNAMIC_STATE_LINE_WIDTH,
+     };
+     if (key.state.extended_dynamic_state) {
+-        static constexpr std::array extended{
++        std::vector<VkDynamicState> extended{
+             VK_DYNAMIC_STATE_CULL_MODE_EXT,
+             VK_DYNAMIC_STATE_FRONT_FACE_EXT,
+             VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT,
+@@ -862,68 +852,51 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
+             VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT,
+             VK_DYNAMIC_STATE_STENCIL_OP_EXT,
+         };
+-        dynamic_states.insert(dynamic_states.end(), extended.begin(), extended.end());
+-
+-        // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT is part of EDS1
+-        // Only use it if VIDS is not active (VIDS replaces it with full vertex input control)
+-        if (!key.state.dynamic_vertex_input) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT);
+-        }
+-    }
+-
+-    // VK_DYNAMIC_STATE_VERTEX_INPUT_EXT (VIDS) - Independent from EDS
+-    // Provides full dynamic vertex input control, replaces VERTEX_INPUT_BINDING_STRIDE
+-    if (key.state.dynamic_vertex_input) {
+-        dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+-    }
+-
+-    // EDS2 - Core (3 states)
+-    if (key.state.extended_dynamic_state_2) {
+-        static constexpr std::array extended2{
+-            VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT,
+-        };
+-        dynamic_states.insert(dynamic_states.end(), extended2.begin(), extended2.end());
+-    }
+-
+-    // EDS2 - LogicOp (granular)
+-    if (key.state.extended_dynamic_state_2_logic_op) {
+-        dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_EXT);
+-    }
+-
+-    // EDS3 - Blending (composite: 3 states)
+-    if (key.state.extended_dynamic_state_3_blend) {
+-        static constexpr std::array extended3{
+-            VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
+-            VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
+-            VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
+-        };
+-        dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
+-    }
+-
+-    // EDS3 - Enables (composite: per-feature)
+-    if (key.state.extended_dynamic_state_3_enables) {
+-        if (device.SupportsDynamicState3DepthClampEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT);
++        if (!device.IsExtVertexInputDynamicStateSupported()) {
++            extended.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT);
+         }
+-        if (device.SupportsDynamicState3LogicOpEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT);
++        if (key.state.dynamic_vertex_input) {
++            dynamic_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+         }
+-        if (device.SupportsDynamicState3LineRasterizationMode()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT);
+-        }
+-        if (device.SupportsDynamicState3ConservativeRasterizationMode()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT);
+-        }
+-        if (device.SupportsDynamicState3LineStippleEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT);
+-        }
+-        if (device.SupportsDynamicState3AlphaToCoverageEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT);
+-        }
+-        if (device.SupportsDynamicState3AlphaToOneEnable()) {
+-            dynamic_states.push_back(VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT);
++        dynamic_states.insert(dynamic_states.end(), extended.begin(), extended.end());
++        if (key.state.extended_dynamic_state_2) {
++            static constexpr std::array extended2{
++                VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT,
++                VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT,
++                VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended2.begin(), extended2.end());
++        }
++        if (key.state.extended_dynamic_state_2_extra) {
++            dynamic_states.push_back(VK_DYNAMIC_STATE_LOGIC_OP_EXT);
++        }
++        if (key.state.extended_dynamic_state_3_blend) {
++            static constexpr std::array extended3{
++                VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
++                VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
++                VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
++
++                // VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
++        }
++        if (key.state.extended_dynamic_state_3_enables) {
++            static constexpr std::array extended3{
++                VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT,
++                VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT,
++
++                // additional state3 extensions
++                VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT,
++
++                VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT,
++
++                VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT,
++                VK_DYNAMIC_STATE_DEPTH_CLIP_ENABLE_EXT,
++                VK_DYNAMIC_STATE_PROVOKING_VERTEX_MODE_EXT,
++            };
++            dynamic_states.insert(dynamic_states.end(), extended3.begin(), extended3.end());
+         }
+     }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.h b/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
+index 1a41e50a36..332b58674c 100644
+--- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
++++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.h
+@@ -82,17 +82,6 @@ public:
+         const std::array<const Shader::Info*, NUM_STAGES>& infos);
+ 
+     bool HasDynamicVertexInput() const noexcept { return key.state.dynamic_vertex_input; }
+-    bool SupportsAlphaToCoverage() const noexcept {
+-        return fragment_has_color0_output;
+-    }
+-
+-    bool SupportsAlphaToOne() const noexcept {
+-        return fragment_has_color0_output;
+-    }
+-
+-    bool UsesExtendedDynamicState() const noexcept {
+-        return key.state.extended_dynamic_state != 0;
+-    }
+     GraphicsPipeline& operator=(GraphicsPipeline&&) noexcept = delete;
+     GraphicsPipeline(GraphicsPipeline&&) noexcept = delete;
+ 
+@@ -161,7 +150,6 @@ private:
+     VideoCommon::UniformBufferSizes uniform_buffer_sizes{};
+     size_t num_image_elements{};
+     u32 num_textures{};
+-    bool fragment_has_color0_output{};
+ 
+     vk::DescriptorSetLayout descriptor_set_layout;
+     DescriptorAllocator descriptor_allocator;
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 5f86506961..f1fa23fc02 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -40,7 +40,6 @@
+ #include "video_core/shader_cache.h"
+ #include "video_core/shader_environment.h"
+ #include "video_core/shader_notify.h"
+-#include "video_core/surface.h"
+ #include "video_core/vulkan_common/vulkan_device.h"
+ #include "video_core/vulkan_common/vulkan_wrapper.h"
+ #include "video_core/gpu_logging/gpu_logging.h"
+@@ -149,8 +148,7 @@ Shader::AttributeType AttributeType(const FixedPipelineState& state, size_t inde
+ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> programs,
+                                     const GraphicsPipelineCacheKey& key,
+                                     const Shader::IR::Program& program,
+-                                    const Shader::IR::Program* previous_program,
+-                                    const Vulkan::Device& device) {
++                                    const Shader::IR::Program* previous_program) {
+     Shader::RuntimeInfo info;
+     if (previous_program) {
+         info.previous_stage_stores = previous_program->info.stores;
+@@ -172,14 +170,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+                 info.fixed_state_point_size = point_size;
+             }
+             if (key.state.xfb_enabled) {
+-                if (device.IsExtTransformFeedbackSupported()) {
+-                    auto [varyings, count] =
+-                        VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
+-                    info.xfb_varyings = varyings;
+-                    info.xfb_count = count;
+-                } else {
+-                    LOG_WARNING(Render_Vulkan, "XFB requested in pipeline key but device lacks VK_EXT_transform_feedback; ignoring XFB decorations");
+-                }
++                auto [varyings, count] =
++                    VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
++                info.xfb_varyings = varyings;
++                info.xfb_count = count;
+             }
+             info.convert_depth_mode = gl_ndc;
+         }
+@@ -226,14 +220,10 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+             info.fixed_state_point_size = point_size;
+         }
+         if (key.state.xfb_enabled != 0) {
+-            if (device.IsExtTransformFeedbackSupported()) {
+-                auto [varyings, count] =
+-                    VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
+-                info.xfb_varyings = varyings;
+-                info.xfb_count = count;
+-            } else {
+-                LOG_WARNING(Render_Vulkan, "XFB requested in pipeline key but device lacks VK_EXT_transform_feedback; ignoring XFB decorations");
+-            }
++            auto [varyings, count] =
++                VideoCommon::MakeTransformFeedbackVaryings(key.state.xfb_state);
++            info.xfb_varyings = varyings;
++            info.xfb_count = count;
+         }
+         info.convert_depth_mode = gl_ndc;
+         break;
+@@ -268,22 +258,6 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
+                 dst_a == F::Source1Color_GL || dst_a == F::OneMinusSource1Color_GL ||
+                 dst_a == F::Source1Alpha_GL || dst_a == F::OneMinusSource1Alpha_GL;
+         }
+-
+-        if (device.IsMoltenVK()) {
+-            for (size_t i = 0; i < 8; ++i) {
+-                const auto format = static_cast<Tegra::RenderTargetFormat>(key.state.color_formats[i]);
+-                const auto pixel_format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(format);
+-                if (VideoCore::Surface::IsPixelFormatInteger(pixel_format)) {
+-                    if (VideoCore::Surface::IsPixelFormatSignedInteger(pixel_format)) {
+-                        info.color_output_types[i] = Shader::AttributeType::SignedInt;
+-                    } else {
+-                        info.color_output_types[i] = Shader::AttributeType::UnsignedInt;
+-                    }
+-                } else {
+-                    info.color_output_types[i] = Shader::AttributeType::Float;
+-                }
+-            }
+-        }
+         break;
+     }
+     default:
+@@ -463,41 +437,19 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+ 
+     LOG_INFO(Render_Vulkan, "DynamicState setting value: {}", u32(Settings::values.dyna_state.GetValue()));
+ 
+-    dynamic_features = {};
+-
+-    // User granularity enforced in vulkan_device.cpp switch statement:
+-    //   Level 0: Core Dynamic States only
+-    //   Level 1: Core + EDS1
+-    //   Level 2: Core + EDS1 + EDS2 (accumulative)
+-    //   Level 3: Core + EDS1 + EDS2 + EDS3 (accumulative)
+-    // Here we only verify if extensions were successfully loaded by the device
+-
+-    dynamic_features.has_extended_dynamic_state =
+-        device.IsExtExtendedDynamicStateSupported();
+-
+-    dynamic_features.has_extended_dynamic_state_2 =
+-        device.IsExtExtendedDynamicState2Supported();
+-    dynamic_features.has_extended_dynamic_state_2_logic_op =
+-        device.IsExtExtendedDynamicState2ExtrasSupported();
+-    dynamic_features.has_extended_dynamic_state_2_patch_control_points = false;
+-
+-    dynamic_features.has_extended_dynamic_state_3_blend =
+-        device.IsExtExtendedDynamicState3BlendingSupported();
+-    dynamic_features.has_extended_dynamic_state_3_enables =
+-        device.IsExtExtendedDynamicState3EnablesSupported();
+-
+-    // VIDS: Independent toggle (not affected by dyna_state levels)
+-    dynamic_features.has_dynamic_vertex_input =
+-        device.IsExtVertexInputDynamicStateSupported() &&
+-        Settings::values.vertex_input_dynamic_state.GetValue();
+-
+-    dynamic_features.has_provoking_vertex = device.IsExtProvokingVertexSupported();
+-    dynamic_features.has_provoking_vertex_first_mode =
+-        device.SupportsProvokingVertexFirstMode();
+-    dynamic_features.has_provoking_vertex_last_mode =
+-        device.SupportsProvokingVertexLastMode();
+-    dynamic_features.has_provoking_vertex_tf_preserve =
+-        device.SupportsTransformFeedbackProvokingVertexPreservation();
++    dynamic_features = DynamicFeatures{
++        .has_extended_dynamic_state = device.IsExtExtendedDynamicStateSupported(),
++        .has_extended_dynamic_state_2 = device.IsExtExtendedDynamicState2Supported(),
++        .has_extended_dynamic_state_2_extra = device.IsExtExtendedDynamicState2ExtrasSupported(),
++        .has_extended_dynamic_state_3_blend = device.IsExtExtendedDynamicState3BlendingSupported(),
++        .has_extended_dynamic_state_3_enables = device.IsExtExtendedDynamicState3EnablesSupported(),
++        .has_dynamic_vertex_input = device.IsExtVertexInputDynamicStateSupported() &&
++                                    Settings::values.vertex_input_dynamic_state.GetValue(),
++        .has_provoking_vertex = device.IsExtProvokingVertexSupported(),
++        .has_provoking_vertex_first_mode = device.SupportsProvokingVertexFirstMode(),
++        .has_provoking_vertex_last_mode = device.SupportsProvokingVertexLastMode(),
++        .has_provoking_vertex_tf_preserve = device.SupportsTransformFeedbackProvokingVertexPreservation(),
++    };
+ }
+ 
+ PipelineCache::~PipelineCache() {
+@@ -602,8 +554,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+                 dynamic_features.has_extended_dynamic_state ||
+             (key.state.extended_dynamic_state_2 != 0) !=
+                 dynamic_features.has_extended_dynamic_state_2 ||
+-            (key.state.extended_dynamic_state_2_logic_op != 0) !=
+-                dynamic_features.has_extended_dynamic_state_2_logic_op ||
++            (key.state.extended_dynamic_state_2_extra != 0) !=
++                dynamic_features.has_extended_dynamic_state_2_extra ||
+             (key.state.extended_dynamic_state_3_blend != 0) !=
+                 dynamic_features.has_extended_dynamic_state_3_blend ||
+             (key.state.extended_dynamic_state_3_enables != 0) !=
+@@ -769,7 +721,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+         const size_t stage_index{index - 1};
+         infos[stage_index] = &program.info;
+ 
+-        const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
++        const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage)};
+         ConvertLegacyToGeneric(program, runtime_info);
+         const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
+         device.SaveShader(code);
+diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+index 8518d89eee..acf3aacd37 100644
+--- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+@@ -859,18 +859,17 @@ private:
+             return;
+         }
+         has_flushed_end_pending = true;
+-        // Refresh buffers state before beginning transform feedback so counters are up-to-date
+-        UpdateBuffers();
+         if (!has_started || buffers_count == 0) {
+-            // No counter buffers available: begin without counters
+             scheduler.Record([](vk::CommandBuffer cmdbuf) {
+                 cmdbuf.BeginTransformFeedbackEXT(0, 0, nullptr, nullptr);
+             });
++            UpdateBuffers();
+             return;
+         }
+         scheduler.Record([this, total = static_cast<u32>(buffers_count)](vk::CommandBuffer cmdbuf) {
+             cmdbuf.BeginTransformFeedbackEXT(0, total, counter_buffers.data(), offsets.data());
+         });
++        UpdateBuffers();
+     }
+ 
+     void FlushEndTFB() {
+@@ -899,7 +898,6 @@ private:
+     void UpdateBuffers() {
+         last_queries.fill(0);
+         last_queries_stride.fill(1);
+-        streams_mask = 0; // reset previously recorded streams
+         runtime.View3DRegs([this](Maxwell3D& maxwell3d) {
+             buffers_count = 0;
+             out_topology = maxwell3d.draw_manager->GetDrawState().topology;
+@@ -909,10 +907,6 @@ private:
+                     continue;
+                 }
+                 const size_t stream = tf.controls[i].stream;
+-                if (stream >= last_queries_stride.size()) {
+-                    LOG_WARNING(Render_Vulkan, "TransformFeedback stream {} out of range", stream);
+-                    continue;
+-                }
+                 last_queries_stride[stream] = tf.controls[i].stride;
+                 streams_mask |= 1ULL << stream;
+                 buffers_count = std::max<size_t>(buffers_count, stream + 1);
+@@ -1113,21 +1107,16 @@ public:
+ 
+             query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
+             u64 num_vertices = 0;
+-            // Protect against stride == 0 (avoid divide-by-zero). Use fallback stride=1 and warn.
+-            u64 safe_stride = query->stride == 0 ? 1 : query->stride;
+-            if (query->stride == 0) {
+-                LOG_WARNING(Render_Vulkan, "TransformFeedback query has stride 0; using 1 to avoid div-by-zero (addr=0x{:x})", query->dependant_address);
+-            }
+             if (query->dependant_manage) {
+                 auto* dependant_query = tfb_streamer.GetQuery(query->dependant_index);
+-                num_vertices = dependant_query->value / safe_stride;
++                num_vertices = dependant_query->value / query->stride;
+                 tfb_streamer.Free(query->dependant_index);
+             } else {
+                 u8* pointer = device_memory.GetPointer<u8>(query->dependant_address);
+                 if (pointer != nullptr) {
+                     u32 result;
+                     std::memcpy(&result, pointer, sizeof(u32));
+-                    num_vertices = static_cast<u64>(result) / safe_stride;
++                    num_vertices = static_cast<u64>(result) / query->stride;
+                 }
+             }
+             query->value = [&]() -> u64 {
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+index ba7b5d8c1b..a8baa29006 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+@@ -411,48 +411,13 @@ void RasterizerVulkan::Clear(u32 layer_count) {
+         .baseArrayLayer = regs.clear_surface.layer,
+         .layerCount = layer_count,
+     };
+-    const auto clamp_rect_to_render_area = [render_area](VkRect2D& rect) -> bool {
+-        const auto clamp_axis = [](s32& offset, u32& extent, u32 limit) {
+-            auto clamp_offset = [&offset, limit]() {
+-                if (limit == 0) {
+-                    offset = 0;
+-                    return;
+-                }
+-                offset = std::clamp(offset, 0, static_cast<s32>(limit));
+-            };
+-
+-            if (extent == 0) {
+-                clamp_offset();
+-                return;
+-            }
+-            if (offset < 0) {
+-                const u32 shrink = (std::min)(extent, static_cast<u32>(-offset));
+-                extent -= shrink;
+-                offset = 0;
+-            }
+-            if (limit == 0) {
+-                extent = 0;
+-                offset = 0;
+-                return;
+-            }
+-            if (offset >= s32(limit)) {
+-                offset = s32(limit);
+-                extent = 0;
+-                return;
+-            }
+-            const u64 end_coord = u64(offset) + extent;
+-            if (end_coord > limit) {
+-                extent = limit - u32(offset);
+-            }
+-        };
+-
+-        clamp_axis(rect.offset.x, rect.extent.width, render_area.width);
+-        clamp_axis(rect.offset.y, rect.extent.height, render_area.height);
+-        return rect.extent.width != 0 && rect.extent.height != 0;
+-    };
+-    if (!clamp_rect_to_render_area(clear_rect.rect)) {
++    if (clear_rect.rect.extent.width == 0 || clear_rect.rect.extent.height == 0) {
+         return;
+     }
++    clear_rect.rect.extent = VkExtent2D{
++        .width = (std::min)(clear_rect.rect.extent.width, render_area.width),
++        .height = (std::min)(clear_rect.rect.extent.height, render_area.height),
++    };
+ 
+     const u32 color_attachment = regs.clear_surface.RT;
+     if (use_color && framebuffer->HasAspectColorBit(color_attachment)) {
+@@ -896,21 +861,23 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
+ 
+ void RasterizerVulkan::FlushWork() {
+ #ifdef ANDROID
+-    static constexpr u32 DRAWS_TO_DISPATCH = 512;
+-    static constexpr u32 CHECK_MASK = 3;
++    static constexpr u32 DRAWS_TO_DISPATCH = 1024;
+ #else
+     static constexpr u32 DRAWS_TO_DISPATCH = 4096;
+-    static constexpr u32 CHECK_MASK = 7;
+ #endif // ANDROID
+ 
+-    static_assert(DRAWS_TO_DISPATCH % (CHECK_MASK + 1) == 0);
+-    if ((++draw_counter & CHECK_MASK) != CHECK_MASK) {
++    // Only check multiples of 8 draws
++    static_assert(DRAWS_TO_DISPATCH % 8 == 0);
++    if ((++draw_counter & 7) != 7) {
+         return;
+     }
+     if (draw_counter < DRAWS_TO_DISPATCH) {
++        // Send recorded tasks to the worker thread
+         scheduler.DispatchWork();
+         return;
+     }
++    // Otherwise (every certain number of draws) flush execution.
++    // This submits commands to the Vulkan driver.
+     scheduler.Flush();
+     draw_counter = 0;
+ }
+@@ -976,8 +943,6 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
+ 
+ void RasterizerVulkan::UpdateDynamicStates() {
+     auto& regs = maxwell3d->regs;
+-
+-    // Core Dynamic States (Vulkan 1.0) - Always active regardless of dyna_state setting
+     UpdateViewportsState(regs);
+     UpdateScissorsState(regs);
+     UpdateDepthBias(regs);
+@@ -985,8 +950,6 @@ void RasterizerVulkan::UpdateDynamicStates() {
+     UpdateDepthBounds(regs);
+     UpdateStencilFaces(regs);
+     UpdateLineWidth(regs);
+-
+-    // EDS1: CullMode, DepthCompare, FrontFace, StencilOp, DepthBoundsTest, DepthTest, DepthWrite, StencilTest
+     if (device.IsExtExtendedDynamicStateSupported()) {
+         UpdateCullMode(regs);
+         UpdateDepthCompareOp(regs);
+@@ -997,52 +960,40 @@ void RasterizerVulkan::UpdateDynamicStates() {
+             UpdateDepthTestEnable(regs);
+             UpdateDepthWriteEnable(regs);
+             UpdateStencilTestEnable(regs);
+-        }
+-    }
+-
+-    // EDS2: PrimitiveRestart, RasterizerDiscard, DepthBias enable/disable
+-    if (device.IsExtExtendedDynamicState2Supported()) {
+-        UpdatePrimitiveRestartEnable(regs);
+-        UpdateRasterizerDiscardEnable(regs);
+-        UpdateDepthBiasEnable(regs);
+-    }
+-
+-    // EDS2 Extras: LogicOp operation selection
+-    if (device.IsExtExtendedDynamicState2ExtrasSupported()) {
+-        UpdateLogicOp(regs);
+-    }
+-
+-    // EDS3 Enables: LogicOpEnable, DepthClamp, LineStipple, ConservativeRaster
+-    if (device.IsExtExtendedDynamicState3EnablesSupported()) {
+-        using namespace Tegra::Engines;
+-        // AMD Workaround: LogicOp incompatible with float render targets
+-        if (device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_OPEN_SOURCE ||
+-            device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_PROPRIETARY) {
+-            const auto has_float = std::any_of(
+-                regs.vertex_attrib_format.begin(), regs.vertex_attrib_format.end(),
+-                [](const auto& attrib) {
+-                    return attrib.type == Maxwell3D::Regs::VertexAttribute::Type::Float;
++            if (device.IsExtExtendedDynamicState2Supported()) {
++                UpdatePrimitiveRestartEnable(regs);
++                UpdateRasterizerDiscardEnable(regs);
++                UpdateDepthBiasEnable(regs);
++            }
++            if (device.IsExtExtendedDynamicState3EnablesSupported()) {
++                using namespace Tegra::Engines;
++                if (device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_OPEN_SOURCE || device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_PROPRIETARY) {
++                    const auto has_float = std::any_of(
++                        regs.vertex_attrib_format.begin(),
++                        regs.vertex_attrib_format.end(),
++                        [](const auto& attrib) {
++                            return attrib.type == Maxwell3D::Regs::VertexAttribute::Type::Float;
++                        }
++                    );
++                    if (regs.logic_op.enable) {
++                        regs.logic_op.enable = static_cast<u32>(!has_float);
++                    }
+                 }
+-            );
+-            if (regs.logic_op.enable) {
+-                regs.logic_op.enable = static_cast<u32>(!has_float);
++                UpdateLogicOpEnable(regs);
++                UpdateDepthClampEnable(regs);
+             }
+         }
+-        UpdateLogicOpEnable(regs);
+-        UpdateDepthClampEnable(regs);
+-        UpdateLineRasterizationMode(regs);
+-        UpdateLineStippleEnable(regs);
+-        UpdateConservativeRasterizationMode(regs);
+-        UpdateAlphaToCoverageEnable(regs);
+-        UpdateAlphaToOneEnable(regs);
+-    }
+-
+-    // EDS3 Blending: ColorBlendEnable, ColorBlendEquation, ColorWriteMask
+-    if (device.IsExtExtendedDynamicState3BlendingSupported()) {
+-        UpdateBlending(regs);
++        if (device.IsExtExtendedDynamicState2ExtrasSupported()) {
++            UpdateLogicOp(regs);
++        }
++        if (device.IsExtExtendedDynamicState3BlendingSupported()) {
++            UpdateBlending(regs);
++        }
++        if (device.IsExtExtendedDynamicState3EnablesSupported()) {
++            UpdateLineStippleEnable(regs);
++            UpdateConservativeRasterizationMode(regs);
++        }
+     }
+-
+-    // Vertex Input Dynamic State: Independent from EDS levels
+     if (device.IsExtVertexInputDynamicStateSupported()) {
+         if (auto* gp = pipeline_cache.CurrentGraphicsPipeline(); gp && gp->HasDynamicVertexInput()) {
+             UpdateVertexInput(regs);
+@@ -1055,16 +1006,9 @@ void RasterizerVulkan::HandleTransformFeedback() {
+ 
+     const auto& regs = maxwell3d->regs;
+     if (!device.IsExtTransformFeedbackSupported()) {
+-        // If the guest enabled transform feedback, warn once that the device lacks support.
+-        if (regs.transform_feedback_enabled != 0) {
+-            std::call_once(warn_unsupported, [&] {
+-                LOG_WARNING(Render_Vulkan, "Transform feedback requested by guest but VK_EXT_transform_feedback is unavailable; queries disabled");
+-            });
+-        } else {
+-            std::call_once(warn_unsupported, [&] {
+-                LOG_INFO(Render_Vulkan, "VK_EXT_transform_feedback not available on device");
+-            });
+-        }
++        std::call_once(warn_unsupported, [&] {
++            LOG_ERROR(Render_Vulkan, "Transform feedbacks used but not supported");
++        });
+         return;
+     }
+     query_cache.CounterEnable(VideoCommon::QueryType::StreamingByteCount,
+@@ -1407,10 +1351,6 @@ void RasterizerVulkan::UpdateConservativeRasterizationMode(Tegra::Engines::Maxwe
+         return;
+     }
+ 
+-    if (!device.SupportsDynamicState3ConservativeRasterizationMode()) {
+-        return;
+-    }
+-
+     scheduler.Record([enable = regs.conservative_raster_enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetConservativeRasterizationModeEXT(
+             enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT
+@@ -1423,50 +1363,23 @@ void RasterizerVulkan::UpdateLineStippleEnable(Tegra::Engines::Maxwell3D::Regs&
+         return;
+     }
+ 
+-    if (!device.SupportsDynamicState3LineStippleEnable()) {
+-        return;
+-    }
+-
+     scheduler.Record([enable = regs.line_stipple_enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetLineStippleEnableEXT(enable);
+     });
+ }
+ 
+ void RasterizerVulkan::UpdateLineRasterizationMode(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!device.IsExtLineRasterizationSupported()) {
+-        return;
+-    }
+-    if (!state_tracker.TouchLineRasterizationMode()) {
+-        return;
+-    }
++    // if (!state_tracker.TouchLi()) {
++    //     return;
++    // }
+ 
+-    if (!device.SupportsDynamicState3LineRasterizationMode()) {
+-        static std::once_flag warn_missing_rect;
+-        std::call_once(warn_missing_rect, [] {
+-            LOG_WARNING(Render_Vulkan,
+-                        "Driver lacks rectangular line rasterization support; skipping dynamic "
+-                        "line state updates");
+-        });
+-        return;
+-    }
++    // TODO: The maxwell emulator does not capture line rasters
+ 
+-    const bool wants_smooth = regs.line_anti_alias_enable != 0;
+-    VkLineRasterizationModeEXT mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
+-    if (wants_smooth) {
+-        if (device.SupportsSmoothLines()) {
+-            mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
+-        } else {
+-            static std::once_flag warn_missing_smooth;
+-            std::call_once(warn_missing_smooth, [] {
+-                LOG_WARNING(Render_Vulkan,
+-                            "Line anti-aliasing requested but smoothLines feature unavailable; "
+-                            "using rectangular rasterization");
+-            });
+-        }
+-    }
+-    scheduler.Record([mode](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetLineRasterizationModeEXT(mode);
+-    });
++    // scheduler.Record([enable = regs.line](vk::CommandBuffer cmdbuf) {
++    //     cmdbuf.SetConservativeRasterizationModeEXT(
++    //         enable ? VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT
++    //                : VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT);
++    // });
+ }
+ 
+ void RasterizerVulkan::UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+@@ -1508,9 +1421,6 @@ void RasterizerVulkan::UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs
+     if (!state_tracker.TouchLogicOpEnable()) {
+         return;
+     }
+-    if (!device.SupportsDynamicState3LogicOpEnable()) {
+-        return;
+-    }
+     scheduler.Record([enable = regs.logic_op.enable](vk::CommandBuffer cmdbuf) {
+         cmdbuf.SetLogicOpEnableEXT(enable != 0);
+     });
+@@ -1520,9 +1430,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+     if (!state_tracker.TouchDepthClampEnable()) {
+         return;
+     }
+-    if (!device.SupportsDynamicState3DepthClampEnable()) {
+-        return;
+-    }
+     bool is_enabled = !(regs.viewport_clip_control.geometry_clip ==
+                             Maxwell::ViewportClipControl::GeometryClip::Passthrough ||
+                         regs.viewport_clip_control.geometry_clip ==
+@@ -1533,41 +1440,6 @@ void RasterizerVulkan::UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& r
+         [is_enabled](vk::CommandBuffer cmdbuf) { cmdbuf.SetDepthClampEnableEXT(is_enabled); });
+ }
+ 
+-void RasterizerVulkan::UpdateAlphaToCoverageEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!state_tracker.TouchAlphaToCoverageEnable()) {
+-        return;
+-    }
+-    if (!device.SupportsDynamicState3AlphaToCoverageEnable()) {
+-        return;
+-    }
+-    GraphicsPipeline* const pipeline = pipeline_cache.CurrentGraphicsPipeline();
+-    const bool enable = pipeline != nullptr && pipeline->SupportsAlphaToCoverage() &&
+-                        regs.anti_alias_alpha_control.alpha_to_coverage != 0;
+-    scheduler.Record([enable](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetAlphaToCoverageEnableEXT(enable ? VK_TRUE : VK_FALSE);
+-    });
+-}
+-
+-void RasterizerVulkan::UpdateAlphaToOneEnable(Tegra::Engines::Maxwell3D::Regs& regs) {
+-    if (!state_tracker.TouchAlphaToOneEnable()) {
+-        return;
+-    }
+-    if (!device.SupportsDynamicState3AlphaToOneEnable()) {
+-        static std::once_flag warn_alpha_to_one;
+-        std::call_once(warn_alpha_to_one, [] {
+-            LOG_WARNING(Render_Vulkan,
+-                        "Alpha-to-one is not supported on this device; forcing it disabled");
+-        });
+-        return;
+-    }
+-    GraphicsPipeline* const pipeline = pipeline_cache.CurrentGraphicsPipeline();
+-    const bool enable = pipeline != nullptr && pipeline->SupportsAlphaToOne() &&
+-                        regs.anti_alias_alpha_control.alpha_to_one != 0;
+-    scheduler.Record([enable](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.SetAlphaToOneEnableEXT(enable ? VK_TRUE : VK_FALSE);
+-    });
+-}
+-
+ void RasterizerVulkan::UpdateDepthCompareOp(Tegra::Engines::Maxwell3D::Regs& regs) {
+     if (!state_tracker.TouchDepthCompareOp()) {
+         return;
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.h b/src/video_core/renderer_vulkan/vk_rasterizer.h
+index b689c6b660..30780b9cbd 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.h
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.h
+@@ -183,8 +183,6 @@ private:
+     void UpdateDepthBiasEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateLogicOpEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateDepthClampEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+-    void UpdateAlphaToCoverageEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+-    void UpdateAlphaToOneEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateFrontFace(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateStencilOp(Tegra::Engines::Maxwell3D::Regs& regs);
+     void UpdateStencilTestEnable(Tegra::Engines::Maxwell3D::Regs& regs);
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+index 226619d8d6..12bdaee53e 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
++++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+@@ -17,7 +17,6 @@
+ #include "common/thread.h"
+ #include "video_core/gpu_logging/gpu_logging.h"
+ #include "video_core/renderer_vulkan/vk_command_pool.h"
+-#include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
+ #include "video_core/renderer_vulkan/vk_master_semaphore.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "video_core/renderer_vulkan/vk_state_tracker.h"
+@@ -154,27 +153,9 @@ void Scheduler::RequestOutsideRenderPassOperationContext() {
+ 
+ bool Scheduler::UpdateGraphicsPipeline(GraphicsPipeline* pipeline) {
+     if (state.graphics_pipeline == pipeline) {
+-        if (pipeline && pipeline->UsesExtendedDynamicState() &&
+-            state.needs_state_enable_refresh) {
+-            state_tracker.InvalidateStateEnableFlag();
+-            state.needs_state_enable_refresh = false;
+-        }
+         return false;
+     }
+-
+     state.graphics_pipeline = pipeline;
+-
+-    if (!pipeline) {
+-        return true;
+-    }
+-
+-    if (!pipeline->UsesExtendedDynamicState()) {
+-        state.needs_state_enable_refresh = true;
+-    } else if (state.needs_state_enable_refresh) {
+-        state_tracker.InvalidateStateEnableFlag();
+-        state.needs_state_enable_refresh = false;
+-    }
+-
+     return true;
+ }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
+index 00a912f2cd..8633487311 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.h
++++ b/src/video_core/renderer_vulkan/vk_scheduler.h
+@@ -243,7 +243,6 @@ private:
+         GraphicsPipeline* graphics_pipeline = nullptr;
+         bool is_rescaling = false;
+         bool rescaling_defined = false;
+-        bool needs_state_enable_refresh = false;
+     };
+ 
+     void WorkerThread(std::stop_token stop_token);
+diff --git a/src/video_core/renderer_vulkan/vk_state_tracker.cpp b/src/video_core/renderer_vulkan/vk_state_tracker.cpp
+index 79967d540a..242d03cf24 100644
+--- a/src/video_core/renderer_vulkan/vk_state_tracker.cpp
++++ b/src/video_core/renderer_vulkan/vk_state_tracker.cpp
+@@ -48,7 +48,6 @@ Flags MakeInvalidationFlags() {
+         FrontFace,
+         StencilOp,
+         StencilTestEnable,
+-        RasterizerDiscardEnable,
+         VertexBuffers,
+         VertexInput,
+         StateEnable,
+@@ -56,9 +55,6 @@ Flags MakeInvalidationFlags() {
+         DepthBiasEnable,
+         LogicOpEnable,
+         DepthClampEnable,
+-        AlphaToCoverageEnable,
+-        AlphaToOneEnable,
+-        LineRasterizationMode,
+         LogicOp,
+         Blending,
+         ColorMask,
+@@ -152,8 +148,6 @@ void SetupDirtyStateEnable(Tables& tables) {
+     setup(OFF(logic_op.enable), LogicOpEnable);
+     setup(OFF(viewport_clip_control.geometry_clip), DepthClampEnable);
+     setup(OFF(line_stipple_enable), LineStippleEnable);
+-    setup(OFF(anti_alias_alpha_control.alpha_to_coverage), AlphaToCoverageEnable);
+-    setup(OFF(anti_alias_alpha_control.alpha_to_one), AlphaToOneEnable);
+ }
+ 
+ void SetupDirtyDepthCompareOp(Tables& tables) {
+@@ -232,7 +226,6 @@ void SetupRasterModes(Tables &tables) {
+ 
+     table[OFF(line_stipple_params)] = LineStippleParams;
+     table[OFF(conservative_raster_enable)] = ConservativeRasterizationMode;
+-    table[OFF(line_anti_alias_enable)] = LineRasterizationMode;
+ }
+ } // Anonymous namespace
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_state_tracker.h b/src/video_core/renderer_vulkan/vk_state_tracker.h
+index 74bae9e181..aef726658a 100644
+--- a/src/video_core/renderer_vulkan/vk_state_tracker.h
++++ b/src/video_core/renderer_vulkan/vk_state_tracker.h
+@@ -54,7 +54,6 @@ enum : u8 {
+     PrimitiveRestartEnable,
+     RasterizerDiscardEnable,
+     ConservativeRasterizationMode,
+-    LineRasterizationMode,
+     LineStippleEnable,
+     LineStippleParams,
+     DepthBiasEnable,
+@@ -62,8 +61,6 @@ enum : u8 {
+     LogicOp,
+     LogicOpEnable,
+     DepthClampEnable,
+-    AlphaToCoverageEnable,
+-    AlphaToOneEnable,
+ 
+     Blending,
+     BlendEnable,
+@@ -97,10 +94,6 @@ public:
+         (*flags)[Dirty::Scissors] = true;
+     }
+ 
+-    void InvalidateStateEnableFlag() {
+-        (*flags)[Dirty::StateEnable] = true;
+-    }
+-
+     bool TouchViewports() {
+         const bool dirty_viewports = Exchange(Dirty::Viewports, false);
+         const bool rescale_viewports = Exchange(VideoCommon::Dirty::RescaleViewports, false);
+@@ -232,14 +225,6 @@ public:
+         return Exchange(Dirty::DepthClampEnable, false);
+     }
+ 
+-    bool TouchAlphaToCoverageEnable() {
+-        return Exchange(Dirty::AlphaToCoverageEnable, false);
+-    }
+-
+-    bool TouchAlphaToOneEnable() {
+-        return Exchange(Dirty::AlphaToOneEnable, false);
+-    }
+-
+     bool TouchDepthCompareOp() {
+         return Exchange(Dirty::DepthCompareOp, false);
+     }
+@@ -276,10 +261,6 @@ public:
+         return Exchange(Dirty::LogicOp, false);
+     }
+ 
+-    bool TouchLineRasterizationMode() {
+-        return Exchange(Dirty::LineRasterizationMode, false);
+-    }
+-
+     bool ChangePrimitiveTopology(Maxwell::PrimitiveTopology new_topology) {
+         const bool has_changed = current_topology != new_topology;
+         current_topology = new_topology;
