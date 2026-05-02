@@ -453,7 +453,7 @@ index 4549a36345..dd2c0dd47a 100644
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index c857e90e02..74beb1dbbd 100644
+index eaa6912f0d..a15709bba4 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -30,24 +30,26 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
@@ -550,7 +550,7 @@ index c857e90e02..74beb1dbbd 100644
      delayed_destruction_ring.Tick();
  
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index 08524bd854..dc7daf61a4 100644
+index 473cc6842e..d803e37e26 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
 @@ -187,9 +187,6 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
@@ -575,10 +575,10 @@ index 08524bd854..dc7daf61a4 100644
      u64 critical_memory = 0;
      BufferId inline_buffer_id;
  #ifdef YUZU_LEGACY
-diff --git a/src/video_core/host1x/ffmpeg/ffmpeg.cpp b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
-index 486fd9365c..88a064d509 100644
---- a/src/video_core/host1x/ffmpeg/ffmpeg.cpp
-+++ b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+diff --git a/src/video_core/host1x/ffmpeg.cpp b/src/video_core/host1x/ffmpeg.cpp
+index 80e48692f7..900dce2db4 100644
+--- a/src/video_core/host1x/ffmpeg.cpp
++++ b/src/video_core/host1x/ffmpeg.cpp
 @@ -32,7 +32,7 @@ constexpr std::array PreferredGpuDecoders = {
      AV_HWDEVICE_TYPE_CUDA,
      AV_HWDEVICE_TYPE_D3D11VA,
@@ -586,8 +586,8 @@ index 486fd9365c..88a064d509 100644
 -    AV_HWDEVICE_TYPE_D3D12VA,
 +//    AV_HWDEVICE_TYPE_D3D12VA,
  #elif defined(__FreeBSD__)
+     AV_HWDEVICE_TYPE_VAAPI,
      AV_HWDEVICE_TYPE_VDPAU,
- #elif defined(__APPLE__)
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 958988f27e..88cc165215 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
