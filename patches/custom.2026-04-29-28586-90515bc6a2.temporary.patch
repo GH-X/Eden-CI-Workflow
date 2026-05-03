@@ -453,7 +453,7 @@ index 4549a36345..dd2c0dd47a 100644
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index eaa6912f0d..21ed9d7fc3 100644
+index eaa6912f0d..cbb02ba98c 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -30,24 +30,20 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
@@ -494,7 +494,7 @@ index eaa6912f0d..21ed9d7fc3 100644
  }
  
  template <class P>
-@@ -55,11 +51,28 @@ BufferCache<P>::~BufferCache() = default;
+@@ -55,11 +51,31 @@ BufferCache<P>::~BufferCache() = default;
  
  template <class P>
  void BufferCache<P>::RunGarbageCollector() {
@@ -503,16 +503,19 @@ index eaa6912f0d..21ed9d7fc3 100644
 -    int num_iterations = aggressive_gc ? 64 : 32;
 +    if (total_used_memory > expected_memory) {
 +        --reserve_threshold;
-+    } else if (total_used_memory < minimum_memory) {
-+        ++reserve_threshold;
++        --ticks_to_reserve;
++    } else {
++        if (total_used_memory < minimum_memory) {
++            ++reserve_threshold;
++        }
++        if (total_used_memory >= Last_total_used_memory) {
++            --ticks_to_reserve;
++        } else {
++            ++ticks_to_reserve;
++        }
 +    }
 +    if (reserve_threshold < 10ULL) {
 +        reserve_threshold = 10ULL;
-+    }
-+    if (total_used_memory >= Last_total_used_memory) {
-+        --ticks_to_reserve;
-+    } else {
-+        ++ticks_to_reserve;
 +    }
 +    if (ticks_to_reserve < reserve_threshold) {
 +        ticks_to_reserve = reserve_threshold;
@@ -527,7 +530,7 @@ index eaa6912f0d..21ed9d7fc3 100644
              return true;
          }
          --num_iterations;
-@@ -68,7 +81,11 @@ void BufferCache<P>::RunGarbageCollector() {
+@@ -68,7 +84,11 @@ void BufferCache<P>::RunGarbageCollector() {
          DeleteBuffer(buffer_id);
          return false;
      };
@@ -540,7 +543,7 @@ index eaa6912f0d..21ed9d7fc3 100644
  }
  
  template <class P>
-@@ -100,9 +117,7 @@ void BufferCache<P>::TickFrame() {
+@@ -100,9 +120,7 @@ void BufferCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -664,7 +667,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..c8c6e8eec5 100644
+index efae825885..d75b81febe 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -57,26 +57,20 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -707,7 +710,7 @@ index efae825885..c8c6e8eec5 100644
          lowmemorydevice = true;
      }
  
-@@ -118,55 +112,44 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -118,55 +112,47 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -724,27 +727,30 @@ index efae825885..c8c6e8eec5 100644
 -    };
 +    if (total_used_memory > expected_memory) {
 +        --reserve_threshold;
-+    } else if (total_used_memory < minimum_memory) {
-+        ++reserve_threshold;
++        --ticks_to_reserve;
++    } else {
++        if (total_used_memory < minimum_memory) {
++            ++reserve_threshold;
++        }
++        if (total_used_memory >= Last_total_used_memory) {
++            --ticks_to_reserve;
++        } else {
++            ++ticks_to_reserve;
++        }
 +    }
 +    if (reserve_threshold < 10ULL) {
 +        reserve_threshold = 10ULL;
 +    }
-+    if (total_used_memory >= Last_total_used_memory) {
-+        --ticks_to_reserve;
-+    } else {
-+        ++ticks_to_reserve;
-+    }
 +    if (ticks_to_reserve < reserve_threshold) {
 +        ticks_to_reserve = reserve_threshold;
 +    }
++
++    const u64 ticks_to_destroy = frame_tick - ticks_to_reserve;
++    u64 num_iterations = ticks_to_destroy;
  
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode,
 -                          &aggressive_mode](ImageId image_id) {
 -        if (num_iterations == 0) {
-+    const u64 ticks_to_destroy = frame_tick - ticks_to_reserve;
-+    u64 num_iterations = ticks_to_destroy;
-+
 +    const auto Cleanup = [this, &num_iterations](ImageId image_id) {
 +        if (num_iterations == 0ULL) {
              return true;
@@ -786,7 +792,7 @@ index efae825885..c8c6e8eec5 100644
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
              image.DownloadMemory(map, copies);
-@@ -181,47 +164,13 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -181,47 +167,13 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -837,7 +843,7 @@ index efae825885..c8c6e8eec5 100644
  }
  
  template <class P>
-@@ -230,9 +179,7 @@ void TextureCache<P>::TickFrame() {
+@@ -230,9 +182,7 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -848,7 +854,7 @@ index efae825885..c8c6e8eec5 100644
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1196,10 +1143,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1196,10 +1146,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -859,7 +865,7 @@ index efae825885..c8c6e8eec5 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1164,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1167,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -867,7 +873,7 @@ index efae825885..c8c6e8eec5 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1452,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1455,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -879,7 +885,7 @@ index efae825885..c8c6e8eec5 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1512,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1515,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -889,7 +895,7 @@ index efae825885..c8c6e8eec5 100644
      }
  }
  
-@@ -1621,14 +1555,14 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1621,14 +1558,14 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
      ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
  
      // For large sparse textures, aggressively clean up old allocations at same address
@@ -906,7 +912,7 @@ index efae825885..c8c6e8eec5 100644
              for (ImageId old_image_id : alloc_images) {
                  Image& old_image = slot_images[old_image_id];
                  if (old_image.info.is_sparse &&
-@@ -1667,27 +1601,6 @@ template <class P>
+@@ -1667,27 +1604,6 @@ template <class P>
  ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
      ImageInfo new_info = info;
      const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
