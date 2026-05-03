@@ -453,10 +453,10 @@ index 4549a36345..dd2c0dd47a 100644
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index eaa6912f0d..28e07f0bac 100644
+index eaa6912f0d..21ed9d7fc3 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
-@@ -30,24 +30,26 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+@@ -30,24 +30,20 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
  #ifdef YUZU_LEGACY
      immediately_free = (Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive);
  #endif
@@ -479,28 +479,22 @@ index eaa6912f0d..28e07f0bac 100644
 -        (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
 -                 DEFAULT_CRITICAL_MEMORY));
 +    if (runtime.CanReportMemoryUsage()) {
-+        const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
-+        const u64 local_memory = static_cast<u64>(device_local_memory);
-+        const s64 max_expected = device_local_memory * 70 / 100;
-+        const s64 max_critical = device_local_memory * 80 / 100;
-+        const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
-+        const s64 min_expected = mem_threshold * 70 / 100;
-+        const s64 min_critical = mem_threshold * 80 / 100;
-+        if (local_memory > 4_GiB) {
-+            expected_memory = static_cast<u64>(max_expected);
-+            critical_memory = static_cast<u64>(max_critical);
-+        } else {
-+            expected_memory = static_cast<u64>(min_expected);
-+            critical_memory = static_cast<u64>(min_critical);
-+        }
++        const u64 device_local_memory = runtime.GetDeviceLocalMemory();
++        const s64 local_memory = static_cast<s64>(device_local_memory);
++        const s64 mem_threshold = (std::min)(
++            local_memory, (device_local_memory > 4_GiB ? local_memory : TARGET_THRESHOLD));
++        minimum_memory = static_cast<u64>(mem_threshold * 60 / 100);
++        expected_memory = static_cast<u64>(mem_threshold * 70 / 100);
++        critical_memory = static_cast<u64>(mem_threshold * 80 / 100);
 +    } else {
++        minimum_memory = static_cast<u64>(TARGET_THRESHOLD * 60 / 100);
 +        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 70 / 100);
 +        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 80 / 100);
 +    }
  }
  
  template <class P>
-@@ -55,11 +57,28 @@ BufferCache<P>::~BufferCache() = default;
+@@ -55,11 +51,28 @@ BufferCache<P>::~BufferCache() = default;
  
  template <class P>
  void BufferCache<P>::RunGarbageCollector() {
@@ -509,7 +503,7 @@ index eaa6912f0d..28e07f0bac 100644
 -    int num_iterations = aggressive_gc ? 64 : 32;
 +    if (total_used_memory > expected_memory) {
 +        --reserve_threshold;
-+    } else if (total_used_memory < expected_memory) {
++    } else if (total_used_memory < minimum_memory) {
 +        ++reserve_threshold;
 +    }
 +    if (reserve_threshold < 10ULL) {
@@ -533,7 +527,7 @@ index eaa6912f0d..28e07f0bac 100644
              return true;
          }
          --num_iterations;
-@@ -68,7 +87,11 @@ void BufferCache<P>::RunGarbageCollector() {
+@@ -68,7 +81,11 @@ void BufferCache<P>::RunGarbageCollector() {
          DeleteBuffer(buffer_id);
          return false;
      };
@@ -546,7 +540,7 @@ index eaa6912f0d..28e07f0bac 100644
  }
  
  template <class P>
-@@ -100,9 +123,7 @@ void BufferCache<P>::TickFrame() {
+@@ -100,9 +117,7 @@ void BufferCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -558,7 +552,7 @@ index eaa6912f0d..28e07f0bac 100644
      delayed_destruction_ring.Tick();
  
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index 473cc6842e..9e9a6f9eea 100644
+index 473cc6842e..af4d8726a1 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
 @@ -187,9 +187,6 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
@@ -571,7 +565,7 @@ index 473cc6842e..9e9a6f9eea 100644
      // Debug Flags.
  
      static constexpr bool DISABLE_DOWNLOADS = true;
-@@ -512,8 +509,11 @@ private:
+@@ -512,8 +509,12 @@ private:
      };
      Common::LeastRecentlyUsedCache<LRUItemParams> lru_cache;
      u64 frame_tick = 0;
@@ -579,7 +573,7 @@ index 473cc6842e..9e9a6f9eea 100644
 +    u64 ticks_to_reserve = 40ULL;
 +    u64 Last_total_used_memory = 0;
      u64 total_used_memory = 0;
--    u64 minimum_memory = 0;
+     u64 minimum_memory = 0;
 +    u64 expected_memory = 0;
      u64 critical_memory = 0;
      BufferId inline_buffer_id;
@@ -670,19 +664,17 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..00dada8b00 100644
+index efae825885..978e99091c 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -58,25 +58,23 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -57,26 +57,19 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+     void(slot_samplers.insert(runtime, sampler_descriptor));
  
      if constexpr (HAS_DEVICE_MEMORY_INFO) {
-         const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-        const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
 -        const s64 min_spacing_expected = device_local_memory - 1_GiB;
 -        const s64 min_spacing_critical = device_local_memory - 512_MiB;
-+        const u64 local_memory = static_cast<u64>(device_local_memory);
-+        const s64 max_expected = device_local_memory * 75 / 100;
-+        const s64 max_critical = device_local_memory * 85 / 100;
-         const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-        const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
 -        const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
 -        const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
 -        expected_memory = static_cast<u64>(
@@ -694,27 +686,27 @@ index efae825885..00dada8b00 100644
 -        minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
 -
 -        lowmemorydevice = false;
-+        const s64 min_expected = mem_threshold * 75 / 100;
-+        const s64 min_critical = mem_threshold * 85 / 100;
-+        if (local_memory > 4_GiB) {
-+            expected_memory = static_cast<u64>(max_expected);
-+            critical_memory = static_cast<u64>(max_critical);
-+        } else {
-+            expected_memory = static_cast<u64>(min_expected);
-+            critical_memory = static_cast<u64>(min_critical);
-+            lowmemorydevice = true;
-+        }
++        const u64 device_local_memory = runtime.GetDeviceLocalMemory();
++        const s64 local_memory = static_cast<s64>(device_local_memory);
++        const s64 mem_threshold = (std::min)(
++            local_memory, (device_local_memory > 4_GiB ? local_memory : TARGET_THRESHOLD));
++        minimum_memory = static_cast<u64>(mem_threshold * 65 / 100);
++        expected_memory = static_cast<u64>(mem_threshold * 75 / 100);
++        critical_memory = static_cast<u64>(mem_threshold * 85 / 100);
      } else {
 -        expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
 -        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
 -        minimum_memory = 0;
 -
++        minimum_memory = static_cast<u64>(TARGET_THRESHOLD * 65 / 100);
 +        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 75 / 100);
 +        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 85 / 100);
++    }
++    if (device_local_memory <= 4_GiB) {
          lowmemorydevice = true;
      }
  
-@@ -118,55 +116,44 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -118,55 +111,44 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -731,7 +723,7 @@ index efae825885..00dada8b00 100644
 -    };
 +    if (total_used_memory > expected_memory) {
 +        --reserve_threshold;
-+    } else if (total_used_memory < expected_memory) {
++    } else if (total_used_memory < minimum_memory) {
 +        ++reserve_threshold;
 +    }
 +    if (reserve_threshold < 10ULL) {
@@ -793,7 +785,7 @@ index efae825885..00dada8b00 100644
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
              image.DownloadMemory(map, copies);
-@@ -181,47 +168,13 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -181,47 +163,13 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -844,7 +836,7 @@ index efae825885..00dada8b00 100644
  }
  
  template <class P>
-@@ -230,9 +183,7 @@ void TextureCache<P>::TickFrame() {
+@@ -230,9 +178,7 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -855,7 +847,7 @@ index efae825885..00dada8b00 100644
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1196,10 +1147,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1196,10 +1142,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -866,7 +858,7 @@ index efae825885..00dada8b00 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1168,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1163,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -874,7 +866,7 @@ index efae825885..00dada8b00 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1456,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1451,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -886,7 +878,7 @@ index efae825885..00dada8b00 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1516,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1511,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -896,7 +888,7 @@ index efae825885..00dada8b00 100644
      }
  }
  
-@@ -1621,14 +1559,14 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1621,14 +1554,14 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
      ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
  
      // For large sparse textures, aggressively clean up old allocations at same address
@@ -913,7 +905,7 @@ index efae825885..00dada8b00 100644
              for (ImageId old_image_id : alloc_images) {
                  Image& old_image = slot_images[old_image_id];
                  if (old_image.info.is_sparse &&
-@@ -1667,27 +1605,6 @@ template <class P>
+@@ -1667,27 +1600,6 @@ template <class P>
  ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
      ImageInfo new_info = info;
      const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
@@ -942,7 +934,7 @@ index efae825885..00dada8b00 100644
      const bool native_bgr = runtime.HasNativeBgr();
      join_overlap_ids.clear();
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index 4b4061f21d..03c7227355 100644
+index 4b4061f21d..694f35344f 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
 @@ -118,10 +118,6 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
@@ -956,7 +948,7 @@ index 4b4061f21d..03c7227355 100644
      using Runtime = typename P::Runtime;
      using Image = typename P::Image;
      using ImageAlloc = typename P::ImageAlloc;
-@@ -474,8 +470,10 @@ private:
+@@ -474,8 +470,11 @@ private:
  
      bool has_deleted_images = false;
      bool is_rescaling = false;
@@ -965,10 +957,11 @@ index 4b4061f21d..03c7227355 100644
 +    u64 Last_total_used_memory = 0;
      u64 total_used_memory = 0;
 -    u64 minimum_memory;
++    u64 minimum_memory = 0;
      u64 expected_memory;
      u64 critical_memory;
      bool lowmemorydevice = false;
-@@ -538,7 +536,6 @@ private:
+@@ -538,7 +537,6 @@ private:
      std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
  
      std::deque<PendingUnswizzle> unswizzle_queue;
