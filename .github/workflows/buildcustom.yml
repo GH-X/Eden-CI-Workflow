@@ -91,7 +91,7 @@ jobs:
       - name: Upload payload environment
         uses: actions/upload-artifact@v7
         with:
-          name: forgejo-env
+          name: forgejo.env
           archive: false
           path: forgejo.env
 
@@ -107,18 +107,7 @@ jobs:
   windows:
     name: "Windows"
     needs: [clone]
-    uses: ./.github/workflows/windowsamd64.yml
-    with:
-      build-id: '${{ inputs.build-id }}'
-      cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
-      devel: ${{ inputs.devel }}
-      force_pgo: ${{ needs.clone.outputs.pgo }}
-    secrets: inherit
-
-  msys:
-    name: "MinGW"
-    needs: [clone]
-    uses: ./.github/workflows/msysamd64.yml
+    uses: ./.github/workflows/windows.yml
     with:
       build-id: '${{ inputs.build-id }}'
       cpm-cache-version: '${{ needs.clone.outputs.cachever }}'

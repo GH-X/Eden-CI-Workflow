@@ -69,7 +69,7 @@ pushed() {
 	cat <<-EOF
 	## Custom Build
 
-	- Nightly REV: $FORGEJO_NREV
+	- Nightly REV: $ARTIFACT_REF
 	$FORGEJO_ERROR_TEMP
 	$FORGEJO_ERROR_ZHCN
 	EOF
@@ -79,7 +79,7 @@ manual() {
 	cat <<-EOF
 	## Custom Build
 
-	- Nightly REV: $FORGEJO_NREV
+	- Nightly REV: $ARTIFACT_REF
 	$FORGEJO_ERROR_TEMP
 	$FORGEJO_ERROR_ZHCN
 	EOF
