@@ -27,26 +27,44 @@ env:
   FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
   DEVEL: ${{ inputs.devel }}
   BUILD_ID: ${{ inputs.build-id }}
+  FORCE_PGO: ${{ inputs.force_pgo }}
 
 jobs:
-  windows:
-    name: "Windows ${{ matrix.os.arch }} ${{ matrix.compiler.program }} ${{ matrix.compiler.target }}"
+  set-matrix:
+    name: "Generate Matrices"
+    runs-on: ubuntu-latest
+    outputs:
+      msys: ${{ steps.msys.outputs.matrix }}
+      msvc: ${{ steps.msvc.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      ## MSYS2 ##
+      - name: MSYS Matrix
+        id: msys
+        run: ./.ci/matrix/msys.sh
+
+      # TODO(crueter): See if PGO does anything appreciable.
+      - name: MSVC Matrix
+        id: msvc
+        run: ./.ci/matrix/msvc.sh
+
+  # TODO: setup
+  msys:
+    name: "${{ matrix.os.msystem }} ${{ matrix.os.arch }} ${{ matrix.os.program }} ${{ matrix.os.target }}"
+    needs: [set-matrix]
     runs-on: ${{ matrix.os.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - runs-on: windows-latest
-            arch: amd64
-        compiler:
-          - program: msvc
-            target: standard
+        os: ${{ fromJson(needs.set-matrix.outputs.msys) }}
 
     env:
       TARGET: ${{ matrix.os.arch }}
-      COMPILER: "${{ matrix.compiler.program }}"
-      PGO_TARGET: "${{ matrix.compiler.target }}"
-      ARCH: ${{ matrix.os.arch }}-${{ matrix.compiler.program }}-${{ matrix.compiler.target }}
+      COMPILER: "${{ matrix.os.program }}"
+      PGO_TARGET: "${{ matrix.os.target }}"
+      ARCH: ${{ matrix.os.arch }}-${{ matrix.os.program }}-${{ matrix.os.target }}
 
     steps:
       - name: Checkout
@@ -55,7 +73,81 @@ jobs:
       - name: Setup
         uses: ./.github/workflows/setup
         with:
-          key: ${{ runner.os }}-${{ matrix.os.arch }}-${{ matrix.compiler.program }}
+          key: MSYS2-${{ matrix.os.msystem }}-${{ matrix.os.arch }}-${{ matrix.os.program }}
+          version: ${{ inputs.cpm-cache-version }}
+
+      - name: Load payload environment
+        shell: bash
+        run: . ./.ci/fj/load-env.sh
+
+      - name: Setup MSYS2
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.os.msystem }}
+          update: true
+          install: >-
+            git make autoconf libtool automake-wrapper patch jq
+            pactoys ninja
+          pacboy: >-
+            qt6-tools:p qt6-translations:p qt6-svg:p
+
+            7zip:p sccache:p cmake:p toolchain:p clang:p python-pip:p lld:p
+            openssl:p boost:p fmt:p lz4:p nlohmann-json:p zlib:p zstd:p
+            vulkan-memory-allocator:p vulkan-devel:p glslang:p
+            enet:p opus:p mbedtls:p libusb:p unordered_dense:p
+
+            jbigkit:p xz:p libdeflate:p bzip2:p lerc:p graphite2:p crt-git:p
+            libwebp:p libtiff:p brotli:p
+
+      - name: Configure
+        shell: msys2 {0}
+        run: ./.ci/common/configure.sh -DCCACHE_PATH=sccache
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build
+
+      - name: Package
+        shell: msys2 {0}
+        run: ./.ci/windows/package.sh
+        env:
+          MSYS_TOOLCHAIN: ${{ matrix.os.msystem }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mingw-${{ env.ARCH }}
+          archive: false
+          path: artifacts/*
+
+  # TODO: setup
+  # TODO(crueter): Could probably be combined but I'm lazy + it doesn't matter.
+  msvc:
+    name: "MSVC ${{ matrix.os.arch }} ${{ matrix.os.target }}"
+    needs: [set-matrix]
+    runs-on: ${{ matrix.os.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(needs.set-matrix.outputs.msvc) }}
+
+    env:
+      TARGET: ${{ matrix.os.arch }}
+      COMPILER: "${{ matrix.os.program }}"
+      PGO_TARGET: "${{ matrix.os.target }}"
+      ARCH: ${{ matrix.os.arch }}-${{ matrix.os.program }}-${{ matrix.os.target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup
+        uses: ./.github/workflows/setup
+        with:
+          key: Windows-${{ matrix.os.arch }}-${{ matrix.os.program }}
           version: ${{ inputs.cpm-cache-version }}
 
       - name: Load payload environment
@@ -66,6 +158,18 @@ jobs:
         uses: Eden-CI/msvc-dev-cmd@master
         with:
           arch: ${{ matrix.os.arch }}
+
+      - name: Install LLVM/Clang
+        uses: Nerixyz/install-llvm-action@feat/new-llvm-versions
+        with:
+          version: "22.1.4"
+          env: true
+
+      - name: Check LLVM/Clang
+        shell: bash
+        run: |
+          echo "${LLVM_PATH}/bin" >> $GITHUB_PATH
+          "${LLVM_PATH}/bin/clang-cl" --version
 
       - name: Install Vulkan SDK
         shell: powershell
@@ -89,6 +193,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: windows-${{ env.ARCH }}
-          path: artifacts/*
+          name: msvc-${{ env.ARCH }}
           archive: false
+          path: artifacts/*
+

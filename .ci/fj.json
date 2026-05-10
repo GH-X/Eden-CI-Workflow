@@ -15,12 +15,12 @@
         "build-id": "nightly",
         "host": "git.eden-emu.dev",
         "repo": "eden-ci/nightly",
-        "b2": false
+        "b2": true
     },
     {
         "build-id": "tag",
         "host": "git.eden-emu.dev",
         "repo": "eden-emu/eden",
-        "b2": false
+        "b2": true
     }
 ]
