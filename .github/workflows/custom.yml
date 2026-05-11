@@ -11,9 +11,9 @@ on:
         required: true
         default: 'https://github.com/eden-emulator/mirror.git'
       commit:
-        description: 'Specify commit (e.g. 3a823de605)'
+        description: 'Specify commit (e.g. 676b1aabfc)'
         required: true
-        default: 'default'
+        default: '676b1aabfc'
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
