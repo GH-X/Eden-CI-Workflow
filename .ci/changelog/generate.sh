@@ -144,7 +144,7 @@ win_field() {
 	printf " | "
 
 	if tagged && opts; then
-		file_link "PGO zip" "Windows-${ARTIFACT_REF}-${arch}-clang-pgo.AppImage"
+		file_link "PGO zip" "Windows-${ARTIFACT_REF}-${arch}-clang-pgo.zip"
 	fi
 
 	echo " | $notes |"
