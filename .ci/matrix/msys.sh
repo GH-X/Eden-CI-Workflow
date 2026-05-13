@@ -24,8 +24,7 @@ target() {
 	echo "{${arch}, ${compiler}}"
 }
 
-# TODO(crueter): dedupe in some way
-# TODO(crueter): Probably don't need legacy?
+# TODO(crueter): dedupe in some way?
 amd_gcc="$(target "$AMD64" "$GCC")"
 amd_pgo="$(target "$AMD64" "$PGO")"
 ally_gcc="$(target "$ALLY" "$GCC")"
