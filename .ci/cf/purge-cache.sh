@@ -2,8 +2,8 @@
 
 # Purges a Cloudflare cache (mainly useful for purging latest stuff)
 
-: "${CF_ZONE_ID:?You must set ZONE_ID to your Cloudflare domain zone ID}"
-: "${CF_TOKEN:?You must set API_TOKEN to your Cloudflare API token}"
+: "${CF_ZONE_ID:?You must set CF_ZONE_ID to your Cloudflare domain zone ID}"
+: "${CF_TOKEN:?You must set CF_TOKEN to your Cloudflare API token}"
 
 data=$(jq -n --args '{files: $ARGS.positional}' "$@")
 

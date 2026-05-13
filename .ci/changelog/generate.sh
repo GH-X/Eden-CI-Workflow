@@ -33,12 +33,16 @@ pull_request)
 	;;
 tag)
 	echo "## Changelog"
+	echo
+	cat "$ROOTDIR/releasenotes/$GITHUB_TAG.md"
+
 	devel=false
 	;;
 nightly)
 	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/compare/$FORGEJO_BEFORE..$FORGEJO_LONGSHA)."
 	echo
-	cat nightly-changelog.md
+	cat "$ROOTDIR/nightly-changelog.md"
+
 	devel=false
 	;;
 push | test)

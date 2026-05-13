@@ -45,7 +45,7 @@ case "$BUILD_ID" in
         ;;
     tag)
         # FIXME(crueter): Pull from somewhere, idk
-        _body="Unimplemented"
+        _body="$(cat "$ROOTDIR/releasenotes/$GITHUB_TAG.md")"
         ;;
     *)
         _body="Build: $BUILD_ID"
