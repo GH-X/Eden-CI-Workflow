@@ -21,7 +21,7 @@
   },
   {
     "build-id": "nightly",
-    "bucket": "eden0-public-EdenCI-Nightly",
+    "bucket": "eden0-public-Eden-Nightly",
     "url": "s3.eu-central-003.backblazeb2.com",
     "public": "nightly.eden-emu.dev"
   }
