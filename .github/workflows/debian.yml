@@ -15,6 +15,10 @@ on:
         description: 'Development mode (disables update checker)'
         type: string
         required: true
+      debian-version:
+        description: 'Debian version (12, 13...)'
+        type: string
+        required: true
 
 env:
   DISABLE_ARM: ${{ vars.DISABLE_ARM }}
@@ -26,9 +30,9 @@ env:
 
 jobs:
   debian:
-    name: "Debian 12 (${{ matrix.arch }})"
+    name: "Debian ${{ inputs.debian-version }} (${{ matrix.arch }})"
     runs-on: ${{ matrix.runs-on }}
-    container: debian:12
+    container: debian:${{ inputs.debian-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +45,7 @@ jobs:
 
     env:
       TARGET: package-${{ matrix.arch }}
-      DEBIAN_VERSION: 12
+      DEBIAN_VERSION: ${{ inputs.debian-version }}
       COMPILER: gcc
 
     steps:

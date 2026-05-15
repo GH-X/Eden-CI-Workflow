@@ -28,7 +28,7 @@ jobs:
     outputs:
       cachever: ${{ steps.out.outputs.cachever }}
       pgo: ${{ steps.out.outputs.pgo }}
-    name: "Parse and Clone"
+    name: Parse and Clone
     runs-on: ubuntu-latest
 
     steps:
@@ -103,7 +103,7 @@ jobs:
 
   source:
     if: ${{ inputs.build-id == 'pull_request' }}
-    name: "Source Pack"
+    name: Source Pack
     runs-on: ubuntu-latest
     needs: [clone]
 
@@ -133,17 +133,18 @@ jobs:
 
   deb:
     if: ${{ inputs.build-id == 'pull_request' || inputs.build-id == 'test' }}
-    name: "Debian"
+    name: Debian
     needs: [clone]
     uses: ./.github/workflows/debian.yml
     with:
       build-id: '${{ inputs.build-id }}'
       cpm-cache-version: '${{ needs.clone.outputs.cachever }}'
       devel: ${{ inputs.devel }}
+      debian-version: 13
     secrets: inherit
 
   linux:
-    name: "AppImage"
+    name: AppImage
     needs: [clone]
     uses: ./.github/workflows/appimage.yml
     with:
@@ -154,7 +155,7 @@ jobs:
     secrets: inherit
 
   windows:
-    name: "Windows"
+    name: Windows
     needs: [clone]
     uses: ./.github/workflows/windows.yml
     with:
@@ -165,7 +166,7 @@ jobs:
     secrets: inherit
 
   android:
-    name: "Android"
+    name: Android
     needs: [clone]
     uses: ./.github/workflows/android.yml
     with:
@@ -175,7 +176,7 @@ jobs:
     secrets: inherit
 
   macos:
-    name: "macOS"
+    name: macOS
     needs: [clone]
     uses: ./.github/workflows/macos.yml
     with:
@@ -186,7 +187,7 @@ jobs:
 
   room:
     if: ${{ inputs.build-id == 'pull_request' || inputs.build-id == 'tag' || inputs.build-id == 'test' }}
-    name: "musl room"
+    name: musl room
     needs: [clone]
     uses: ./.github/workflows/room.yml
     with:
