@@ -19,6 +19,21 @@ _header() {
     echo
 }
 
+# Fake API endpoint
+# TODO(crueter): Automate tagged rels
+case "$BUILD_ID" in
+    nightly)
+        _body="$ROOTDIR/nightly-changelog.md"
+        ;;
+    tag)
+        _body="$ROOTDIR/releasenotes/$GITHUB_TAG.md"
+        ;;
+    *)
+		# This codepath is unimplemented and unused
+        _body=/dev/null
+        ;;
+esac
+
 ## URLS ##
 _header "Creating urls.txt"
 
@@ -40,21 +55,6 @@ _assets=$(jq -R -s -c 'split("\n") | map(select(length > 0))' "$ROOTDIR/urls.txt
 
 ## RELEASE.JSON ##
 _header "Creating release.json"
-
-# Fake API endpoint
-# TODO(crueter): Automate tagged rels
-case "$BUILD_ID" in
-    nightly)
-        _body="$ROOTDIR/nightly-changelog.md"
-        ;;
-    tag)
-        _body="$ROOTDIR/releasenotes/$GITHUB_TAG.md"
-        ;;
-    *)
-		# This codepath is unimplemented and unused
-        _body=/dev/null
-        ;;
-esac
 
 jq -c -n \
     --arg title "$GITHUB_TITLE" \
