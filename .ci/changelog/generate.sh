@@ -276,7 +276,7 @@ printf -- "- "
 file_link "macOS DMG" "macOS-${ARTIFACT_REF}.dmg"
 echo
 
-if [ "$1" = "tag" ]; then
+if tagged; then
 	cat <<-EOF
 		## Torrent
 
