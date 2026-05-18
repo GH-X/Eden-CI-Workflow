@@ -462,7 +462,7 @@ index 4549a36345..dd2c0dd47a 100644
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index 60e0e8449b..9a52177446 100644
+index 60e0e8449b..ea1aa90ce4 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -30,24 +30,18 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
@@ -492,16 +492,16 @@ index 60e0e8449b..9a52177446 100644
 +        const s64 local_memory = static_cast<s64>(device_local_memory);
 +        const s64 mem_threshold = (std::min)(
 +            local_memory, (device_local_memory > 4_GiB ? local_memory : TARGET_THRESHOLD));
-+        expected_memory = static_cast<u64>(mem_threshold * 70 / 100);
-+        critical_memory = static_cast<u64>(mem_threshold * 85 / 100);
++        expected_memory = static_cast<u64>(mem_threshold * 76 / 100);
++        critical_memory = static_cast<u64>(mem_threshold * 88 / 100);
 +    } else {
-+        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 70 / 100);
-+        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 85 / 100);
++        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 76 / 100);
++        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 88 / 100);
 +    }
  }
  
  template <class P>
-@@ -55,9 +49,19 @@ BufferCache<P>::~BufferCache() = default;
+@@ -55,9 +49,22 @@ BufferCache<P>::~BufferCache() = default;
  
  template <class P>
  void BufferCache<P>::RunGarbageCollector() {
@@ -517,27 +517,28 @@ index 60e0e8449b..9a52177446 100644
 +            --ticks_to_reserve;
 +        }
 +    }
++    if (ticks_to_reserve < 10) {
++        ticks_to_reserve = 10;
++    }
 +
-+    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve - 10);
++    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
 +    u64 num_iterations = ticks_to_destroy;
 +
      const auto clean_up = [this, &num_iterations](BufferId buffer_id) {
          if (num_iterations == 0) {
              return true;
-@@ -68,7 +72,11 @@ void BufferCache<P>::RunGarbageCollector() {
+@@ -68,7 +75,9 @@ void BufferCache<P>::RunGarbageCollector() {
          DeleteBuffer(buffer_id);
          return false;
      };
 -    lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, clean_up);
 +
-+    if (ticks_to_destroy > 0) {
-+        lru_cache.ForEachItemBelow(ticks_to_destroy, clean_up);
-+    }
++    lru_cache.ForEachItemBelow(ticks_to_destroy, clean_up);
 +    Last_total_used_memory = total_used_memory;
  }
  
  template <class P>
-@@ -100,9 +108,7 @@ void BufferCache<P>::TickFrame() {
+@@ -100,9 +109,7 @@ void BufferCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -660,7 +661,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 5a1c680830..0bbc732679 100644
+index 5a1c680830..49cbf43ea9 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -57,23 +57,15 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -684,18 +685,18 @@ index 5a1c680830..0bbc732679 100644
 +        const s64 local_memory = static_cast<s64>(device_local_memory);
 +        const s64 mem_threshold = (std::min)(
 +            local_memory, (device_local_memory > 4_GiB ? local_memory : TARGET_THRESHOLD));
-+        expected_memory = static_cast<u64>(mem_threshold * 70 / 100);
-+        critical_memory = static_cast<u64>(mem_threshold * 85 / 100);
++        expected_memory = static_cast<u64>(mem_threshold * 76 / 100);
++        critical_memory = static_cast<u64>(mem_threshold * 88 / 100);
      } else {
 -        expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
 -        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
 -        minimum_memory = 0;
-+        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 70 / 100);
-+        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 85 / 100);
++        expected_memory = static_cast<u64>(TARGET_THRESHOLD * 76 / 100);
++        critical_memory = static_cast<u64>(TARGET_THRESHOLD * 88 / 100);
      }
  
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -114,29 +106,26 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -114,29 +106,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -710,10 +711,12 @@ index 5a1c680830..0bbc732679 100644
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
 -    };
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode, &aggressive_mode](ImageId image_id) {
-+    const u64 ticks_to_destroy = frame_tick - 10;
++    const u64 uncleaned_used_memory = total_used_memory;
++    const u8 ticks_to_reserve = total_used_memory + estimated_alloc_size > critical_memory ? 10 : 20;
++    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
 +    u64 num_iterations = ticks_to_destroy;
 +
-+    const auto Cleanup = [this, &num_iterations](ImageId image_id) {
++    const auto Cleanup = [this, &num_iterations, &uncleaned_used_memory](ImageId image_id) {
          if (num_iterations == 0) {
              return true;
          }
@@ -727,7 +730,7 @@ index 5a1c680830..0bbc732679 100644
 -        const bool must_download = image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
 -        if ((!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) || (!high_priority_mode && must_download)) {
 +
-+        if (total_used_memory < expected_memory && !image.info.is_sparse &&
++        if (total_used_memory + estimated_alloc_size < expected_memory && !image.info.is_sparse &&
 +            (True(image.flags & ImageFlagBits::CostlyLoad) || !must_download)) {
              return false;
          }
@@ -736,7 +739,7 @@ index 5a1c680830..0bbc732679 100644
          if (must_download) {
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
-@@ -144,25 +133,18 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -144,26 +135,20 @@ void TextureCache<P>::RunGarbageCollector() {
              runtime.Finish();
              SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
          }
@@ -752,8 +755,10 @@ index 5a1c680830..0bbc732679 100644
 -        } else if (high_priority_mode && total_used_memory < expected_memory) {
 -            num_iterations >>= 1;
 -            high_priority_mode = false;
--        }
 +
++        if (estimated_alloc_size > 0 && uncleaned_used_memory - total_used_memory > estimated_alloc_size) {
++            num_iterations = 0;
+         }
          return false;
      };
 -    Configure(false);
@@ -761,24 +766,25 @@ index 5a1c680830..0bbc732679 100644
 -    if (total_used_memory >= critical_memory) {
 -        Configure(true);
 -        lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
+-    }
 +
-+    if (ticks_to_destroy > 0) {
-+        lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
-     }
++    lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
  }
  
-@@ -172,9 +154,7 @@ void TextureCache<P>::TickFrame() {
+ template <class P>
+@@ -172,9 +157,8 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
 -    if (total_used_memory > minimum_memory) {
 -        RunGarbageCollector();
 -    }
++    estimated_alloc_size = 0;
 +    RunGarbageCollector();
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1138,7 +1118,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1138,7 +1122,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -786,7 +792,7 @@ index 5a1c680830..0bbc732679 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1160,7 +1139,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1160,7 +1143,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -794,7 +800,7 @@ index 5a1c680830..0bbc732679 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1449,11 +1427,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1449,11 +1431,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -806,7 +812,7 @@ index 5a1c680830..0bbc732679 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1514,9 +1487,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1514,9 +1491,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -816,8 +822,62 @@ index 5a1c680830..0bbc732679 100644
      }
  }
  
+@@ -1558,6 +1532,39 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+         }
+     }
+     ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
++
++    // For sparse textures, aggressively clean up old allocations at same address
++    if (info.is_sparse) {
++        const auto alloc_it = image_allocs_table.find(gpu_addr);
++        if (alloc_it != image_allocs_table.end()) {
++            const ImageAllocId alloc_id = alloc_it->second;
++            auto& alloc_images = slot_image_allocs[alloc_id].images;
++
++            // Collect old images at this address that were created more than 2 frames ago
++            boost::container::small_vector<ImageId, 64> to_delete;
++            for (ImageId old_image_id : alloc_images) {
++                Image& old_image = slot_images[old_image_id];
++                if (old_image.info.is_sparse &&
++                    old_image.gpu_addr == gpu_addr &&
++                    old_image.allocation_tick < frame_tick - 2) {  // Try not to delete fresh textures
++                    to_delete.push_back(old_image_id);
++                }
++            }
++
++            // Delete old images immediately
++            for (ImageId old_id : to_delete) {
++                Image& old_image = slot_images[old_id];
++                LOG_DEBUG(HW_GPU, "Immediately deleting old sparse texture at 0x{:X} ({} MiB)",
++                         gpu_addr, old_image.guest_size_bytes / (1024 * 1024));
++                if (True(old_image.flags & ImageFlagBits::Tracked)) {
++                    UntrackImage(old_image, old_id);
++                }
++                UnregisterImage(old_id);
++                DeleteImage(old_id, true);
++            }
++        }
++    }
++
+     const ImageId image_id = JoinImages(info, gpu_addr, *cpu_addr);
+     const Image& image = slot_images[image_id];
+     // Using "image.gpu_addr" instead of "gpu_addr" is important because it might be different
+@@ -1573,6 +1580,13 @@ template <class P>
+ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
+     ImageInfo new_info = info;
+     const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
++
++    // Proactive cleanup for texture allocations
++    estimated_alloc_size = static_cast<u64>(size_bytes);
++    if (estimated_alloc_size > 0) {
++        RunGarbageCollector();
++    }
++
+     const bool broken_views = runtime.HasBrokenTextureViewFormats();
+     const bool native_bgr = runtime.HasNativeBgr();
+     join_overlap_ids.clear();
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index 47f52c5c99..7ac1c4d3e4 100644
+index 47f52c5c99..354252b469 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
 @@ -118,10 +118,6 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
@@ -831,9 +891,11 @@ index 47f52c5c99..7ac1c4d3e4 100644
      using Runtime = typename P::Runtime;
      using Image = typename P::Image;
      using ImageAlloc = typename P::ImageAlloc;
-@@ -475,9 +471,8 @@ private:
+@@ -474,10 +470,10 @@ private:
+ 
      bool has_deleted_images = false;
      bool is_rescaling = false;
++    u64 estimated_alloc_size = 0;
      u64 total_used_memory = 0;
 -    u64 minimum_memory;
 -    u64 expected_memory;
@@ -843,7 +905,7 @@ index 47f52c5c99..7ac1c4d3e4 100644
      size_t gpu_unswizzle_maxsize = 0;
      size_t swizzle_chunk_size = 0;
      u32 swizzle_slices_per_batch = 0;
-@@ -537,7 +532,6 @@ private:
+@@ -537,7 +533,6 @@ private:
      std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
  
      std::deque<PendingUnswizzle> unswizzle_queue;
