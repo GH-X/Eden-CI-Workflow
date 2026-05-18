@@ -65,7 +65,8 @@ file_link() {
 	artifact="$2"
 	prefix="${3:-$PROJECT_PRETTYNAME}"
 
-	url="$GITHUB_DOWNLOAD/$GITHUB_TAG/$prefix-$artifact"
+	# TODO(crueter): Make this detect gh/b2
+	url="https://$B2_PUBLIC_URL/$GITHUB_TAG/$prefix-$artifact"
 
 	printf "[%s](%s)" "$label" "$url"
 }
@@ -278,11 +279,16 @@ echo
 
 if tagged; then
 	cat <<-EOF
+
 		## Torrent
 
-		A torrent containing all artifacts. To use this, simply download the torrent and import it into your favorite torrent client (BitTorrent only!),
-		and artifacts will be downloaded automatically.
-
-		- [Torrent](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent)
+		A torrent containing all artifacts. To use this, simply download the torrent and import it into your
+		favorite torrent client (BitTorrent only!), and artifacts will be downloaded automatically.
 	EOF
+
+	printf -- "- "
+	file_link "Torrent" "${ARTIFACT_REF}.torrent"
+	echo
+	echo
+
 fi
