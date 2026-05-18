@@ -109,10 +109,10 @@ linux_field() {
 
 linux_matrix() {
 	linux_field amd64 "amd64"
-	if opts; then
-		tagged && linux_field legacy "Legacy amd64" "Pre-Ryzen or Haswell CPUs (expect sadness)"
-		linux_field steamdeck "Steam Deck" "Zen 2, with patches for Game/Desktop mode support"
-		tagged && linux_field rog-ally "ROG Ally X" "Zen 4, with patches for Game/Desktop mode support"
+	if tagged && opts; then
+		linux_field legacy "Legacy amd64" "Pre-Ryzen or Haswell CPUs (expect sadness)"
+		linux_field steamdeck "Steam Deck" "Zen 2"
+		linux_field rog-ally "Zen 4" "Zen 4 (AMD Z1/Z2, ROG Ally X, Legion Go S)"
 	fi
 
 	falsy "$DISABLE_ARM" && linux_field aarch64 "ARM (aarch64)"
