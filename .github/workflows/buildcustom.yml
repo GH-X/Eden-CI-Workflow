@@ -35,7 +35,7 @@ jobs:
     outputs:
       cachever: ${{ steps.out.outputs.cachever }}
       pgo: ${{ steps.out.outputs.pgo }}
-    name: "Parse and Clone"
+    name: Parse and Clone
     runs-on: ubuntu-latest
 
     steps:
@@ -105,7 +105,7 @@ jobs:
             eden/.patch
 
   windows:
-    name: "Windows"
+    name: Windows
     needs: [clone]
     uses: ./.github/workflows/windows.yml
     with:

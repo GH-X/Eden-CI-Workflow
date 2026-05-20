@@ -240,7 +240,11 @@ parse_payload() {
 
 		echo "GITHUB_TAG=$_tag"
 		echo "GITHUB_TITLE=$_title"
-		echo "GITHUB_DOWNLOAD=https://$RELEASE_HOST/$RELEASE_REPO/releases/download"
+		[ "$1" = "pushed" -o "$1" = "manual" ] || echo "ARTIFACT_REF=$_ref"
+
+		# TODO(crueter): Make this detect gh/b2?
+		# echo "GITHUB_DOWNLOAD=https://$RELEASE_HOST/$RELEASE_REPO/releases/download"
+		# echo "B2_DOWNLOAD=https://$B2_PUBLIC_URL/$_tag"
 
 		echo "MASTER_RELEASE_URL=https://$MASTER_FJ_HOST/$MASTER_FJ_REPO/releases"
 
