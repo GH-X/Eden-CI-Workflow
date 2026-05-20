@@ -5,6 +5,7 @@
 
 # shellcheck disable=SC1091
 
+ROOTDIR="$PWD"
 . ./.ci/common/project.sh
 
 opts() {
@@ -33,12 +34,16 @@ pull_request)
 	;;
 tag)
 	echo "## Changelog"
+	echo
+	cat "$ROOTDIR/releasenotes/$GITHUB_TAG.md"
+
 	devel=false
 	;;
 nightly)
 	echo "Nightly build of commit [\`$FORGEJO_REF\`](https://$FORGEJO_HOST/$FORGEJO_REPO/compare/$FORGEJO_BEFORE..$FORGEJO_LONGSHA)."
 	echo
-	cat nightly-changelog.md
+	cat "$ROOTDIR/nightly-changelog.md"
+
 	devel=false
 	;;
 push | test)
@@ -60,7 +65,8 @@ file_link() {
 	artifact="$2"
 	prefix="${3:-$PROJECT_PRETTYNAME}"
 
-	url="$GITHUB_DOWNLOAD/$GITHUB_TAG/$prefix-$artifact"
+	# TODO(crueter): Make this detect gh/b2
+	url="https://$B2_PUBLIC_URL/$GITHUB_TAG/$prefix-$artifact"
 
 	printf "[%s](%s)" "$label" "$url"
 }
@@ -103,10 +109,10 @@ linux_field() {
 
 linux_matrix() {
 	linux_field amd64 "amd64"
-	if opts; then
-		tagged && linux_field legacy "Legacy amd64" "Pre-Ryzen or Haswell CPUs (expect sadness)"
-		linux_field steamdeck "Steam Deck" "Zen 2, with patches for Game/Desktop mode support"
-		tagged && linux_field rog-ally "ROG Ally X" "Zen 4, with patches for Game/Desktop mode support"
+	if tagged && opts; then
+		linux_field legacy "Legacy amd64" "Pre-Ryzen or Haswell CPUs (expect sadness)"
+		linux_field steamdeck "Steam Deck" "Zen 2"
+		linux_field rog-ally "Zen 4" "Zen 4 (AMD Z1/Z2, ROG Ally X, Legion Go S)"
 	fi
 
 	falsy "$DISABLE_ARM" && linux_field aarch64 "ARM (aarch64)"
@@ -153,7 +159,11 @@ win_field() {
 win_matrix() {
 	msvc_field
 	win_field amd64 "amd64/x86_64 v3" "Built with MinGW. Requires Ryzen, 4th gen Intel, or newer"
-	win_field rog-ally "Zen 4" "Requires Zen 4 or newer (e.g. ROG Ally X, Legion Go S). Incompatible with Intel"
+
+	if tagged || truthy "${FORCE_PGO}"; then
+		win_field rog-ally "Zen 4" "Requires Zen 4 or newer (e.g. ROG Ally X, Legion Go S). Incompatible with Intel"
+	fi
+
 	win_field arm64 "aarch64/arm64" "Snapdragon devices"
 }
 
@@ -267,13 +277,18 @@ printf -- "- "
 file_link "macOS DMG" "macOS-${ARTIFACT_REF}.dmg"
 echo
 
-if [ "$1" = "tag" ]; then
+if tagged; then
 	cat <<-EOF
+
 		## Torrent
 
-		A torrent containing all artifacts. To use this, simply download the torrent and import it into your favorite torrent client (BitTorrent only!),
-		and artifacts will be downloaded automatically.
-
-		- [Torrent](${GITHUB_DOWNLOAD}/${GITHUB_TAG}/${PROJECT_PRETTYNAME}-${ARTIFACT_REF}.torrent)
+		A torrent containing all artifacts. To use this, simply download the torrent and import it into your
+		favorite torrent client (BitTorrent only!), and artifacts will be downloaded automatically.
 	EOF
+
+	printf -- "- "
+	file_link "Torrent" "${ARTIFACT_REF}.torrent"
+	echo
+	echo
+
 fi

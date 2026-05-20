@@ -19,8 +19,26 @@ _header() {
     echo
 }
 
+# Fake API endpoint
+# TODO(crueter): Automate tagged rels
+case "$BUILD_ID" in
+    nightly)
+        _body="$ROOTDIR/nightly-changelog.md"
+        ;;
+    tag)
+        _body="$ROOTDIR/releasenotes/$GITHUB_TAG.md"
+        ;;
+    *)
+		# This codepath is unimplemented and unused
+        _body=/dev/null
+        ;;
+esac
+
 ## URLS ##
 _header "Creating urls.txt"
+
+cp "$_body" "$ARTIFACTS_DIR"
+
 # get the URLs and put them in a file
 # TODO(crueter): Move these off of Forgejo and onto some static page.
 find "$_local" -type f | while read -r artifact; do
@@ -37,25 +55,11 @@ _assets=$(jq -R -s -c 'split("\n") | map(select(length > 0))' "$ROOTDIR/urls.txt
 
 ## RELEASE.JSON ##
 _header "Creating release.json"
-# Fake API endpoint
-# TODO(crueter): Automate tagged rels
-case "$BUILD_ID" in
-    nightly)
-        _body="$(cat "$ROOTDIR/nightly-changelog.md")"
-        ;;
-    tag)
-        # FIXME(crueter): Pull from somewhere, idk
-        _body="Unimplemented"
-        ;;
-    *)
-        _body="Build: $BUILD_ID"
-        ;;
-esac
 
 jq -c -n \
     --arg title "$GITHUB_TITLE" \
     --arg tag "$GITHUB_TAG" \
-    --arg body "$_body" \
+    --arg body "$(cat "$_body")" \
     --arg base "https://$B2_PUBLIC_URL" \
     --argjson assets "$_assets" \
     '{
