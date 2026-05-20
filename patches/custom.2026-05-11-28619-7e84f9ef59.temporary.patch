@@ -661,7 +661,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 5a1c680830..49cbf43ea9 100644
+index 5a1c680830..e4ea010a3e 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -57,23 +57,15 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -712,7 +712,7 @@ index 5a1c680830..49cbf43ea9 100644
 -    };
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode, &aggressive_mode](ImageId image_id) {
 +    const u64 uncleaned_used_memory = total_used_memory;
-+    const u8 ticks_to_reserve = total_used_memory + estimated_alloc_size > critical_memory ? 10 : 20;
++    const u8 ticks_to_reserve = total_used_memory > critical_memory ? 10 : (estimated_alloc_size > 0 ? 40 : 20);
 +    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
 +    u64 num_iterations = ticks_to_destroy;
 +
@@ -730,7 +730,7 @@ index 5a1c680830..49cbf43ea9 100644
 -        const bool must_download = image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
 -        if ((!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) || (!high_priority_mode && must_download)) {
 +
-+        if (total_used_memory + estimated_alloc_size < expected_memory && !image.info.is_sparse &&
++        if (total_used_memory < expected_memory && !image.info.is_sparse &&
 +            (True(image.flags & ImageFlagBits::CostlyLoad) || !must_download)) {
              return false;
          }
@@ -869,7 +869,7 @@ index 5a1c680830..49cbf43ea9 100644
 +
 +    // Proactive cleanup for texture allocations
 +    estimated_alloc_size = static_cast<u64>(size_bytes);
-+    if (estimated_alloc_size > 0) {
++    if (estimated_alloc_size > 0 && !new_info.is_sparse) {
 +        RunGarbageCollector();
 +    }
 +
