@@ -100,6 +100,10 @@ COMMON_FLAGS=(
 	# We don't need it standalone.
 	-DYUZU_ROOM_STANDALONE=OFF
 
+	# Currently only used on auto-updater for MinGW
+	# Will probably be used for other stuff?
+	-DBUILD_ID="$BUILD_TARGET"
+
 	-DNIGHTLY_BUILD="${NIGHTLY:-OFF}"
 )
 
