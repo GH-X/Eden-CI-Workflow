@@ -25,6 +25,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			echo "Making amd64-v3 optimized build of ${PROJECT_PRETTYNAME}"
 			ARCH_FLAGS="-march=x86-64-v3 -mtune=generic"
 			ARCH="amd64"
+			BUILD_TARGET=amd64
 			;;
 		steamdeck|zen2)
 			echo "Making Steam Deck (Zen 2) optimized build of ${PROJECT_PRETTYNAME}"
@@ -35,6 +36,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			echo "Making ROG Ally X (Zen 4) optimized build of ${PROJECT_PRETTYNAME}"
 			ARCH_FLAGS="-march=znver4 -mtune=znver4"
 			ARCH="rog-ally-x"
+			BUILD_TARGET=rog-ally
 			;;
 		aarch64|arm64)
 			echo "Making armv8-a build of ${PROJECT_PRETTYNAME}"
@@ -76,8 +78,6 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			exit 1
 			;;
 	esac
-
-	BUILD_TARGET="$ARCH"
 
 	ARCH_FLAGS="${ARCH_FLAGS} -O3"
 	[ "$PLATFORM" = "linux" ] && ARCH_FLAGS="${ARCH_FLAGS} -pipe"
