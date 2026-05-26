@@ -100,6 +100,9 @@ COMMON_FLAGS=(
 	# We don't need it standalone.
 	-DYUZU_ROOM_STANDALONE=OFF
 
+	# Mostly used by auto updater
+	-DBUILD_ID="$BUILD_TARGET"
+
 	-DNIGHTLY_BUILD="${NIGHTLY:-OFF}"
 )
 

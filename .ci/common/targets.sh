@@ -3,7 +3,10 @@
 # SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-SDL_FLAGS=(-DYUZU_USE_BUNDLED_SDL3=ON)
+SDL_FLAGS=(
+	-DYUZU_USE_BUNDLED_SDL3=ON
+	-DYUZU_USE_BUNDLED_SDL2=ON
+)
 
 # only clang and gcc support this
 if [ -n "$SUPPORTS_TARGETS" ]; then
@@ -43,12 +46,6 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			ARCH_FLAGS="-march=armv9-a -mtune=generic"
 			ARCH=armv9
 			;;
-		native)
-			echo "Making native build of ${PROJECT_PRETTYNAME}"
-			ARCH_FLAGS="-march=native -mtune=native"
-			FFMPEG=OFF
-			OPENSSL=OFF
-			;;
 		# Special target: package-{amd64,aarch64}
 		# In the "package" target we WANT standalone executables
 		# and want to target generic architectures
@@ -75,10 +72,12 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			LTO=OFF
 			;;
 		*)
-			echo "Invalid target $TARGET specified, must be one of: native, amd64, steamdeck, zen2, allyx, rog-ally, zen4, legacy, aarch64, armv9"
+			echo "Invalid target $TARGET specified"
 			exit 1
 			;;
 	esac
+
+	BUILD_TARGET="$ARCH"
 
 	ARCH_FLAGS="${ARCH_FLAGS} -O3"
 	[ "$PLATFORM" = "linux" ] && ARCH_FLAGS="${ARCH_FLAGS} -pipe"
@@ -98,11 +97,17 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 	fi
 fi
 
+if [ "$STEAMDECK" = "true" ]; then
+	SDL_FLAGS=(
+		-DYUZU_SYSTEM_PROFILE=steamdeck
+		-DYUZU_USE_EXTERNAL_SDL2=ON
+	)
+fi
+
 # Package targets should use system sdl3
 # Mostly to test comp
-# TODO: Drop debian 12
 if [ "$PACKAGE" = "true" ]; then
-	SDL_FLAGS=(-DYUZU_USE_BUNDLED_SDL3=ON)
+	SDL_FLAGS=(-DYUZU_USE_BUNDLED_SDL3=OFF)
 fi
 
 [ -n "$ARCH_FLAGS" ] && ARCH_CMAKE+=(-DCMAKE_C_FLAGS="${ARCH_FLAGS}" -DCMAKE_CXX_FLAGS="${ARCH_FLAGS}")
@@ -116,3 +121,4 @@ export FFMPEG
 export LTO
 export CCACHE
 export UPDATES
+export BUILD_TARGET
