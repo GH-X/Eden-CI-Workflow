@@ -33,23 +33,11 @@ jobs:
     outputs:
       targets: ${{ steps.set.outputs.targets }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - id: set
-        run: |
-          OPT='{"flavor": "optimized"}'
-          LEG='{"flavor": "legacy"}'
-          STD='{"flavor": "standard"}'
-          CHR='{"flavor": "chromeos"}'
-
-          if [ "${{ inputs.devel }}" = "false" ]; then
-            TARGETS="[$OPT, $LEG, $STD, $CHR]"
-          elif [ "${{ inputs.build-id }}" == "pull_request" ]; then
-            TARGETS="[$STD, $CHR]"
-          else
-            TARGETS="[$STD]"
-          fi
-
-          echo $TARGETS
-          echo "targets=${TARGETS}" >> $GITHUB_OUTPUT
+        run: ./.ci/matrix/android.sh
 
   android:
     name: "Android"

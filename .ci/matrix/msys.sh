@@ -39,5 +39,5 @@ fi
 
 MATRIX="$MATRIX]"
 
-echo "$MATRIX"
+echo "MSYS Matrix: $MATRIX"
 echo "matrix=${MATRIX}" >>"$GITHUB_OUTPUT"
