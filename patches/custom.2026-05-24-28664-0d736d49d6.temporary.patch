@@ -23,7 +23,7 @@ index 4e9356cb83..a3c492c91a 100644
          "repo": "eden-emu/tzdb_to_nx",
          "git_host": "git.eden-emu.dev",
 diff --git a/src/common/settings.h b/src/common/settings.h
-index f38e95d5a4..a8bac15579 100644
+index f38e95d5a4..0ada343e63 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -127,7 +127,7 @@ index f38e95d5a4..a8bac15579 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -469,24 +467,18 @@ struct Values {
+@@ -469,28 +467,22 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -155,6 +155,11 @@ index f38e95d5a4..a8bac15579 100644
                                                    Category::RendererAdvanced};
  
      SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
+-        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
++        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
+         Specialization::Default};
+ 
+     SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
 @@ -512,7 +504,7 @@ struct Values {
                                                     Category::RendererAdvanced};
  
@@ -661,7 +666,7 @@ index 69c1720943..b92ccf28df 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index cb6b5b0a94..e4ea010a3e 100644
+index cb6b5b0a94..b948c8dbef 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -57,23 +57,15 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -696,7 +701,7 @@ index cb6b5b0a94..e4ea010a3e 100644
      }
  
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -114,29 +106,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -114,29 +106,27 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -711,12 +716,11 @@ index cb6b5b0a94..e4ea010a3e 100644
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
 -    };
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode, &aggressive_mode](ImageId image_id) {
-+    const u64 uncleaned_used_memory = total_used_memory;
-+    const u8 ticks_to_reserve = total_used_memory > critical_memory ? 10 : (estimated_alloc_size > 0 ? 40 : 20);
++    const u8 ticks_to_reserve = total_used_memory > critical_memory ? 10 : 20;
 +    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
 +    u64 num_iterations = ticks_to_destroy;
 +
-+    const auto Cleanup = [this, &num_iterations, &uncleaned_used_memory](ImageId image_id) {
++    const auto Cleanup = [this, &num_iterations](ImageId image_id) {
          if (num_iterations == 0) {
              return true;
          }
@@ -738,7 +742,7 @@ index cb6b5b0a94..e4ea010a3e 100644
          if (must_download) {
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
              const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
-@@ -144,26 +135,20 @@ void TextureCache<P>::RunGarbageCollector() {
+@@ -144,26 +134,17 @@ void TextureCache<P>::RunGarbageCollector() {
              runtime.Finish();
              SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
          }
@@ -754,10 +758,8 @@ index cb6b5b0a94..e4ea010a3e 100644
 -        } else if (high_priority_mode && total_used_memory < expected_memory) {
 -            num_iterations >>= 1;
 -            high_priority_mode = false;
+-        }
 +
-+        if (estimated_alloc_size > 0 && uncleaned_used_memory - total_used_memory > estimated_alloc_size) {
-+            num_iterations = 0;
-         }
          return false;
      };
 -    Configure(false);
@@ -771,19 +773,18 @@ index cb6b5b0a94..e4ea010a3e 100644
  }
  
  template <class P>
-@@ -172,9 +157,8 @@ void TextureCache<P>::TickFrame() {
+@@ -172,9 +153,7 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
 -    if (total_used_memory > minimum_memory) {
 -        RunGarbageCollector();
 -    }
-+    estimated_alloc_size = 0;
 +    RunGarbageCollector();
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1138,7 +1122,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1138,7 +1117,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -791,7 +792,7 @@ index cb6b5b0a94..e4ea010a3e 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1160,7 +1143,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1160,7 +1138,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -799,7 +800,7 @@ index cb6b5b0a94..e4ea010a3e 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1449,11 +1431,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1449,11 +1426,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -811,7 +812,7 @@ index cb6b5b0a94..e4ea010a3e 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1514,9 +1491,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1514,9 +1486,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -821,7 +822,7 @@ index cb6b5b0a94..e4ea010a3e 100644
      }
  }
  
-@@ -1558,6 +1532,39 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1558,6 +1527,39 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
          }
      }
      ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
@@ -861,22 +862,8 @@ index cb6b5b0a94..e4ea010a3e 100644
      const ImageId image_id = JoinImages(info, gpu_addr, *cpu_addr);
      const Image& image = slot_images[image_id];
      // Using "image.gpu_addr" instead of "gpu_addr" is important because it might be different
-@@ -1573,6 +1580,13 @@ template <class P>
- ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
-     ImageInfo new_info = info;
-     const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
-+
-+    // Proactive cleanup for texture allocations
-+    estimated_alloc_size = static_cast<u64>(size_bytes);
-+    if (estimated_alloc_size > 0 && !new_info.is_sparse) {
-+        RunGarbageCollector();
-+    }
-+
-     const bool broken_views = runtime.HasBrokenTextureViewFormats();
-     const bool native_bgr = runtime.HasNativeBgr();
-     join_overlap_ids.clear();
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index 47f52c5c99..354252b469 100644
+index 47f52c5c99..7ac1c4d3e4 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
 @@ -118,10 +118,6 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
@@ -890,11 +877,9 @@ index 47f52c5c99..354252b469 100644
      using Runtime = typename P::Runtime;
      using Image = typename P::Image;
      using ImageAlloc = typename P::ImageAlloc;
-@@ -474,10 +470,10 @@ private:
- 
+@@ -475,9 +471,8 @@ private:
      bool has_deleted_images = false;
      bool is_rescaling = false;
-+    u64 estimated_alloc_size = 0;
      u64 total_used_memory = 0;
 -    u64 minimum_memory;
 -    u64 expected_memory;
@@ -904,7 +889,7 @@ index 47f52c5c99..354252b469 100644
      size_t gpu_unswizzle_maxsize = 0;
      size_t swizzle_chunk_size = 0;
      u32 swizzle_slices_per_batch = 0;
-@@ -537,7 +533,6 @@ private:
+@@ -537,7 +532,6 @@ private:
      std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
  
      std::deque<PendingUnswizzle> unswizzle_queue;
