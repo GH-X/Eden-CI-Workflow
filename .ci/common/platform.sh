@@ -18,7 +18,7 @@ if [ -n "$VCINSTALLDIR" ]; then
 	FFMPEG=ON
 	QT=ON
 	STATIC=ON
-	[ "$COMPILER" = "clang" ] && SUPPORTS_TARGETS=ON
+	SUPPORTS_TARGETS=ON
 
 	# LTO is completely broken on MSVC
 	LTO=off
@@ -40,6 +40,7 @@ else
 		SIRIT=ON
 		STATIC=ON
 		QT=ON
+		SUPPORTS_TARGETS=ON
 		export LIBVULKAN_PATH="/opt/homebrew/lib/libvulkan.1.dylib"
 		;;
 	CYGWIN* | MINGW* | MSYS*)

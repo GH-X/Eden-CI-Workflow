@@ -37,8 +37,6 @@ esac
 ## URLS ##
 _header "Creating urls.txt"
 
-cp "$_body" "$ARTIFACTS_DIR"
-
 # get the URLs and put them in a file
 # TODO(crueter): Move these off of Forgejo and onto some static page.
 find "$_local" -type f | while read -r artifact; do
