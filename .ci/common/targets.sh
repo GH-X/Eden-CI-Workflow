@@ -8,7 +8,7 @@ SDL_FLAGS=(
 	-DYUZU_USE_BUNDLED_SDL2=ON
 )
 
-OPENSSL=external
+OPENSSL=bundled
 
 # only clang and gcc support this
 if [ "$PLATFORM" = win ]; then
@@ -118,6 +118,7 @@ fi
 
 [ -n "$ARCH_FLAGS" ] && ARCH_CMAKE+=(-DCMAKE_C_FLAGS="${ARCH_FLAGS}" -DCMAKE_CXX_FLAGS="${ARCH_FLAGS}")
 
+# TODO: External OpenSSL is broken on the Linux runner
 case "$OPENSSL" in
 	system) ARCH_CMAKE+=(-DYUZU_USE_BUNDLED_OPENSSL=OFF -DOpenSSL_FORCE_SYSTEM=ON) ;;
 	bundled) ARCH_CMAKE+=(-DYUZU_USE_BUNDLED_OPENSSL=ON) ;;
