@@ -8,18 +8,18 @@ SDL_FLAGS=(
 	-DYUZU_USE_BUNDLED_SDL2=ON
 )
 
-# only clang and gcc support this
-if [ -n "$SUPPORTS_TARGETS" ]; then
-	# MSVC (clang-cl) makes generic builds
-	if [ "$PLATFORM" = win ] && [ "$TARGET" = amd64 ]; then
-		TARGET=legacy
-	fi
+OPENSSL=external
 
+# only clang and gcc support this
+if [ "$PLATFORM" = win ]; then
+	OPENSSL=bundled
+elif [ -n "$SUPPORTS_TARGETS" ]; then
 	case "$TARGET" in
 		legacy)
 			echo "Making amd64 generic build of ${PROJECT_PRETTYNAME}"
 			ARCH_FLAGS="-march=x86-64 -mtune=generic"
 			ARCH=legacy
+			OPENSSL=bundled
 			;;
 		amd64)
 			echo "Making amd64-v3 optimized build of ${PROJECT_PRETTYNAME}"
@@ -42,6 +42,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			echo "Making armv8-a build of ${PROJECT_PRETTYNAME}"
 			ARCH_FLAGS="-march=armv8-a -mtune=generic"
 			ARCH=aarch64
+			OPENSSL=bundled
 			;;
 		armv9)
 			echo "Making armv9-a build of ${PROJECT_PRETTYNAME}"
@@ -57,9 +58,8 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			STANDALONE=ON
 			PACKAGE=true
 			FFMPEG=OFF
-			OPENSSL=OFF
+			OPENSSL=system
 			UPDATES=ON
-
 			;;
 		package-aarch64)
 			echo "Making package-friendly aarch64 build of ${PROJECT_PRETTYNAME}"
@@ -67,7 +67,7 @@ if [ -n "$SUPPORTS_TARGETS" ]; then
 			STANDALONE=ON
 			PACKAGE=true
 			FFMPEG=OFF
-			OPENSSL=OFF
+			OPENSSL=system
 			UPDATES=ON
 
 			# apparently gcc-arm64 on ubuntu dislikes lto
@@ -111,6 +111,12 @@ if [ "$PACKAGE" = "true" ]; then
 fi
 
 [ -n "$ARCH_FLAGS" ] && ARCH_CMAKE+=(-DCMAKE_C_FLAGS="${ARCH_FLAGS}" -DCMAKE_CXX_FLAGS="${ARCH_FLAGS}")
+
+case "$OPENSSL" in
+	system) ARCH_CMAKE+=(-DYUZU_USE_BUNDLED_OPENSSL=OFF -DOpenSSL_FORCE_SYSTEM=ON) ;;
+	bundled) ARCH_CMAKE+=(-DYUZU_USE_BUNDLED_OPENSSL=ON) ;;
+	external) ARCH_CMAKE+=(-DYUZU_USE_BUNDLED_OPENSSL=OFF -DOpenSSL_FORCE_BUNDLED=ON) ;;
+esac
 
 export ARCH_CMAKE
 export SDL_FLAGS
