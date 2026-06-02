@@ -6,15 +6,22 @@
 # compiler handling
 if [ "$COMPILER" = "clang" ]; then
 	case "$PLATFORM" in
-		(linux|freebsd|msys)
-			CLANG=clang
-			CLANGPP=clang++
-			;;
-		(win)
-			CLANG=clang-cl
-			CLANGPP=clang-cl
-			;;
-		(*) ;;
+	linux | freebsd | msys)
+		CLANG=clang
+		CLANGPP=clang++
+		;;
+	macos)
+		prefix="$(brew --prefix llvm)/bin"
+		CLANG="${prefix}/clang"
+		CLANGPP="${prefix}/clang++"
+		# maybe not needed
+		COMPILER_FLAGS+=(-DCMAKE_OSX_SYSROOT="$(xcrun --show-sdk-path)")
+		;;
+	win)
+		CLANG=clang-cl
+		CLANGPP=clang-cl
+		;;
+	*) ;;
 	esac
 
 	COMPILER_FLAGS+=(-DCMAKE_C_COMPILER="$CLANG" -DCMAKE_CXX_COMPILER="$CLANGPP" -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld")
