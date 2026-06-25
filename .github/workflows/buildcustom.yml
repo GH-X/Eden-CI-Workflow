@@ -74,15 +74,7 @@ jobs:
 
       - name: Apply Temporary Patch
         shell: bash
-        run: ./patchwindows.sh
-
-      - name: ReLoad payload environment
-        shell: bash
-        run: . ./.ci/fj/load-env.sh
-
-      - name: Summary
-        shell: bash
-        run: ./.ci/fj/summarycustom.sh ${{ inputs.build-id }}
+        run: ./patchwindows.sh ${{ inputs.build-id }} ${{ inputs.clone-giturl }}
 
       - name: Cleanup
         run: |
