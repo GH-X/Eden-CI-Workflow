@@ -503,6 +503,35 @@ index fd79d2299f..4b2700e89e 100644
  
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
+diff --git a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+index 2d4feca02c..809879c981 100644
+--- a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
++++ b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+@@ -376,6 +376,14 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+         .offset_end = 0x700,
+         .alignment = 16,
+     };
++    // Additional biases cover games (e.g. Zelda TOTK) that use
++    // storage buffers at index 6 or extended offset ranges.
++    static constexpr Bias extended_index_bias{
++        .index = 6,
++        .offset_begin = 0,
++        .offset_end = 0x800,
++        .alignment = 16,
++    };
+     // Track the low address of the instruction
+     const std::optional<LowAddrInfo> low_addr_info{TrackLowAddress(&inst)};
+     if (!low_addr_info) {
+@@ -385,6 +393,9 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+     // First try to find storage buffers in the NVN address
+     const IR::U32 low_addr{low_addr_info->value};
+     std::optional<StorageBufferAddr> storage_buffer{Track(low_addr, &nvn_bias)};
++    if (!storage_buffer) {
++        storage_buffer = Track(low_addr, &extended_index_bias);
++    }
+     if (!storage_buffer) {
+         // If it fails, track without a bias
+         storage_buffer = Track(low_addr, nullptr);
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
 index 740d99558e..f461260822 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
@@ -966,3 +995,16 @@ index fbc2bb4cf7..b54f4f6d8d 100644
  
      // Join caching
      boost::container::small_vector<ImageId, 4> join_overlap_ids;
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 7bf73dcead..f979ff800b 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -895,7 +895,7 @@ bool Device::GetSuitability(bool requires_swapchain) {
+     properties.properties = physical.GetProperties();
+ 
+     // Set instance version.
+-    instance_version = properties.properties.apiVersion;
++    instance_version = VK_API_VERSION_1_1;
+ 
+     // Minimum of API version 1.1 is required. (This is well-supported.)
+     ASSERT(instance_version >= VK_API_VERSION_1_1);
