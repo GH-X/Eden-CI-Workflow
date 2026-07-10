@@ -1,29 +1,25 @@
 diff --git a/cpmfile.json b/cpmfile.json
-index 792ec217f8..7b8e57f69a 100644
+index cac6c357b0..4b601b8c25 100644
 --- a/cpmfile.json
 +++ b/cpmfile.json
-@@ -115,6 +115,7 @@
-         "bundled": true
+@@ -146,6 +146,7 @@
+         "version": "aa3975893d"
      },
      "llvm-mingw": {
-+        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/master/cpmfile/clang-rt-builtins.tar.zst",
-         "repo": "eden-emu/llvm-mingw",
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/main/cpmfile/clang-rt-builtins.tar.zst",
+         "artifact": "clang-rt-builtins.tar.zst",
          "git_host": "git.eden-emu.dev",
-         "tag": "%VERSION%",
-diff --git a/externals/cpmfile.json b/externals/cpmfile.json
-index 07addeac5d..48b3c781c3 100644
---- a/externals/cpmfile.json
-+++ b/externals/cpmfile.json
-@@ -216,6 +216,7 @@
-         "min_version": "4.1"
+         "hash": "d902392caf94e84f223766e2cc51ca5fab6cae36ab8dc6ef9ef6a683ab1c483bfcfe291ef0bd38ab16a4ecc4078344fa8af72da2f225ab4c378dee23f6186181",
+@@ -294,6 +295,7 @@
+         "version": "vulkan-sdk-1.4.341.0"
      },
      "tzdb": {
-+        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/master/cpmfile/230326.tar.gz",
-         "package": "nx_tzdb",
-         "repo": "eden-emu/tzdb_to_nx",
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/main/cpmfile/230326.tar.gz",
+         "artifact": "%VERSION%.tar.gz",
          "git_host": "git.eden-emu.dev",
+         "hash": "cce65a12bf90f4ead43b24a0b95dfad77ac3d9bfbaaf66c55e6701346e7a1e44ca5d2f23f47ee35ee02271eb1082bf1762af207aad9fb236f1c8476812d008ed",
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 5f6e1a2206..84b6f5f6ac 100644
+index 00ba7dddc9..34da080be0 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -240,7 +240,7 @@ struct Values {
@@ -35,7 +31,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
                                              Specialization::Default};
  
      // Cpu
-@@ -258,7 +258,7 @@ struct Values {
+@@ -258,10 +258,10 @@ struct Values {
  #endif
                                                      "cpu_backend",
                                                      Category::Cpu};
@@ -43,7 +39,11 @@ index 5f6e1a2206..84b6f5f6ac 100644
 +    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Unsafe,
                                                        "cpu_accuracy", Category::Cpu};
      SwitchableSetting<CpuClock> fast_cpu_time{linkage,
-                                               CpuClock::Off,
+-                                              CpuClock::Off,
++                                              CpuClock::Fast,
+                                               "fast_cpu_time",
+                                               Category::Cpu,
+                                               Specialization::Default,
 @@ -315,7 +315,7 @@ struct Values {
  #endif
                                          "cpuopt_unsafe_host_mmu",
@@ -85,25 +85,45 @@ index 5f6e1a2206..84b6f5f6ac 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -420,7 +413,7 @@ struct Values {
- #ifdef __ANDROID__
-                                                       GpuAccuracy::Low,
- #else
--                                                      GpuAccuracy::Medium,
-+                                                      GpuAccuracy::High,
- #endif
-                                                       "gpu_accuracy",
-                                                       Category::RendererAdvanced,
-@@ -431,7 +424,7 @@ struct Values {
-     GpuAccuracy current_gpu_accuracy{GpuAccuracy::Medium};
+@@ -430,16 +423,8 @@ struct Values {
  
-     SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
+     GpuAccuracy current_gpu_accuracy{GpuAccuracy::High};
+ 
+-    SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
 -                                                      DmaAccuracy::Default,
-+                                                      DmaAccuracy::Safe,
-                                                       "dma_accuracy",
-                                                       Category::RendererAdvanced,
-                                                       Specialization::Default,
-@@ -450,7 +443,7 @@ struct Values {
+-                                                      "dma_accuracy",
+-                                                      Category::RendererAdvanced,
+-                                                      Specialization::Default,
+-                                                      true,
+-                                                      true};
+-
+     SwitchableSetting<GpuFenceBehavior, true> gpu_fence_behavior{linkage,
+-                                                                 GpuFenceBehavior::Default,
++                                                                 GpuFenceBehavior::Immediate,
+                                                                  GpuFenceBehavior::Default,
+                                                                  GpuFenceBehavior::Strict,
+                                                                  "gpu_fence_behavior",
+@@ -448,29 +433,43 @@ struct Values {
+                                                                  true,
+                                                                  true};
+ 
++    SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
++                                                      DmaAccuracy::Unsafe,
++                                                      "dma_accuracy",
++                                                      Category::RendererAdvanced,
++                                                      Specialization::Default,
++                                                      true,
++                                                      true};
++
+     SwitchableSetting<VramUsageMode, true> vram_usage_mode{linkage,
+                                                            VramUsageMode::Conservative,
+                                                            "vram_usage_mode",
+                                                            Category::RendererAdvanced};
+ 
+-    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
+-                                                      "nvdec_emulation", Category::RendererAdvanced};
+-
+     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
  #ifdef __ANDROID__
                                                             AnisotropyMode::Default,
  #else
@@ -112,7 +132,13 @@ index 5f6e1a2206..84b6f5f6ac 100644
  #endif
                                                             "max_anisotropy",
                                                             Category::RendererAdvanced};
-@@ -459,8 +452,13 @@ struct Values {
++
++    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
++                                                      "nvdec_emulation", Category::RendererAdvanced};
++
+     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
+-                                                            AstcDecodeMode::Gpu,
++                                                            AstcDecodeMode::Cpu,
                                                              "accelerate_astc",
                                                              Category::RendererAdvanced};
  
@@ -127,7 +153,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -469,12 +467,6 @@ struct Values {
+@@ -479,11 +478,11 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -135,30 +161,74 @@ index 5f6e1a2206..84b6f5f6ac 100644
 -                                                                  AstcRecompression::Uncompressed,
 -                                                                  "astc_recompression",
 -                                                                  Category::RendererAdvanced};
--
--
++    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
++                                                     Category::RendererAdvanced};
+ 
++    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
++                                                   Category::RendererAdvanced};
+ 
      SwitchableSetting<bool> sync_memory_operations{linkage,
                                                     false,
-                                                    "sync_memory_operations",
-@@ -483,14 +475,14 @@ struct Values {
+@@ -493,22 +492,6 @@ struct Values {
                                                     true,
                                                     true};
  
 -    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
-+    SwitchableSetting<bool> renderer_force_max_clock{linkage, true, "force_max_clock",
-                                                      Category::RendererAdvanced};
- 
+-                                                     Category::RendererAdvanced};
+-
 -    SwitchableSetting<bool> use_disk_shader_cache{linkage, true, "use_disk_shader_cache",
-+    SwitchableSetting<bool> use_disk_shader_cache{linkage, false, "use_disk_shader_cache",
+-                                                  Category::RendererAdvanced};
+-
+-    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
+-        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
+-        Specialization::Default};
+-
+-    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
+-                                                     Category::RendererAdvanced};
+-
+-    SwitchableSetting<bool> use_video_framerate{linkage, false, "use_video_framerate",
+-                                                Category::RendererAdvanced};
+-
+     SwitchableSetting<bool> use_reactive_flushing{linkage,
+ #ifdef __ANDROID__
+                                                   false,
+@@ -518,8 +501,8 @@ struct Values {
+                                                   "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
-     SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
--        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
-+        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
-         Specialization::Default};
+-    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
+-                                                   Category::RendererAdvanced};
++    SwitchableSetting<bool> use_video_framerate{linkage, false, "use_video_framerate",
++                                                Category::RendererAdvanced};
  
-     SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
-@@ -530,14 +522,6 @@ struct Values {
+     SwitchableSetting<bool> enable_buffer_history{linkage,
+                                                   false,
+@@ -529,6 +512,24 @@ struct Values {
+                                                   true,
+                                                   true};
+ 
++    SwitchableSetting<bool> enable_gpu_buffer_readback{linkage,
++                                                       false,
++                                                       "enable_gpu_buffer_readback",
++                                                       Category::RendererAdvanced,
++                                                       Specialization::Default,
++                                                       true,
++                                                       true};
++
++    SwitchableSetting<bool> use_disk_shader_cache{linkage, false, "use_disk_shader_cache",
++                                                  Category::RendererAdvanced};
++
++    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
++        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
++        Specialization::Default};
++
++    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
++                                                     Category::RendererAdvanced};
++
+ #ifdef __ANDROID__
+     SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
+                                                  false,
+@@ -540,14 +541,6 @@ struct Values {
  #endif
  
      // Renderer Hacks //
@@ -173,10 +243,10 @@ index 5f6e1a2206..84b6f5f6ac 100644
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -552,13 +536,6 @@ struct Values {
-                                         Specialization::Default,
-                                         true,
-                                         true};
+@@ -555,13 +548,6 @@ struct Values {
+                                                         Specialization::Default,
+                                                         true,
+                                                         true};
 -    SwitchableSetting<bool> async_presentation{linkage,
 -#ifdef __ANDROID__
 -                                               false,
@@ -187,10 +257,18 @@ index 5f6e1a2206..84b6f5f6ac 100644
  
      SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
                                                       Category::RendererHacks};
-@@ -574,29 +551,53 @@ struct Values {
+@@ -576,37 +562,62 @@ struct Values {
+         false,
  #endif
          "rescale_hack", Category::RendererHacks};
- 
+-    SwitchableSetting<bool> enable_gpu_buffer_readback{linkage,
+-                                                       false,
+-                                                       "enable_gpu_buffer_readback",
+-                                                       Category::RendererAdvanced,
+-                                                       Specialization::Default,
+-                                                       true,
+-                                                       true};
++
 +    SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage,
 +#ifdef __ANDROID__
 +                                                           false,
@@ -206,7 +284,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
 +                                               false,
 +#endif
 +                                               "async_presentation", Category::RendererHacks};
-+
+ 
      SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
                                                       Category::RendererHacks};
  
@@ -243,28 +321,42 @@ index 5f6e1a2206..84b6f5f6ac 100644
 +                                                  Specialization::Default,
 +                                                        true,
 +                                                        true};
++
++    SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
++#ifdef __ANDROID__
++                                                       false,
++#else
++                                                       true,
++#endif
++                                                       "vertex_input_dynamic_state", Category::RendererExtensions};
  
      SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
  #if defined(__ANDROID__)
-@@ -604,7 +605,7 @@ struct Values {
+@@ -614,7 +625,7 @@ struct Values {
  #elif defined(__APPLE__)
                                             ExtendedDynamicState::Disabled,
  #else
 -                                           ExtendedDynamicState::EDS2,
-+                                           ExtendedDynamicState::Disabled,
++                                           ExtendedDynamicState::EDS1,
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -621,7 +622,7 @@ struct Values {
- #ifdef __ANDROID__
-                                                        false,
- #else
--                                                       true,
-+                                                       false,
- #endif
-                                                        "vertex_input_dynamic_state", Category::RendererExtensions};
+@@ -627,14 +638,6 @@ struct Values {
+                                                 Category::RendererExtensions,
+                                                 Specialization::Scalar};
  
-@@ -647,13 +648,20 @@ struct Values {
+-    SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
+-#ifdef __ANDROID__
+-                                                       false,
+-#else
+-                                                       true,
+-#endif
+-                                                       "vertex_input_dynamic_state", Category::RendererExtensions};
+-
+     Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
+     Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
+                                            Category::RendererDebug};
+@@ -657,13 +660,20 @@ struct Values {
  
      // System
      SwitchableSetting<Language, true> language_index{linkage,
@@ -289,7 +381,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
      // Measured in seconds since epoch
      SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
      SwitchableSetting<s64> custom_rtc{
-@@ -673,8 +681,6 @@ struct Values {
+@@ -683,8 +693,6 @@ struct Values {
      SwitchableSetting<u32> rng_seed{
                                      linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
                                      true,    true, &rng_seed_enabled};
@@ -298,7 +390,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
  
      Setting<s32> current_user{linkage, 0, "current_user", Category::System};
  
-@@ -682,7 +688,7 @@ struct Values {
+@@ -692,7 +700,7 @@ struct Values {
  #ifdef __ANDROID__
                                                     ConsoleMode::Handheld,
  #else
@@ -307,7 +399,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
  #endif
                                                     "use_docked_mode",
                                                     Category::System,
-@@ -779,13 +785,6 @@ struct Values {
+@@ -789,13 +797,6 @@ struct Values {
      bool record_frame_times;
      Setting<bool> use_gdbstub{linkage, false, "use_gdbstub", Category::Debugging};
      Setting<u16> gdbstub_port{linkage, 6543, "gdbstub_port", Category::Debugging};
@@ -316,12 +408,12 @@ index 5f6e1a2206..84b6f5f6ac 100644
 -                                                "program_args",
 -                                                Category::System,
 -                                                Specialization::Default,
--                                                true,    // save_ — persist in config file
--                                                false};  // runtime_modifiable_ — startup-only
+-                                                true,    // save_ - persist in config file
+-                                                false};  // runtime_modifiable_ - startup-only
      Setting<bool> dump_exefs{linkage, false, "dump_exefs", Category::Debugging};
      Setting<bool> dump_nso{linkage, false, "dump_nso", Category::Debugging};
-     Setting<bool> dump_shaders{
-@@ -823,7 +822,8 @@ struct Values {
+     Setting<bool> dump_guest_shaders{
+@@ -832,7 +833,8 @@ struct Values {
      Setting<bool> gpu_log_driver_debug{linkage, true, "gpu_log_driver_debug", Category::Debugging};
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
@@ -332,7 +424,7 @@ index 5f6e1a2206..84b6f5f6ac 100644
                                             0,
                                             0,
 diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
-index b14ed9bc67..cf255c820d 100644
+index 2db0e02a5f..d69a5f770c 100644
 --- a/src/common/settings_enums.h
 +++ b/src/common/settings_enums.h
 @@ -130,8 +130,8 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
@@ -346,44 +438,6 @@ index b14ed9bc67..cf255c820d 100644
  ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
  ENUM(VramUsageMode, Conservative, Aggressive);
  ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
-diff --git a/src/core/hle/service/filesystem/fsp/fsp_srv.cpp b/src/core/hle/service/filesystem/fsp/fsp_srv.cpp
-index 78a1dac81b..3de4793adf 100644
---- a/src/core/hle/service/filesystem/fsp/fsp_srv.cpp
-+++ b/src/core/hle/service/filesystem/fsp/fsp_srv.cpp
-@@ -75,7 +75,7 @@ FSP_SRV::FSP_SRV(Core::System& system_)
-         {30, nullptr, "OpenGameCardStorage"},
-         {31, nullptr, "OpenGameCardFileSystem"},
-         {32, D<&FSP_SRV::ExtendSaveDataFileSystem>, "ExtendSaveDataFileSystem"},
--        {33, nullptr, "DeleteCacheStorage"},
-+        {33, D<&FSP_SRV::DeleteCacheStorage>, "DeleteCacheStorage"},
-         {34, D<&FSP_SRV::GetCacheStorageSize>, "GetCacheStorageSize"},
-         {35, nullptr, "CreateSaveDataFileSystemByHashSalt"},
-         {36, nullptr, "OpenHostFileSystemWithOption"},
-@@ -606,6 +606,12 @@ Result FSP_SRV::ExtendSaveDataFileSystem(FileSys::SaveDataSpaceId space_id, u64
-     R_SUCCEED();
- }
- 
-+Result FSP_SRV::DeleteCacheStorage(u16 index) {
-+    LOG_WARNING(Service_FS, "(STUBBED) called, index={}", index);
-+    // Cache storage deletion is not implemented, but we return success to prevent crashes
-+    R_SUCCEED();
-+}
-+
- Result FSP_SRV::GetCacheStorageSize(s32 index, Out<s64> out_data_size, Out<s64> out_journal_size) {
-     LOG_WARNING(Service_FS, "(STUBBED) called with index={}", index);
- 
-diff --git a/src/core/hle/service/filesystem/fsp/fsp_srv.h b/src/core/hle/service/filesystem/fsp/fsp_srv.h
-index 0ea41903e4..dd0408b982 100644
---- a/src/core/hle/service/filesystem/fsp/fsp_srv.h
-+++ b/src/core/hle/service/filesystem/fsp/fsp_srv.h
-@@ -112,6 +112,7 @@ private:
-     Result OpenMultiCommitManager(OutInterface<IMultiCommitManager> out_interface);
-     Result ExtendSaveDataFileSystem(FileSys::SaveDataSpaceId space_id, u64 save_data_id,
-                                     s64 available_size, s64 journal_size);
-+    Result DeleteCacheStorage(u16 index);
-     Result GetCacheStorageSize(s32 index, Out<s64> out_data_size, Out<s64> out_journal_size);
- 
-     FileSystemController& fsc;
 diff --git a/src/qt_common/config/uisettings.cpp b/src/qt_common/config/uisettings.cpp
 index f4f5688781..45d73a9235 100644
 --- a/src/qt_common/config/uisettings.cpp
@@ -522,8 +576,37 @@ index fd79d2299f..4b2700e89e 100644
  
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
+diff --git a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+index 3929475ddc..67b0b07cb2 100644
+--- a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
++++ b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+@@ -379,6 +379,14 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+         .offset_end = 0x700,
+         .alignment = 16,
+     };
++    // Additional biases cover games (e.g. Zelda TOTK) that use
++    // storage buffers at index 6 or extended offset ranges.
++    static constexpr Bias extended_index_bias{
++        .index = 6,
++        .offset_begin = 0,
++        .offset_end = 0x800,
++        .alignment = 16,
++    };
+     // Track the low address of the instruction
+     const std::optional<LowAddrInfo> low_addr_info{TrackLowAddress(&inst)};
+     if (!low_addr_info) {
+@@ -388,6 +396,9 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+     // First try to find storage buffers in the NVN address
+     const IR::U32 low_addr{low_addr_info->value};
+     std::optional<StorageBufferAddr> storage_buffer{Track(low_addr, &nvn_bias)};
++    if (!storage_buffer) {
++        storage_buffer = Track(low_addr, &extended_index_bias);
++    }
+     if (!storage_buffer) {
+         // If it fails, track without a bias
+         storage_buffer = Track(low_addr, nullptr);
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index 3494895f66..0f70c22df2 100644
+index e40aad1fb5..66f578ddc1 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -30,24 +30,17 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
@@ -561,49 +644,33 @@ index 3494895f66..0f70c22df2 100644
  }
  
  template <class P>
-@@ -55,11 +48,15 @@ BufferCache<P>::~BufferCache() = default;
+@@ -55,20 +48,16 @@ BufferCache<P>::~BufferCache() = default;
  
  template <class P>
  void BufferCache<P>::RunGarbageCollector() {
 -    const bool aggressive_gc = total_used_memory >= critical_memory;
 -    const u64 ticks_to_destroy = aggressive_gc ? 60 : 120;
 -    int num_iterations = aggressive_gc ? 64 : 32;
+-    const auto clean_up = [this, &num_iterations](BufferId buffer_id) {
+-        if (num_iterations == 0) {
+-            return true;
+-        }
+-        --num_iterations;
 +    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
-+    u8 num_iterations = cleanup_depth;
 +
-     const auto clean_up = [this, &num_iterations](BufferId buffer_id) {
-         if (num_iterations == 0) {
-+            if (total_used_memory >= critical_memory) {
-+                ++num_iterations;
-+                return false;
-+            }
-             return true;
-         }
-         --num_iterations;
-@@ -68,7 +65,21 @@ void BufferCache<P>::RunGarbageCollector() {
++    const auto clean_up = [this](BufferId buffer_id) {
+         auto& buffer = slot_buffers[buffer_id];
+         DownloadBufferMemory(buffer);
          DeleteBuffer(buffer_id);
          return false;
      };
 -    lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, clean_up);
 +
 +    lru_cache.ForEachItemBelow(ticks_to_destroy, clean_up);
-+    if (total_used_memory >= expected_memory) {
-+        if (cleanup_depth < 255) {
-+            ++cleanup_depth;
-+        } else if (ticks_to_reserve > 10) {
-+            --ticks_to_reserve;
-+        }
-+    } else {
-+        if (cleanup_depth > 10) {
-+            --cleanup_depth;
-+        } else if (ticks_to_reserve < 255) {
-+            ++ticks_to_reserve;
-+        }
-+    }
  }
  
  template <class P>
-@@ -100,9 +111,7 @@ void BufferCache<P>::TickFrame() {
+@@ -100,9 +89,7 @@ void BufferCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -614,24 +681,8 @@ index 3494895f66..0f70c22df2 100644
      ++frame_tick;
      delayed_destruction_ring.Tick();
  
-@@ -1634,15 +1643,6 @@ bool BufferCache<P>::SynchronizeBuffer(Buffer& buffer, DAddr device_addr, u32 si
-     if (total_size_bytes == 0) {
-         return true;
-     }
--    u64 min_offset = (std::numeric_limits<u64>::max)();
--    u64 max_offset = 0;
--    for (const auto& copy : upload_copies) {
--        min_offset = (std::min)(min_offset, copy.dst_offset);
--        max_offset = (std::max)(max_offset, copy.dst_offset + copy.size);
--    }
--    const DAddr sync_addr = buffer.CpuAddr() + min_offset;
--    const u64 sync_size = max_offset - min_offset;
--    DownloadBufferMemory(buffer, sync_addr, sync_size);
-     const std::span<BufferCopy> copies_span(upload_copies.data(), upload_copies.size());
-     UploadMemory(buffer, total_size_bytes, largest_copy, copies_span);
-     any_buffer_uploaded = true;
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index 473cc6842e..874f19dfc4 100644
+index 14ab3e6ebc..3f72436558 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
 @@ -187,9 +187,6 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
@@ -644,23 +695,22 @@ index 473cc6842e..874f19dfc4 100644
      // Debug Flags.
  
      static constexpr bool DISABLE_DOWNLOADS = true;
-@@ -513,8 +510,10 @@ private:
+@@ -515,8 +512,9 @@ private:
      Common::LeastRecentlyUsedCache<LRUItemParams> lru_cache;
      u64 frame_tick = 0;
      u64 total_used_memory = 0;
 -    u64 minimum_memory = 0;
 +    u64 expected_memory = 0;
      u64 critical_memory = 0;
-+    u8 ticks_to_reserve = 255;
-+    u8 cleanup_depth = 10;
++    u16 ticks_to_reserve = 10;
      BufferId inline_buffer_id;
  #ifdef YUZU_LEGACY
      bool immediately_free = false;
 diff --git a/src/video_core/host1x/ffmpeg.cpp b/src/video_core/host1x/ffmpeg.cpp
-index 88df6695d8..211434bf11 100644
+index 783259ccfc..1ab555c6b4 100644
 --- a/src/video_core/host1x/ffmpeg.cpp
 +++ b/src/video_core/host1x/ffmpeg.cpp
-@@ -32,7 +32,7 @@ constexpr std::array PreferredGpuDecoders = {
+@@ -36,7 +36,7 @@ constexpr std::array PreferredGpuDecoders = {
      AV_HWDEVICE_TYPE_CUDA,
      AV_HWDEVICE_TYPE_D3D11VA,
      AV_HWDEVICE_TYPE_DXVA2,
@@ -684,10 +734,10 @@ index 958988f27e..88cc165215 100644
          return is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
      }
 diff --git a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
-index 77ef8bf7bc..4501f0c35d 100644
+index 6c18ade926..87b7275781 100644
 --- a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
 +++ b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
-@@ -251,12 +251,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
+@@ -255,12 +255,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
                  tuple.usage |= usage_storage;
              }
              break;
@@ -729,10 +779,10 @@ index fdbad16721..7abd34b9d5 100644
          scheduler.Wait(resource_ticks[image_index], 60.0);
          break;
 diff --git a/src/video_core/surface.cpp b/src/video_core/surface.cpp
-index 69c1720943..b92ccf28df 100644
+index 4603870bfa..68a8d8c68b 100644
 --- a/src/video_core/surface.cpp
 +++ b/src/video_core/surface.cpp
-@@ -470,6 +470,8 @@ u64 TranscodedAstcSize(u64 base_size, PixelFormat format) {
+@@ -474,6 +474,8 @@ u64 TranscodedAstcSize(u64 base_size, PixelFormat format) {
          return uncompressed_size / 8;
      case Settings::AstcRecompression::Bc3:
          return uncompressed_size / 4;
@@ -742,7 +792,7 @@ index 69c1720943..b92ccf28df 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 2cfdb94359..e35929a9cd 100644
+index 2cfdb94359..c701c6590d 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -57,24 +57,15 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -778,7 +828,7 @@ index 2cfdb94359..e35929a9cd 100644
      }
  
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -115,55 +106,66 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -115,56 +106,46 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -793,22 +843,18 @@ index 2cfdb94359..e35929a9cd 100644
 -        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
 -    };
 -    const auto Cleanup = [this, &num_iterations, &high_priority_mode, &aggressive_mode](ImageId image_id) {
+-        if (num_iterations == 0) {
+-            return true;
+-        }
+-        --num_iterations;
 +    const u64 ticks_to_destroy = static_cast<u64>(frame_tick - ticks_to_reserve);
 +    const u64 ticks_to_deleted = static_cast<u64>(ticks_to_destroy - ticks_to_reserve);
-+    u8 num_iterations = cleanup_depth;
 +
-+    const auto Cleanup = [this, &num_iterations, &ticks_to_deleted](ImageId image_id) {
-         if (num_iterations == 0) {
-+            if (total_used_memory >= critical_memory) {
-+                ++num_iterations;
-+                return false;
-+            }
-             return true;
-         }
-         --num_iterations;
++    const auto Cleanup = [this, &ticks_to_deleted](ImageId image_id) {
          auto& image = slot_images[image_id];
 +        const bool costly_load = True(image.flags & ImageFlagBits::CostlyLoad);
 +        const bool bad_overlap = True(image.flags & ImageFlagBits::BadOverlap);
++        const bool sparse_textures = True(image.flags & ImageFlagBits::Sparse);
 +        const bool must_download = image.IsSafeDownload();
 +        const bool delete_immediately = bad_overlap || (image.scale_tick < ticks_to_deleted &&
 +                                                        image.allocation_tick < ticks_to_deleted);
@@ -820,8 +866,8 @@ index 2cfdb94359..e35929a9cd 100644
 -        if ((!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) || (!high_priority_mode && must_download)) {
 +
 +        if (!must_download && !bad_overlap &&
-+            ((costly_load && total_used_memory < expected_memory) ||
-+            (!costly_load && !delete_immediately))) {
++            (((costly_load || sparse_textures) && total_used_memory < expected_memory) ||
++            (!costly_load && !sparse_textures && !delete_immediately))) {
              return false;
          }
 -        if (must_download) {
@@ -855,24 +901,13 @@ index 2cfdb94359..e35929a9cd 100644
 -    if (total_used_memory >= critical_memory) {
 -        Configure(true);
 -        lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
+-    }
 +
 +    lru_cache.ForEachItemBelow(ticks_to_destroy, Cleanup);
-+    if (total_used_memory >= expected_memory) {
-+        if (cleanup_depth < 255) {
-+            ++cleanup_depth;
-+        } else if (ticks_to_reserve > 10) {
-+            --ticks_to_reserve;
-+        }
-+    } else {
-+        if (cleanup_depth > 10) {
-+            --cleanup_depth;
-+        } else if (ticks_to_reserve < 255) {
-+            ++ticks_to_reserve;
-+        }
-     }
  }
  
-@@ -173,9 +175,7 @@ void TextureCache<P>::TickFrame() {
+ template <class P>
+@@ -173,9 +154,7 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -883,23 +918,7 @@ index 2cfdb94359..e35929a9cd 100644
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1103,7 +1103,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
-     }
- 
-     image.flags &= ~ImageFlagBits::CpuModified;
--
-     TrackImage(image, image_id);
- 
-     if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1125,7 +1124,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
-         image.info.resources.layers == 1 &&
-         MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
-         False(image.flags & ImageFlagBits::GpuModified)) {
--
-         QueueAsyncUnswizzle(image, image_id);
-         return;
-     }
-@@ -1401,11 +1399,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1401,11 +1380,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -911,7 +930,7 @@ index 2cfdb94359..e35929a9cd 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1466,9 +1459,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1466,9 +1440,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -921,8 +940,69 @@ index 2cfdb94359..e35929a9cd 100644
      }
  }
  
+@@ -1510,6 +1481,31 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+         }
+     }
+     ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
++
++    // For sparse textures, aggressively cleanup old allocations at same address
++    if (info.is_sparse) {
++        const auto alloc_it = image_allocs_table.find(gpu_addr);
++        if (alloc_it != image_allocs_table.end()) {
++            const ImageAllocId alloc_id = alloc_it->second;
++            auto& alloc_images = slot_image_allocs[alloc_id].images;
++            // Collect old images
++            for (ImageId old_image_id : alloc_images) {
++                Image& old_image = slot_images[old_image_id];
++                // Cleanup old images
++                if (old_image.info.is_sparse &&
++                    old_image.gpu_addr == gpu_addr &&
++                    old_image.scale_tick < frame_tick &&
++                    old_image.allocation_tick < frame_tick) {
++                    if (True(old_image.flags & ImageFlagBits::Tracked)) {
++                        UntrackImage(old_image, old_image_id);
++                    }
++                    UnregisterImage(old_image_id);
++                    DeleteImage(old_image_id, old_image.guest_size_bytes == CalculateGuestSizeInBytes(info));
++                }
++            }
++        }
++    }
++
+     const ImageId image_id = JoinImages(info, gpu_addr, *cpu_addr);
+     const Image& image = slot_images[image_id];
+     // Using "image.gpu_addr" instead of "gpu_addr" is important because it might be different
+@@ -1631,7 +1627,27 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
+     for (const ImageId overlap_id : join_ignore_textures) {
+         Image& overlap = slot_images[overlap_id];
+         if (True(overlap.flags & ImageFlagBits::GpuModified)) {
+-            UNIMPLEMENTED();
++            // For ignored textures that are GPU modified, try to preserve the data
++            // by copying it to the new image if possible, otherwise mark as modified
++            const auto base_opt = new_image.TryFindBase(overlap.gpu_addr);
++            if (base_opt.has_value() && overlap.info.format == new_info.format &&
++                overlap.info.num_samples == new_info.num_samples) {
++                // Formats match, copy the data
++                new_image.flags |= ImageFlagBits::GpuModified;
++                const auto& resolution = Settings::values.resolution_info;
++                const u32 up_scale = can_rescale ? resolution.up_scale : 1;
++                const u32 down_shift = can_rescale ? resolution.down_shift : 0;
++                auto copies = MakeShrinkImageCopies(new_info, overlap.info, base_opt.value(),
++                                                    up_scale, down_shift);
++                runtime.CopyImage(new_image, overlap, std::move(copies));
++                new_image.modification_tick =
++                    (std::max)(new_image.modification_tick, overlap.modification_tick);
++            } else {
++                // Formats don't match or can't find base, just mark as modified
++                new_image.flags |= ImageFlagBits::GpuModified;
++                new_image.modification_tick =
++                    (std::max)(new_image.modification_tick, overlap.modification_tick);
++            }
+         }
+         if (True(overlap.flags & ImageFlagBits::Tracked)) {
+             UntrackImage(overlap, overlap_id);
 diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
-index fbc2bb4cf7..b54f4f6d8d 100644
+index fbc2bb4cf7..f802f12fc7 100644
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
 @@ -117,10 +117,6 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
@@ -936,7 +1016,7 @@ index fbc2bb4cf7..b54f4f6d8d 100644
      using Runtime = typename P::Runtime;
      using Image = typename P::Image;
      using ImageAlloc = typename P::ImageAlloc;
-@@ -451,9 +447,10 @@ private:
+@@ -451,9 +447,9 @@ private:
      bool has_deleted_images = false;
      bool is_rescaling = false;
      u64 total_used_memory = 0;
@@ -945,12 +1025,11 @@ index fbc2bb4cf7..b54f4f6d8d 100644
 -    u64 critical_memory;
 +    u64 expected_memory = 0;
 +    u64 critical_memory = 0;
-+    u8 ticks_to_reserve = 255;
-+    u8 cleanup_depth = 10;
++    u16 ticks_to_reserve = 10;
      size_t gpu_unswizzle_maxsize = 0;
      size_t swizzle_chunk_size = 0;
      u32 swizzle_slices_per_batch = 0;
-@@ -513,7 +510,6 @@ private:
+@@ -513,7 +509,6 @@ private:
      std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
  
      std::deque<PendingUnswizzle> unswizzle_queue;
@@ -958,227 +1037,3 @@ index fbc2bb4cf7..b54f4f6d8d 100644
  
      // Join caching
      boost::container::small_vector<ImageId, 4> join_overlap_ids;
-diff --git a/src/yuzu/configuration/configure_debug.ui b/src/yuzu/configuration/configure_debug.ui
-index f76f3b012d..c82354d5f7 100644
---- a/src/yuzu/configuration/configure_debug.ui
-+++ b/src/yuzu/configuration/configure_debug.ui
-@@ -474,15 +474,53 @@
-          <string>Debugging</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_3">
-+         <item row="1" column="0">
-+          <widget class="QCheckBox" name="dump_audio_commands">
-+           <property name="toolTip">
-+            <string>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</string>
-+           </property>
-+           <property name="text">
-+            <string>Dump Audio Commands To Console**</string>
-+           </property>
-+          </widget>
-+         </item>
-+         <item row="2" column="0">
-+          <widget class="QCheckBox" name="flush_line">
-+           <property name="text">
-+            <string>Flush log output on each line</string>
-+           </property>
-+          </widget>
-+         </item>
-+         <item row="3" column="0">
-+          <widget class="QCheckBox" name="fs_access_log">
-+           <property name="text">
-+            <string>Enable FS Access Log</string>
-+           </property>
-+          </widget>
-+         </item>
-+         <item row="4" column="0">
-+          <widget class="QCheckBox" name="reporting_services">
-+           <property name="text">
-+            <string>Enable Verbose Reporting Services**</string>
-+           </property>
-+          </widget>
-+         </item>
-+         <item row="5" column="0">
-+          <widget class="QCheckBox" name="censor_username">
-+           <property name="text">
-+            <string>Censor username in logs</string>
-+           </property>
-+          </widget>
-+         </item>
-          <item row="6" column="0">
--          <widget class="QWidget" name="serial_battery_widget" native="true">
-+          <widget class="QWidget" name="serial_board_widget" native="true">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
--           <layout class="QHBoxLayout" name="horizontalLayout_11">
-+           <layout class="QHBoxLayout" name="horizontalLayout_12">
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-@@ -496,7 +534,7 @@
-              <number>0</number>
-             </property>
-             <item>
--             <widget class="QLabel" name="label_12">
-+             <widget class="QLabel" name="label_13">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-@@ -504,50 +542,25 @@
-                </sizepolicy>
-               </property>
-               <property name="text">
--               <string>Battery Serial:</string>
-+               <string>Unit Serial:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
--             <widget class="QLineEdit" name="serial_battery_edit"/>
-+             <widget class="QLineEdit" name="serial_board_edit"/>
-             </item>
-            </layout>
-           </widget>
-          </item>
--          <item row="8" column="0">
--            <widget class="QSpinBox" name="debug_knobs_spinbox">
--                <property name="minimum">
--                <number>0</number>
--                </property>
--                <property name="maximum">
--                <number>65535</number>
--                </property>
--                <property name="toolTip">
--                <string>Bitmask for quick development toggles</string>
--                </property>
--                <property name="statusTip">
--                <string>Set debug knobs (bitmask)</string>
--                </property>
--                <property name="whatsThis">
--                <string>16-bit debug knob set for quick development toggles</string>
--                </property>
--                <property name="suffix">
--                <string> (bitmask)</string>
--                </property>
--                <property name="prefix">
--                <string>Debug Knobs: </string>
--                </property>
--            </widget>
--          </item>
-          <item row="7" column="0">
--          <widget class="QWidget" name="serial_board_widget" native="true">
-+          <widget class="QWidget" name="serial_battery_widget" native="true">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
--           <layout class="QHBoxLayout" name="horizontalLayout_12">
-+           <layout class="QHBoxLayout" name="horizontalLayout_11">
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-@@ -561,7 +574,7 @@
-              <number>0</number>
-             </property>
-             <item>
--             <widget class="QLabel" name="label_13">
-+             <widget class="QLabel" name="label_12">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-@@ -569,17 +582,42 @@
-                </sizepolicy>
-               </property>
-               <property name="text">
--               <string>Unit Serial:</string>
-+               <string>Battery Serial:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
--             <widget class="QLineEdit" name="serial_board_edit"/>
-+             <widget class="QLineEdit" name="serial_battery_edit"/>
-             </item>
-            </layout>
-           </widget>
-          </item>
--         <item row="0" column="0">
-+          <item row="8" column="0">
-+            <widget class="QSpinBox" name="debug_knobs_spinbox">
-+                <property name="minimum">
-+                <number>0</number>
-+                </property>
-+                <property name="maximum">
-+                <number>65535</number>
-+                </property>
-+                <property name="toolTip">
-+                <string>Bitmask for quick development toggles</string>
-+                </property>
-+                <property name="statusTip">
-+                <string>Set debug knobs (bitmask)</string>
-+                </property>
-+                <property name="whatsThis">
-+                <string>16-bit debug knob set for quick development toggles</string>
-+                </property>
-+                <property name="suffix">
-+                <string> (bitmask)</string>
-+                </property>
-+                <property name="prefix">
-+                <string>Debug Knobs: </string>
-+                </property>
-+            </widget>
-+          </item>
-+         <item row="9" column="0">
-           <spacer name="verticalSpacer_3">
-            <property name="orientation">
-             <enum>Qt::Orientation::Vertical</enum>
-@@ -595,44 +633,6 @@
-            </property>
-           </spacer>
-          </item>
--         <item row="1" column="0">
--          <widget class="QCheckBox" name="dump_audio_commands">
--           <property name="toolTip">
--            <string>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</string>
--           </property>
--           <property name="text">
--            <string>Dump Audio Commands To Console**</string>
--           </property>
--          </widget>
--         </item>
--         <item row="2" column="0">
--          <widget class="QCheckBox" name="flush_line">
--           <property name="text">
--            <string>Flush log output on each line</string>
--           </property>
--          </widget>
--         </item>
--         <item row="3" column="0">
--          <widget class="QCheckBox" name="fs_access_log">
--           <property name="text">
--            <string>Enable FS Access Log</string>
--           </property>
--          </widget>
--         </item>
--         <item row="4" column="0">
--          <widget class="QCheckBox" name="reporting_services">
--           <property name="text">
--            <string>Enable Verbose Reporting Services**</string>
--           </property>
--          </widget>
--         </item>
--         <item row="5" column="0">
--          <widget class="QCheckBox" name="censor_username">
--           <property name="text">
--            <string>Censor username in logs</string>
--           </property>
--          </widget>
--         </item>
-         </layout>
-        </widget>
-       </item>
