@@ -19,32 +19,176 @@ index cac6c357b0..4b601b8c25 100644
          "git_host": "git.eden-emu.dev",
          "hash": "cce65a12bf90f4ead43b24a0b95dfad77ac3d9bfbaaf66c55e6701346e7a1e44ca5d2f23f47ee35ee02271eb1082bf1762af207aad9fb236f1c8476812d008ed",
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 00ba7dddc9..34da080be0 100644
+index 00ba7dddc9..1d6785815d 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
-@@ -240,7 +240,7 @@ struct Values {
-     // The currently used speed mode.
-     Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
+@@ -195,17 +195,59 @@ struct Values {
+     Setting<bool, false> dump_audio_commands{
+                                              linkage, false, "dump_audio_commands", Category::Audio, Specialization::Default, false};
  
++    // System
++    SwitchableSetting<ConsoleMode> use_docked_mode{linkage,
++#ifdef __ANDROID__
++                                                   ConsoleMode::Handheld,
++#else
++                                                   ConsoleMode::Handheld,
++#endif
++                                                   "use_docked_mode",
++                                                   Category::System,
++                                                   Specialization::Radio,
++                                                   true,
++                                                   true};
++    Setting<s32> current_user{linkage, 0, "current_user", Category::System};
++    SwitchableSetting<Language, true> language_index{linkage,
++                                                     Language::Chinese,
++                                                     "language_index",
++                                                     Category::System};
++    SwitchableSetting<Region, true> region_index{linkage, Region::China, "region_index", Category::System};
++    SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
++    Setting<std::string> device_name{
++        linkage, "Eden", "device_name", Category::System, Specialization::Default, true, true};
++    SwitchableSetting<std::string> program_args{linkage,
++                                                std::string(),
++                                                "program_args",
++                                                Category::System,
++                                                Specialization::Default,
++                                                true,    // save_ — persist in config file
++                                                false};  // runtime_modifiable_ — startup-only
++    // Measured in seconds since epoch
++    SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
++    SwitchableSetting<s64> custom_rtc{
++                                      linkage, 0,    "custom_rtc",       Category::System, Specialization::Time,
++                                      false,   true, &custom_rtc_enabled};
++    SwitchableSetting<s64, true> custom_rtc_offset{linkage,
++                                                   0,
++                                                   (std::numeric_limits<s64>::min)(),
++                                                   (std::numeric_limits<s64>::max)(),
++                                                   "custom_rtc_offset",
++                                                   Category::System,
++                                                   Specialization::Countable,
++                                                   true,
++                                                   true};
++    SwitchableSetting<bool> rng_seed_enabled{
++                                             linkage, false, "rng_seed_enabled", Category::System, Specialization::Paired, true, true};
++    SwitchableSetting<u32> rng_seed{
++                                    linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
++                                    true,    true, &rng_seed_enabled};
++
+     // Core
+     SwitchableSetting<bool> use_multi_core{linkage, true, "use_multi_core", Category::Core};
+-    SwitchableSetting<MemoryLayout, true> memory_layout_mode{linkage,
+-                                                             MemoryLayout::Memory_4Gb,
+-                                                             "memory_layout_mode",
+-                                                             Category::Core,
+-                                                             Specialization::Default,
+-                                                             true};
+-    SwitchableSetting<bool> use_speed_limit{
+-                                            linkage, true, "use_speed_limit", Category::Core, Specialization::Paired, true, true};
++    SwitchableSetting<bool> sync_core_speed{linkage, true, "sync_core_speed", Category::Core, Specialization::Default};
+ 
++    SwitchableSetting<bool> use_speed_limit{linkage, true, "use_speed_limit", Category::Core, Specialization::Paired, true, true};
+     SwitchableSetting<u16, true> speed_limit{linkage,
+                                              100,
+                                              0,
+@@ -217,51 +259,38 @@ struct Values {
+                                              true,
+                                              &use_speed_limit};
+ 
+-    SwitchableSetting<u16, true> slow_speed_limit{linkage,
+-                                             50,
++    // The currently used speed mode.
++    Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
++    SwitchableSetting<u16, true> turbo_speed_limit{linkage,
++                                             200,
+                                              0,
+                                              9999,
+-                                             "slow_speed_limit",
++                                             "turbo_speed_limit",
+                                              Category::Core,
+                                              Specialization::Countable | Specialization::Percentage,
+                                              true,
+                                              true};
+-
+-    SwitchableSetting<u16, true> turbo_speed_limit{linkage,
+-                                             200,
++    SwitchableSetting<u16, true> slow_speed_limit{linkage,
++                                             50,
+                                              0,
+                                              9999,
+-                                             "turbo_speed_limit",
++                                             "slow_speed_limit",
+                                              Category::Core,
+                                              Specialization::Countable | Specialization::Percentage,
+                                              true,
+                                              true};
+ 
+-    // The currently used speed mode.
+-    Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
+-
 -    SwitchableSetting<bool> sync_core_speed{linkage, false, "sync_core_speed", Category::Core,
-+    SwitchableSetting<bool> sync_core_speed{linkage, true, "sync_core_speed", Category::Core,
-                                             Specialization::Default};
+-                                            Specialization::Default};
++    SwitchableSetting<MemoryLayout, true> memory_layout_mode{linkage,
++                                                             MemoryLayout::Memory_4Gb,
++                                                             "memory_layout_mode",
++                                                             Category::Core,
++                                                             Specialization::Default,
++                                                             true};
  
      // Cpu
-@@ -258,10 +258,10 @@ struct Values {
- #endif
-                                                     "cpu_backend",
-                                                     Category::Cpu};
+-    SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
+-#ifdef HAS_NCE
+-                                                    CpuBackend::Nce,
+-#else
+-                                                    CpuBackend::Dynarmic,
+-#endif
+-                                                    CpuBackend::Dynarmic,
+-#ifdef HAS_NCE
+-                                                    CpuBackend::Nce,
+-#else
+-                                                    CpuBackend::Dynarmic,
+-#endif
+-                                                    "cpu_backend",
+-                                                    Category::Cpu};
 -    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Auto,
-+    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Unsafe,
-                                                       "cpu_accuracy", Category::Cpu};
+-                                                      "cpu_accuracy", Category::Cpu};
++    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Unsafe, "cpu_accuracy", Category::Cpu};
      SwitchableSetting<CpuClock> fast_cpu_time{linkage,
 -                                              CpuClock::Off,
 +                                              CpuClock::Fast,
                                                "fast_cpu_time",
                                                Category::Cpu,
                                                Specialization::Default,
-@@ -315,7 +315,7 @@ struct Values {
+@@ -275,7 +304,6 @@ struct Values {
+                                                  Specialization::Paired,
+                                                  true,
+                                                  true};
+-
+     SwitchableSetting<u32, true> cpu_ticks{linkage,
+                                            16000,
+                                            77,
+@@ -287,6 +315,21 @@ struct Values {
+                                            true,
+                                            &use_custom_cpu_ticks};
+ 
++    SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
++#ifdef HAS_NCE
++                                                    CpuBackend::Nce,
++#else
++                                                    CpuBackend::Dynarmic,
++#endif
++                                                    CpuBackend::Dynarmic,
++#ifdef HAS_NCE
++                                                    CpuBackend::Nce,
++#else
++                                                    CpuBackend::Dynarmic,
++#endif
++                                                    "cpu_backend",
++                                                    Category::Cpu};
++
+     Setting<bool> cpuopt_page_tables{linkage, true, "cpuopt_page_tables", Category::CpuDebug};
+     Setting<bool> cpuopt_block_linking{linkage, true, "cpuopt_block_linking", Category::CpuDebug};
+     Setting<bool> cpuopt_return_stack_buffer{linkage, true, "cpuopt_return_stack_buffer",
+@@ -315,7 +358,7 @@ struct Values {
  #endif
                                          "cpuopt_unsafe_host_mmu",
                                          Category::CpuUnsafe};
@@ -53,7 +197,7 @@ index 00ba7dddc9..34da080be0 100644
                                                       Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_reduce_fp_error{
                                                            linkage, true, "cpuopt_unsafe_reduce_fp_error", Category::CpuUnsafe};
-@@ -326,7 +326,7 @@ struct Values {
+@@ -326,7 +369,7 @@ struct Values {
      SwitchableSetting<bool> cpuopt_unsafe_fastmem_check{
                                                          linkage, true, "cpuopt_unsafe_fastmem_check", Category::CpuUnsafe};
      SwitchableSetting<bool> cpuopt_unsafe_ignore_global_monitor{
@@ -62,16 +206,43 @@ index 00ba7dddc9..34da080be0 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -352,7 +352,7 @@ struct Values {
-                                                   true};
+@@ -343,35 +386,6 @@ struct Values {
+     SwitchableSetting<ResolutionSetup> resolution_setup{linkage, ResolutionSetup::Res1X,
+                                                         "resolution_setup", Category::Renderer};
  
-     SwitchableSetting<ScalingFilter> scaling_filter{linkage,
+-    SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
+-                                                  VSyncMode::Fifo,
+-                                                  "use_vsync",
+-                                                  Category::Renderer,
+-                                                  Specialization::RuntimeList,
+-                                                  true,
+-                                                  true};
+-
+-    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
 -                                                    ScalingFilter::Bilinear,
-+                                                    ScalingFilter::Bicubic,
-                                                     "scaling_filter",
-                                                     Category::Renderer,
-                                                     Specialization::Default,
-@@ -388,13 +388,6 @@ struct Values {
+-                                                    "scaling_filter",
+-                                                    Category::Renderer,
+-                                                    Specialization::Default,
+-                                                    true,
+-                                                    true};
+-    SwitchableSetting<int, true> fsr_sharpening_slider{linkage,
+-#ifdef __ANDROID__
+-                                                       0,
+-#else
+-                                                       25,
+-#endif
+-                                                       0,
+-                                                       200,
+-                                                       "fsr_sharpening_slider",
+-                                                       Category::Renderer,
+-                                                       Specialization::Scalar |
+-                                                           Specialization::Percentage,
+-                                                       true,
+-                                                       true};
+     SwitchableSetting<AspectRatio, true> aspect_ratio{linkage,
+                                                       AspectRatio::R16_9,
+                                                       "aspect_ratio",
+@@ -388,13 +402,6 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -85,7 +256,55 @@ index 00ba7dddc9..34da080be0 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -430,16 +423,8 @@ struct Values {
+@@ -409,13 +416,41 @@ struct Values {
+                                                             true,
+                                                             true};
+ 
+-    SwitchableSetting<u8, false> bg_red{
+-                                        linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
+-    SwitchableSetting<u8, false> bg_green{
+-                                          linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
+-    SwitchableSetting<u8, false> bg_blue{
+-                                         linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
++                                                  VSyncMode::Fifo,
++                                                  "use_vsync",
++                                                  Category::Renderer,
++                                                  Specialization::RuntimeList,
++                                                  true,
++                                                  true};
+ 
++    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
++                                                    ScalingFilter::Bicubic,
++                                                    "scaling_filter",
++                                                    Category::Renderer,
++                                                    Specialization::Default,
++                                                    true,
++                                                    true};
++    SwitchableSetting<int, true> fsr_sharpening_slider{linkage,
++#ifdef __ANDROID__
++                                                       0,
++#else
++                                                       25,
++#endif
++                                                       0,
++                                                       200,
++                                                       "fsr_sharpening_slider",
++                                                       Category::Renderer,
++                                                       Specialization::Scalar |
++                                                           Specialization::Percentage,
++                                                       true,
++                                                       true};
++
++    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
++
++    // Renderer (Advanced)
+     SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
+ #ifdef __ANDROID__
+                                                       GpuAccuracy::Low,
+@@ -430,16 +465,8 @@ struct Values {
  
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::High};
  
@@ -103,7 +322,7 @@ index 00ba7dddc9..34da080be0 100644
                                                                   GpuFenceBehavior::Default,
                                                                   GpuFenceBehavior::Strict,
                                                                   "gpu_fence_behavior",
-@@ -448,29 +433,43 @@ struct Values {
+@@ -448,29 +475,43 @@ struct Values {
                                                                   true,
                                                                   true};
  
@@ -153,7 +372,7 @@ index 00ba7dddc9..34da080be0 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -479,11 +478,11 @@ struct Values {
+@@ -479,11 +520,11 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -169,7 +388,7 @@ index 00ba7dddc9..34da080be0 100644
  
      SwitchableSetting<bool> sync_memory_operations{linkage,
                                                     false,
-@@ -493,22 +492,6 @@ struct Values {
+@@ -493,22 +534,6 @@ struct Values {
                                                     true,
                                                     true};
  
@@ -192,7 +411,7 @@ index 00ba7dddc9..34da080be0 100644
      SwitchableSetting<bool> use_reactive_flushing{linkage,
  #ifdef __ANDROID__
                                                    false,
-@@ -518,8 +501,8 @@ struct Values {
+@@ -518,8 +543,8 @@ struct Values {
                                                    "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
@@ -203,7 +422,7 @@ index 00ba7dddc9..34da080be0 100644
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
                                                    false,
-@@ -529,6 +512,24 @@ struct Values {
+@@ -529,6 +554,24 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -228,10 +447,11 @@ index 00ba7dddc9..34da080be0 100644
  #ifdef __ANDROID__
      SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
                                                   false,
-@@ -540,14 +541,6 @@ struct Values {
+@@ -539,15 +582,7 @@ struct Values {
+                                                  true};
  #endif
  
-     // Renderer Hacks //
+-    // Renderer Hacks //
 -    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
 -                                                  GpuOverclock::Medium,
 -                                                  "fast_gpu_time",
@@ -240,10 +460,11 @@ index 00ba7dddc9..34da080be0 100644
 -                                                        true,
 -                                                        true};
 -
++    // Renderer (Hacks)
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -555,13 +548,6 @@ struct Values {
+@@ -555,13 +590,6 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -257,7 +478,7 @@ index 00ba7dddc9..34da080be0 100644
  
      SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
                                                       Category::RendererHacks};
-@@ -576,37 +562,62 @@ struct Values {
+@@ -576,37 +604,59 @@ struct Values {
          false,
  #endif
          "rescale_hack", Category::RendererHacks};
@@ -288,23 +509,21 @@ index 00ba7dddc9..34da080be0 100644
      SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
                                                       Category::RendererHacks};
  
-+    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
-+                                                  Category::RendererHacks};
-+
++    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled", Category::RendererHacks};
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
 -                                                  GpuUnswizzleSize::Large,
 +                                                  GpuUnswizzleSize::Normal,
                                                    "gpu_unswizzle_texture_size",
                                                    Category::RendererHacks,
                                                    Specialization::Default};
- 
+-
      SwitchableSetting<GpuUnswizzle> gpu_unswizzle_stream_size{linkage,
 -                                                  GpuUnswizzle::Medium,
 +                                                  GpuUnswizzle::Normal,
                                                    "gpu_unswizzle_stream_size",
                                                    Category::RendererHacks,
                                                    Specialization::Default};
- 
+-
      SwitchableSetting<GpuUnswizzleChunk> gpu_unswizzle_chunk_size{linkage,
 -                                                  GpuUnswizzleChunk::Medium,
 +                                                  GpuUnswizzleChunk::VeryLow,
@@ -322,17 +541,18 @@ index 00ba7dddc9..34da080be0 100644
 +                                                        true,
 +                                                        true};
 +
-+    SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
-+#ifdef __ANDROID__
-+                                                       false,
-+#else
-+                                                       true,
-+#endif
-+                                                       "vertex_input_dynamic_state", Category::RendererExtensions};
++    // Renderer (Extensions)
++    SwitchableSetting<u32, true> sample_shading{linkage,
++                                                0,
++                                                0,
++                                                100,
++                                                "sample_shading_fraction",
++                                                Category::RendererExtensions,
++                                                Specialization::Scalar};
  
      SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
  #if defined(__ANDROID__)
-@@ -614,7 +625,7 @@ struct Values {
+@@ -614,19 +664,11 @@ struct Values {
  #elif defined(__APPLE__)
                                             ExtendedDynamicState::Disabled,
  #else
@@ -341,65 +561,79 @@ index 00ba7dddc9..34da080be0 100644
  #endif
                                             "dyna_state",
                                             Category::RendererExtensions};
-@@ -627,14 +638,6 @@ struct Values {
-                                                 Category::RendererExtensions,
-                                                 Specialization::Scalar};
  
--    SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
--#ifdef __ANDROID__
--                                                       false,
--#else
--                                                       true,
--#endif
--                                                       "vertex_input_dynamic_state", Category::RendererExtensions};
+-    SwitchableSetting<u32, true> sample_shading{linkage,
+-                                                0,
+-                                                0,
+-                                                100,
+-                                                "sample_shading_fraction",
+-                                                Category::RendererExtensions,
+-                                                Specialization::Scalar};
 -
+     SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
+ #ifdef __ANDROID__
+                                                        false,
+@@ -635,6 +677,7 @@ struct Values {
+ #endif
+                                                        "vertex_input_dynamic_state", Category::RendererExtensions};
+ 
++    // Renderer (Debug)
      Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
      Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
                                             Category::RendererDebug};
-@@ -657,13 +660,20 @@ struct Values {
+@@ -655,51 +698,6 @@ struct Values {
+                                                          true,
+                                                          true};
  
-     // System
-     SwitchableSetting<Language, true> language_index{linkage,
+-    // System
+-    SwitchableSetting<Language, true> language_index{linkage,
 -                                                     Language::EnglishAmerican,
-+                                                     Language::Chinese,
-                                                      "language_index",
-                                                      Category::System};
+-                                                     "language_index",
+-                                                     Category::System};
 -    SwitchableSetting<Region, true> region_index{linkage, Region::Usa, "region_index", Category::System};
-+    SwitchableSetting<Region, true> region_index{linkage, Region::China, "region_index", Category::System};
-     SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
+-    SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
 -    Setting<u32> serial_battery{linkage, 0, "serial_battery", Category::Debugging};
 -    Setting<u32> serial_unit{linkage, 0, "serial_unit", Category::Debugging};
-+    Setting<std::string> device_name{
-+        linkage, "Eden", "device_name", Category::System, Specialization::Default, true, true};
-+    SwitchableSetting<std::string> program_args{linkage,
-+                                                std::string(),
-+                                                "program_args",
-+                                                Category::System,
-+                                                Specialization::Default,
-+                                                true,    // save_ — persist in config file
-+                                                false};  // runtime_modifiable_ — startup-only
-     // Measured in seconds since epoch
-     SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
-     SwitchableSetting<s64> custom_rtc{
-@@ -683,8 +693,6 @@ struct Values {
-     SwitchableSetting<u32> rng_seed{
-                                     linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
-                                     true,    true, &rng_seed_enabled};
+-    // Measured in seconds since epoch
+-    SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
+-    SwitchableSetting<s64> custom_rtc{
+-                                      linkage, 0,    "custom_rtc",       Category::System, Specialization::Time,
+-                                      false,   true, &custom_rtc_enabled};
+-    SwitchableSetting<s64, true> custom_rtc_offset{linkage,
+-                                                   0,
+-                                                   (std::numeric_limits<s64>::min)(),
+-                                                   (std::numeric_limits<s64>::max)(),
+-                                                   "custom_rtc_offset",
+-                                                   Category::System,
+-                                                   Specialization::Countable,
+-                                                   true,
+-                                                   true};
+-    SwitchableSetting<bool> rng_seed_enabled{
+-                                             linkage, false, "rng_seed_enabled", Category::System, Specialization::Paired, true, true};
+-    SwitchableSetting<u32> rng_seed{
+-                                    linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
+-                                    true,    true, &rng_seed_enabled};
 -    Setting<std::string> device_name{
 -        linkage, "Eden", "device_name", Category::System, Specialization::Default, true, true};
- 
-     Setting<s32> current_user{linkage, 0, "current_user", Category::System};
- 
-@@ -692,7 +700,7 @@ struct Values {
- #ifdef __ANDROID__
-                                                    ConsoleMode::Handheld,
- #else
+-
+-    Setting<s32> current_user{linkage, 0, "current_user", Category::System};
+-
+-    SwitchableSetting<ConsoleMode> use_docked_mode{linkage,
+-#ifdef __ANDROID__
+-                                                   ConsoleMode::Handheld,
+-#else
 -                                                   ConsoleMode::Docked,
-+                                                   ConsoleMode::Handheld,
- #endif
-                                                    "use_docked_mode",
-                                                    Category::System,
-@@ -789,13 +797,6 @@ struct Values {
+-#endif
+-                                                   "use_docked_mode",
+-                                                   Category::System,
+-                                                   Specialization::Radio,
+-                                                   true,
+-                                                   true};
+-
+     // Controls
+     InputSetting<std::array<PlayerInput, 10>> players;
+ 
+@@ -789,13 +787,6 @@ struct Values {
      bool record_frame_times;
      Setting<bool> use_gdbstub{linkage, false, "use_gdbstub", Category::Debugging};
      Setting<u16> gdbstub_port{linkage, 6543, "gdbstub_port", Category::Debugging};
@@ -413,7 +647,7 @@ index 00ba7dddc9..34da080be0 100644
      Setting<bool> dump_exefs{linkage, false, "dump_exefs", Category::Debugging};
      Setting<bool> dump_nso{linkage, false, "dump_nso", Category::Debugging};
      Setting<bool> dump_guest_shaders{
-@@ -832,7 +833,8 @@ struct Values {
+@@ -832,7 +823,8 @@ struct Values {
      Setting<bool> gpu_log_driver_debug{linkage, true, "gpu_log_driver_debug", Category::Debugging};
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
