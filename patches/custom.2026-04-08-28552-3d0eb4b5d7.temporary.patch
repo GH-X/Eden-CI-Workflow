@@ -1,0 +1,2147 @@
+diff --git a/.patch/spirv-tools/0001-netbsd-fix.patch b/.patch/spirv-tools/0001-netbsd-fix.patch
+deleted file mode 100644
+index e4b71f2938..0000000000
+--- a/.patch/spirv-tools/0001-netbsd-fix.patch
++++ /dev/null
+@@ -1,14 +0,0 @@
+-diff --git a/external/CMakeLists.txt b/external/CMakeLists.txt
+-index eb4e69e..3155805 100644
+---- a/external/CMakeLists.txt
+-+++ b/external/CMakeLists.txt
+-@@ -72,7 +72,8 @@ if (SPIRV_TOOLS_USE_MIMALLOC)
+-   pop_variable(MI_BUILD_TESTS)
+- endif()
+- 
+--if (DEFINED SPIRV-Headers_SOURCE_DIR)
+-+# NetBSD doesn't have SPIRV-Headers readily available on system
+-+if (DEFINED SPIRV-Headers_SOURCE_DIR AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "NetBSD")
+-   # This allows flexible position of the SPIRV-Headers repo.
+-   set(SPIRV_HEADER_DIR ${SPIRV-Headers_SOURCE_DIR})
+- else()
+diff --git a/.patch/spirv-tools/0002-allow-static-only.patch b/.patch/spirv-tools/0002-allow-static-only.patch
+deleted file mode 100644
+index 873589a5ac..0000000000
+--- a/.patch/spirv-tools/0002-allow-static-only.patch
++++ /dev/null
+@@ -1,287 +0,0 @@
+-From 67bf3d1381b1faf59e87001d6156ba4e21cada14 Mon Sep 17 00:00:00 2001
+-From: crueter <crueter@eden-emu.dev>
+-Date: Mon, 29 Dec 2025 21:22:36 -0500
+-Subject: [PATCH] [cmake] refactor: shared/static handling
+-
+-This significantly redoes the way shared and static libraries are
+-handled. Now, it's controlled by two options: `SPIRV_TOOLS_BUILD_STATIC`
+-and `SPIRV_TOOLS_BUILD_SHARED`.
+-
+-The default configuration (no `BUILD_SHARED_LIBS` set, options left at
+-default) is to build shared ONLY if this is the master project, or
+-static ONLY if this is a subproject (e.g. FetchContent, CPM.cmake). Also
+-I should note that static-only (i.e. no shared) is now a supported
+-target, this is done because projects including it as a submodule e.g.
+-on Android or Windows may prefer this.
+-
+-Now the shared/static handling:
+-- static ON, shared OFF: Only generates `.a` libraries.
+-- static ON, shared ON: Generates `.a` libraries, but also
+-  `libSPIRV-Tools.so`
+-- static OFF, shared ON: Only generates `.so` libraries.
+-
+-Notable TODOs:
+-- SPIRV-Tools-shared.pc seems redundant--how should we handle which one
+-  to use in the case of distributions that distribute both types (MSYS2
+-  for instance)?
+-  * *Note: pkgconfig sucks at this and usually just leaves it up to the
+-    user, so the optimal solution may indeed be doing absolutely
+-    nothing.* CMake is unaffected :)
+-- use namespaces in the CMake config files pleaaaaase
+-
+-This is going to change things a good bit for package maintainers, but
+-cest la vie. It's for the greater good, I promise.
+-
+-Signed-off-by: crueter <crueter@eden-emu.dev>
+----
+- CMakeLists.txt        | 108 +++++++++++++++++++++++++-----------------
+- source/CMakeLists.txt |  62 ++++++++++++------------
+- 2 files changed, 94 insertions(+), 76 deletions(-)
+-
+-diff --git a/CMakeLists.txt b/CMakeLists.txt
+-index 4d843b4d2f..07201f690f 100644
+---- a/CMakeLists.txt
+-+++ b/CMakeLists.txt
+-@@ -14,6 +14,15 @@
+- 
+- cmake_minimum_required(VERSION 3.22.1)
+- 
+-+# master project detection--useful for FetchContent/submodule inclusion
+-+set(master_project OFF)
+-+set(subproject ON)
+-+
+-+if (NOT DEFINED PROJECT_NAME)
+-+  set(master_project ON)
+-+  set(subproject OFF)
+-+endif()
+-+
+- project(spirv-tools)
+- 
+- # Avoid a bug in CMake 3.22.1. By default it will set -std=c++11 for
+-@@ -135,46 +144,49 @@ if (DEFINED SPIRV_TOOLS_EXTRA_DEFINITIONS)
+-   add_definitions(${SPIRV_TOOLS_EXTRA_DEFINITIONS})
+- endif()
+- 
+--# Library build setting definitions:
+--#
+--# * SPIRV_TOOLS_BUILD_STATIC - ON or OFF - Defaults to ON.
+--#   If enabled the following targets will be created:
+--#     ${SPIRV_TOOLS}-static - STATIC library.
+--#                             Has full public symbol visibility.
+--#     ${SPIRV_TOOLS}-shared - SHARED library.
+--#                             Has default-hidden symbol visibility.
+--#     ${SPIRV_TOOLS}        - will alias to one of above, based on BUILD_SHARED_LIBS.
+--#   If disabled the following targets will be created:
+--#     ${SPIRV_TOOLS}        - either STATIC or SHARED based on SPIRV_TOOLS_LIBRARY_TYPE.
+--#                             Has full public symbol visibility.
+--#     ${SPIRV_TOOLS}-shared - SHARED library.
+--#                             Has default-hidden symbol visibility.
+--#
+--# * SPIRV_TOOLS_LIBRARY_TYPE - SHARED or STATIC.
+--#   Specifies the library type used for building SPIRV-Tools libraries.
+--#   Defaults to SHARED when BUILD_SHARED_LIBS=1, otherwise STATIC.
+--#
+--# * SPIRV_TOOLS_FULL_VISIBILITY - "${SPIRV_TOOLS}-static" or "${SPIRV_TOOLS}"
+--#   Evaluates to the SPIRV_TOOLS target library name that has no hidden symbols.
+--#   This is used by internal targets for accessing symbols that are non-public.
+--#   Note this target provides no API stability guarantees.
+--#
+--# Ideally, all of these will go away - see https://github.com/KhronosGroup/SPIRV-Tools/issues/3909.
+--option(ENABLE_EXCEPTIONS_ON_MSVC "Build SPIRV-TOOLS with c++ exceptions enabled in MSVC" ON)
+--option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS}-static target. ${SPIRV_TOOLS} will alias to ${SPIRV_TOOLS}-static or ${SPIRV_TOOLS}-shared based on BUILD_SHARED_LIBS" ON)
+--if(SPIRV_TOOLS_BUILD_STATIC)
+--  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
+-+# If BUILD_SHARED_LIBS is undefined, set it based on whether we are
+-+# the master project or a subproject
+-+if (NOT DEFINED BUILD_SHARED_LIBS)
+-+  set(BUILD_SHARED_LIBS ${master_project})
+-+endif()
+-+
+-+if (BUILD_SHARED_LIBS)
+-+  set(static_default OFF)
+-+else()
+-+  set(static_default ON)
+-+endif()
+-+
+-+option(SPIRV_TOOLS_BUILD_SHARED "Build ${SPIRV_TOOLS} as a shared library"
+-+       ${BUILD_SHARED_LIBS})
+-+option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS} as a static library"
+-+       ${static_default})
+-+
+-+# Avoid conflict between the dll import library and
+-+# the static library (thanks microsoft)
+-+if(CMAKE_STATIC_LIBRARY_PREFIX STREQUAL "" AND
+-+   CMAKE_STATIC_LIBRARY_SUFFIX STREQUAL ".lib")
+-+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}-static")
+-+else()
+-+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}")
+-+endif()
+-+
+-+if (SPIRV_TOOLS_BUILD_STATIC)
+-+  # If building a static library at all, always build other libraries as static,
+-+  # and link to the static SPIRV-Tools library.
+-   set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
+--else(SPIRV_TOOLS_BUILD_STATIC)
+--  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS})
+--  if (NOT DEFINED SPIRV_TOOLS_LIBRARY_TYPE)
+--      if(BUILD_SHARED_LIBS)
+--        set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
+--      else()
+--        set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
+--      endif()
+--  endif()
+--endif(SPIRV_TOOLS_BUILD_STATIC)
+-+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
+-+elseif (SPIRV_TOOLS_BUILD_SHARED)
+-+  # If only building a shared library, link other libraries to the
+-+  # shared library. Also, other libraries should be shared
+-+  set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
+-+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-shared)
+-+else()
+-+  message(FATAL_ERROR "You must set one of "
+-+    "SPIRV_TOOLS_BUILD_STATIC or SPIRV_TOOLS_BUILD_SHARED!")
+-+endif()
+-+
+-+option(ENABLE_EXCEPTIONS_ON_MSVC
+-+    "Build SPIRV-TOOLS with C++ exceptions enabled in MSVC" ON)
+- 
+- function(spvtools_default_compile_options TARGET)
+-   target_compile_options(${TARGET} PRIVATE ${SPIRV_WARNINGS})
+-@@ -372,7 +384,7 @@ if (NOT "${SPIRV_SKIP_TESTS}")
+- endif()
+- 
+- set(SPIRV_LIBRARIES "-lSPIRV-Tools-opt -lSPIRV-Tools -lSPIRV-Tools-link")
+--set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools-shared")
+-+set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools")
+- 
+- # Build pkg-config file
+- # Use a first-class target so it's regenerated when relevant files are updated.
+-@@ -388,7 +400,12 @@ add_custom_command(
+-                       -DSPIRV_LIBRARIES=${SPIRV_LIBRARIES}
+-                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
+-         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
+--add_custom_command(
+-+
+-+set(pc_files ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
+-+
+-+# TODO(crueter): remove?
+-+if (SPIRV_TOOLS_BUILD_SHARED)
+-+  add_custom_command(
+-         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc
+-         COMMAND ${CMAKE_COMMAND}
+-                       -DCHANGES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/CHANGES
+-@@ -400,9 +417,12 @@ add_custom_command(
+-                       -DSPIRV_SHARED_LIBRARIES=${SPIRV_SHARED_LIBRARIES}
+-                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
+-         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools-shared.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
+--add_custom_target(spirv-tools-pkg-config 
+--        ALL 
+--        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
+-+  set(pc_files ${pc_files} ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc)
+-+endif()
+-+
+-+add_custom_target(spirv-tools-pkg-config
+-+        ALL
+-+        DEPENDS ${pc_files})
+- 
+- # Install pkg-config file
+- if (ENABLE_SPIRV_TOOLS_INSTALL)
+-diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
+-index bfa1e661bc..fd3712c70c 100644
+---- a/source/CMakeLists.txt
+-+++ b/source/CMakeLists.txt
+-@@ -337,49 +337,44 @@ function(spirv_tools_default_target_options target)
+-   )
+-   set_property(TARGET ${target} PROPERTY FOLDER "SPIRV-Tools libraries")
+-   spvtools_check_symbol_exports(${target})
+--  add_dependencies(${target} spirv-tools-build-version core_tables extinst_tables)
+-+  add_dependencies(${target}
+-+    spirv-tools-build-version core_tables extinst_tables)
+- endfunction()
+- 
+--# Always build ${SPIRV_TOOLS}-shared. This is expected distro packages, and
+--# unlike the other SPIRV_TOOLS target, defaults to hidden symbol visibility.
+--add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
+--if (SPIRV_TOOLS_USE_MIMALLOC)
+--  target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
+-+if (SPIRV_TOOLS_BUILD_SHARED)
+-+  add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
+-+  if (SPIRV_TOOLS_USE_MIMALLOC)
+-+    target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
+-+  endif()
+-+
+-+  set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES
+-+    OUTPUT_NAME "${SPIRV_TOOLS}")
+-+  spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
+-+
+-+  target_compile_definitions(${SPIRV_TOOLS}-shared
+-+    PRIVATE SPIRV_TOOLS_IMPLEMENTATION
+-+    PUBLIC SPIRV_TOOLS_SHAREDLIB)
+-+
+-+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-shared)
+- endif()
+--spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
+--set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES CXX_VISIBILITY_PRESET hidden)
+--target_compile_definitions(${SPIRV_TOOLS}-shared
+--  PRIVATE SPIRV_TOOLS_IMPLEMENTATION
+--  PUBLIC SPIRV_TOOLS_SHAREDLIB
+--)
+- 
+- if(SPIRV_TOOLS_BUILD_STATIC)
+-   add_library(${SPIRV_TOOLS}-static STATIC ${SPIRV_SOURCES})
+-   if (SPIRV_TOOLS_USE_MIMALLOC AND SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD)
+-     target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
+-   endif()
+-+
+-   spirv_tools_default_target_options(${SPIRV_TOOLS}-static)
+--  # The static target does not have the '-static' suffix.
+--  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES OUTPUT_NAME "${SPIRV_TOOLS}")
+--
+--  # Create the "${SPIRV_TOOLS}" target as an alias to either "${SPIRV_TOOLS}-static"
+--  # or "${SPIRV_TOOLS}-shared" depending on the value of BUILD_SHARED_LIBS.
+--  if(BUILD_SHARED_LIBS)
+--    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-shared)
+--  else()
+--    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-static)
+--  endif()
+-+  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES
+-+    OUTPUT_NAME "${SPIRV_TOOLS_STATIC_LIBNAME}")
+- 
+--  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static ${SPIRV_TOOLS}-shared)
+--else()
+--  add_library(${SPIRV_TOOLS} ${SPIRV_TOOLS_LIBRARY_TYPE} ${SPIRV_SOURCES})
+--  if (SPIRV_TOOLS_USE_MIMALLOC)
+--    target_link_libraries(${SPIRV_TOOLS} PRIVATE mimalloc-static)
+--  endif()
+--  spirv_tools_default_target_options(${SPIRV_TOOLS})
+--  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS} ${SPIRV_TOOLS}-shared)
+-+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static)
+- endif()
+- 
+-+# Create the "SPIRV-Tools" target as an alias to either "SPIRV-Tools-static"
+-+# or "SPIRV-Tools-shared" depending on the value of SPIRV_TOOLS_BUILD_SHARED.
+-+add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS_FULL_VISIBILITY})
+-+
+- if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+-   find_library(LIBRT rt)
+-   if(LIBRT)
+-@@ -390,14 +385,17 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+- endif()
+- 
+- if(ENABLE_SPIRV_TOOLS_INSTALL)
+--  if (SPIRV_TOOLS_USE_MIMALLOC AND (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
+-+  if (SPIRV_TOOLS_USE_MIMALLOC AND
+-+    (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
+-     list(APPEND SPIRV_TOOLS_TARGETS mimalloc-static)
+-   endif()
+-   install(TARGETS ${SPIRV_TOOLS_TARGETS} EXPORT ${SPIRV_TOOLS}Targets)
+-   export(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake)
+- 
+-   spvtools_config_package_dir(${SPIRV_TOOLS} PACKAGE_DIR)
+--  install(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake DESTINATION ${PACKAGE_DIR})
+-+  install(EXPORT ${SPIRV_TOOLS}Targets
+-+    FILE ${SPIRV_TOOLS}Target.cmake
+-+    DESTINATION ${PACKAGE_DIR})
+- 
+-   # Special config file for root library compared to other libs.
+-   file(WRITE ${CMAKE_BINARY_DIR}/${SPIRV_TOOLS}Config.cmake
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 42717c496d..1f000141f0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -130,7 +130,6 @@ if (YUZU_STATIC_BUILD)
+ 
+         # these libs do not properly provide static libs/let you do it with cmake
+         set(fmt_FORCE_BUNDLED ON)
+-        set(SPIRV-Tools_FORCE_BUNDLED ON)
+         set(SPIRV-Headers_FORCE_BUNDLED ON)
+         set(zstd_FORCE_BUNDLED ON)
+     endif()
+@@ -523,7 +522,6 @@ if (NOT YUZU_STATIC_ROOM)
+     find_package(VulkanMemoryAllocator)
+     find_package(VulkanUtilityLibraries)
+     find_package(SimpleIni)
+-    find_package(SPIRV-Tools)
+     find_package(sirit)
+     find_package(gamemode)
+     find_package(frozen)
+diff --git a/CMakeModules/FindSPIRV-Tools.cmake b/CMakeModules/FindSPIRV-Tools.cmake
+deleted file mode 100644
+index e0f9a88d54..0000000000
+--- a/CMakeModules/FindSPIRV-Tools.cmake
++++ /dev/null
+@@ -1,26 +0,0 @@
+-# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+-# SPDX-License-Identifier: GPL-3.0-or-later
+-
+-# SPDX-FileCopyrightText: 2022 yuzu Emulator Project
+-# SPDX-License-Identifier: GPL-2.0-or-later
+-
+-include(FindPackageHandleStandardArgs)
+-
+-find_package(PkgConfig QUIET)
+-pkg_search_module(SPIRV-Tools QUIET IMPORTED_TARGET SPIRV-Tools)
+-find_package_handle_standard_args(SPIRV-Tools
+-    REQUIRED_VARS SPIRV-Tools_LINK_LIBRARIES
+-    VERSION_VAR SPIRV-Tools_VERSION
+-)
+-
+-if (PLATFORM_MSYS)
+-    FixMsysPath(PkgConfig::SPIRV-Tools)
+-endif()
+-
+-if (SPIRV-Tools_FOUND AND NOT TARGET SPIRV-Tools::SPIRV-Tools)
+-    if (TARGET SPIRV-Tools)
+-        add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools)
+-    else()
+-        add_library(SPIRV-Tools::SPIRV-Tools ALIAS PkgConfig::SPIRV-Tools)
+-    endif()
+-endif()
+diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
+index ba0545b7a7..e230f709fa 100644
+--- a/externals/CMakeLists.txt
++++ b/externals/CMakeLists.txt
+@@ -192,14 +192,6 @@ else()
+     endif()
+ endif()
+ 
+-# SPIRV Tools
+-AddJsonPackage(spirv-tools)
+-
+-if (SPIRV-Tools_ADDED)
+-    add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools-static)
+-    target_link_libraries(SPIRV-Tools-static PRIVATE SPIRV-Tools-opt SPIRV-Tools-link)
+-endif()
+-
+ # Catch2
+ if (YUZU_TESTS OR DYNARMIC_TESTS)
+     AddJsonPackage(catch2)
+diff --git a/externals/cpmfile.json b/externals/cpmfile.json
+index b8472774ae..0f8d34230c 100644
+--- a/externals/cpmfile.json
++++ b/externals/cpmfile.json
+@@ -102,20 +102,6 @@
+         "git_version": "1.3.18",
+         "find_args": "MODULE"
+     },
+-    "spirv-tools": {
+-        "package": "SPIRV-Tools",
+-        "repo": "KhronosGroup/SPIRV-Tools",
+-        "sha": "0a7e28689a",
+-        "hash": "eadfcceb82f4b414528d99962335e4f806101168474028f3cf7691ac40c37f323decf2a42c525e2d5bfa6f14ff132d6c5cf9b87c151490efad01f5e13ade1520",
+-        "git_version": "2025.4",
+-        "options": [
+-            "SPIRV_SKIP_EXECUTABLES ON"
+-        ],
+-        "patches": [
+-            "0001-netbsd-fix.patch",
+-            "0002-allow-static-only.patch"
+-        ]
+-    },
+     "spirv-headers": {
+         "package": "SPIRV-Headers",
+         "repo": "KhronosGroup/SPIRV-Headers",
+diff --git a/externals/ffmpeg/CMakeLists.txt b/externals/ffmpeg/CMakeLists.txt
+index 3140f8e545..87a3cacc70 100644
+--- a/externals/ffmpeg/CMakeLists.txt
++++ b/externals/ffmpeg/CMakeLists.txt
+@@ -254,7 +254,7 @@ else()
+         OUTPUT
+             ${FFmpeg_BUILD_LIBRARIES}
+         COMMAND
+-            make ${FFmpeg_MAKE_ARGS}
++            gmake ${FFmpeg_MAKE_ARGS}
+         WORKING_DIRECTORY
+             ${FFmpeg_BUILD_DIR}
+     )
+diff --git a/src/common/settings.cpp b/src/common/settings.cpp
+index 54848c4dd1..0ca0449282 100644
+--- a/src/common/settings.cpp
++++ b/src/common/settings.cpp
+@@ -157,22 +157,10 @@ void UpdateGPUAccuracy() {
+     values.current_gpu_accuracy = values.gpu_accuracy.GetValue();
+ }
+ 
+-bool IsGPULevelLow() {
+-    return values.current_gpu_accuracy == GpuAccuracy::Low;
+-}
+-
+-bool IsGPULevelMedium() {
+-    return values.current_gpu_accuracy == GpuAccuracy::Medium;
+-}
+-
+ bool IsGPULevelHigh() {
+     return values.current_gpu_accuracy == GpuAccuracy::High;
+ }
+ 
+-bool IsDMALevelDefault() {
+-    return values.dma_accuracy.GetValue() == DmaAccuracy::Default;
+-}
+-
+ bool IsDMALevelSafe() {
+     return values.dma_accuracy.GetValue() == DmaAccuracy::Safe;
+ }
+diff --git a/src/common/settings.h b/src/common/settings.h
+index bec1e93e79..0a3bb132a3 100644
+--- a/src/common/settings.h
++++ b/src/common/settings.h
+@@ -171,6 +171,7 @@ struct Values {
+     SwitchableSetting<bool> enable_overlay{linkage, false, "enable_overlay", Category::LibraryApplet};
+ 
+     // Audio
++    Setting<bool, false> dump_audio_commands{linkage, false, "dump_audio_commands", Category::Audio, Specialization::Default, false};
+     SwitchableSetting<AudioEngine> sink_id{linkage, AudioEngine::Auto, "output_engine",
+                                            Category::Audio, Specialization::RuntimeList};
+     SwitchableSetting<std::string> audio_output_device_id{
+@@ -192,20 +193,54 @@ struct Values {
+                                        true};
+     Setting<bool, false> audio_muted{
+                                      linkage, false, "audio_muted", Category::Audio, Specialization::Default, true, true};
+-    Setting<bool, false> dump_audio_commands{
+-                                             linkage, false, "dump_audio_commands", Category::Audio, Specialization::Default, false};
++
++    // System
++    SwitchableSetting<ConsoleMode> use_docked_mode{linkage,
++#ifdef ANDROID
++                                                   ConsoleMode::Handheld,
++#else
++                                                   ConsoleMode::Handheld,
++#endif
++                                                   "use_docked_mode",
++                                                   Category::System,
++                                                   Specialization::Radio,
++                                                   true,
++                                                   true};
++    Setting<s32> current_user{linkage, 0, "current_user", Category::System};
++
++    SwitchableSetting<Language, true> language_index{linkage,
++                                                     Language::Chinese,
++                                                     "language_index",
++                                                     Category::System};
++    SwitchableSetting<Region, true> region_index{linkage, Region::China, "region_index", Category::System};
++    SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
++    Setting<std::string> device_name{
++        linkage, "Eden", "device_name", Category::System, Specialization::Default, true, true};
++    // Measured in seconds since epoch
++    SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
++    SwitchableSetting<s64> custom_rtc{
++                                      linkage, 0,    "custom_rtc",       Category::System, Specialization::Time,
++                                      false,   true, &custom_rtc_enabled};
++    SwitchableSetting<s64, true> custom_rtc_offset{linkage,
++                                                   0,
++                                                   (std::numeric_limits<int>::min)(),
++                                                   (std::numeric_limits<int>::max)(),
++                                                   "custom_rtc_offset",
++                                                   Category::System,
++                                                   Specialization::Countable,
++                                                   true,
++                                                   true};
++    SwitchableSetting<bool> rng_seed_enabled{
++                                             linkage, false, "rng_seed_enabled", Category::System, Specialization::Paired, true, true};
++    SwitchableSetting<u32> rng_seed{
++                                    linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
++                                    true,    true, &rng_seed_enabled};
+ 
+     // Core
+     SwitchableSetting<bool> use_multi_core{linkage, true, "use_multi_core", Category::Core};
+-    SwitchableSetting<MemoryLayout, true> memory_layout_mode{linkage,
+-                                                             MemoryLayout::Memory_4Gb,
+-                                                             "memory_layout_mode",
+-                                                             Category::Core,
+-                                                             Specialization::Default,
+-                                                             true};
+-    SwitchableSetting<bool> use_speed_limit{
+-                                            linkage, true, "use_speed_limit", Category::Core, Specialization::Paired, true, true};
++    SwitchableSetting<bool> sync_core_speed{linkage, true, "sync_core_speed", Category::Core, Specialization::Default};
+ 
++    SwitchableSetting<bool> use_speed_limit{linkage, true, "use_speed_limit", Category::Core, Specialization::Paired, true, true};
+     SwitchableSetting<u16, true> speed_limit{linkage,
+                                              100,
+                                              0,
+@@ -217,48 +252,36 @@ struct Values {
+                                              true,
+                                              &use_speed_limit};
+ 
+-    SwitchableSetting<u16, true> slow_speed_limit{linkage,
+-                                             50,
++    // The currently used speed mode.
++    Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
++    SwitchableSetting<u16, true> turbo_speed_limit{linkage,
++                                             200,
+                                              0,
+                                              9999,
+-                                             "slow_speed_limit",
++                                             "turbo_speed_limit",
+                                              Category::Core,
+                                              Specialization::Countable | Specialization::Percentage,
+                                              true,
+                                              true};
+-
+-    SwitchableSetting<u16, true> turbo_speed_limit{linkage,
+-                                             200,
++    SwitchableSetting<u16, true> slow_speed_limit{linkage,
++                                             50,
+                                              0,
+                                              9999,
+-                                             "turbo_speed_limit",
++                                             "slow_speed_limit",
+                                              Category::Core,
+                                              Specialization::Countable | Specialization::Percentage,
+                                              true,
+                                              true};
+ 
+-    // The currently used speed mode.
+-    Setting<SpeedMode> current_speed_mode{linkage, SpeedMode::Standard, "current_speed_mode", Category::Core, Specialization::Default, false, true};
+-
+-    SwitchableSetting<bool> sync_core_speed{linkage, false, "sync_core_speed", Category::Core,
+-                                            Specialization::Default};
++    SwitchableSetting<MemoryLayout, true> memory_layout_mode{linkage,
++                                                             MemoryLayout::Memory_4Gb,
++                                                             "memory_layout_mode",
++                                                             Category::Core,
++                                                             Specialization::Default,
++                                                             true};
+ 
+     // Cpu
+-    SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
+-#ifdef HAS_NCE
+-                                                    CpuBackend::Nce,
+-#else
+-                                                    CpuBackend::Dynarmic,
+-#endif
+-                                                    CpuBackend::Dynarmic,
+-#ifdef HAS_NCE
+-                                                    CpuBackend::Nce,
+-#else
+-                                                    CpuBackend::Dynarmic,
+-#endif
+-                                                    "cpu_backend",
+-                                                    Category::Cpu};
+-    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Auto,
++    SwitchableSetting<CpuAccuracy, true> cpu_accuracy{linkage, CpuAccuracy::Unsafe,
+                                                       "cpu_accuracy", Category::Cpu};
+     SwitchableSetting<CpuClock> fast_cpu_time{linkage,
+                                               CpuClock::Off,
+@@ -287,6 +310,21 @@ struct Values {
+                                            true,
+                                            &use_custom_cpu_ticks};
+ 
++    SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
++#ifdef HAS_NCE
++                                                    CpuBackend::Nce,
++#else
++                                                    CpuBackend::Dynarmic,
++#endif
++                                                    CpuBackend::Dynarmic,
++#ifdef HAS_NCE
++                                                    CpuBackend::Nce,
++#else
++                                                    CpuBackend::Dynarmic,
++#endif
++                                                    "cpu_backend",
++                                                    Category::Cpu};
++
+     Setting<bool> cpuopt_page_tables{linkage, true, "cpuopt_page_tables", Category::CpuDebug};
+     Setting<bool> cpuopt_block_linking{linkage, true, "cpuopt_block_linking", Category::CpuDebug};
+     Setting<bool> cpuopt_return_stack_buffer{linkage, true, "cpuopt_return_stack_buffer",
+@@ -315,7 +353,7 @@ struct Values {
+ #endif
+                                         "cpuopt_unsafe_host_mmu",
+                                         Category::CpuUnsafe};
+-    SwitchableSetting<bool> cpuopt_unsafe_unfuse_fma{linkage, true, "cpuopt_unsafe_unfuse_fma",
++    SwitchableSetting<bool> cpuopt_unsafe_unfuse_fma{linkage, false, "cpuopt_unsafe_unfuse_fma",
+                                                      Category::CpuUnsafe};
+     SwitchableSetting<bool> cpuopt_unsafe_reduce_fp_error{
+                                                           linkage, true, "cpuopt_unsafe_reduce_fp_error", Category::CpuUnsafe};
+@@ -326,7 +364,7 @@ struct Values {
+     SwitchableSetting<bool> cpuopt_unsafe_fastmem_check{
+                                                         linkage, true, "cpuopt_unsafe_fastmem_check", Category::CpuUnsafe};
+     SwitchableSetting<bool> cpuopt_unsafe_ignore_global_monitor{
+-                                                                linkage, true, "cpuopt_unsafe_ignore_global_monitor", Category::CpuUnsafe};
++                                                                linkage, false, "cpuopt_unsafe_ignore_global_monitor", Category::CpuUnsafe};
+ 
+     // Renderer
+     SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
+@@ -337,41 +375,10 @@ struct Values {
+ #endif
+         "backend", Category::Renderer};
+     SwitchableSetting<int> vulkan_device{linkage, 0, "vulkan_device", Category::Renderer, Specialization::RuntimeList};
+-
+-    // Graphics Settings
++    // Renderer (Graphics Settings)
+     ResolutionScalingInfo resolution_info{};
+     SwitchableSetting<ResolutionSetup> resolution_setup{linkage, ResolutionSetup::Res1X,
+                                                         "resolution_setup", Category::Renderer};
+-
+-    SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
+-                                                  VSyncMode::Fifo,
+-                                                  "use_vsync",
+-                                                  Category::Renderer,
+-                                                  Specialization::RuntimeList,
+-                                                  true,
+-                                                  true};
+-
+-    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
+-                                                    ScalingFilter::Bilinear,
+-                                                    "scaling_filter",
+-                                                    Category::Renderer,
+-                                                    Specialization::Default,
+-                                                    true,
+-                                                    true};
+-    SwitchableSetting<int, true> fsr_sharpening_slider{linkage,
+-#ifdef ANDROID
+-                                                       0,
+-#else
+-                                                       25,
+-#endif
+-                                                       0,
+-                                                       200,
+-                                                       "fsr_sharpening_slider",
+-                                                       Category::Renderer,
+-                                                       Specialization::Scalar |
+-                                                           Specialization::Percentage,
+-                                                       true,
+-                                                       true};
+     SwitchableSetting<AspectRatio, true> aspect_ratio{linkage,
+                                                       AspectRatio::R16_9,
+                                                       "aspect_ratio",
+@@ -387,13 +394,6 @@ struct Values {
+                                                   Specialization::Default,
+                                                   true,
+                                                   true};
+-
+-    SwitchableSetting<SpirvOptimizeMode, true> optimize_spirv_output{linkage,
+-                                                                     SpirvOptimizeMode::Never,
+-                                                                     "optimize_spirv_output",
+-                                                                     Category::Renderer};
+-    SwitchableSetting<bool> use_asynchronous_gpu_emulation{
+-                                                           linkage, true, "use_asynchronous_gpu_emulation", Category::Renderer};
+     // *nix platforms may have issues with the borderless windowed fullscreen mode.
+     // Default to exclusive fullscreen on these platforms for now.
+     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
+@@ -408,18 +408,42 @@ struct Values {
+                                                             true,
+                                                             true};
+ 
+-    SwitchableSetting<u8, false> bg_red{
+-                                        linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
+-    SwitchableSetting<u8, false> bg_green{
+-                                          linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
+-    SwitchableSetting<u8, false> bg_blue{
+-                                         linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
++                                                  VSyncMode::Fifo,
++                                                  "use_vsync",
++                                                  Category::Renderer,
++                                                  Specialization::RuntimeList,
++                                                  true,
++                                                  true};
++
++    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
++                                                    ScalingFilter::Bicubic,
++                                                    "scaling_filter",
++                                                    Category::Renderer,
++                                                    Specialization::Default,
++                                                    true,
++                                                    true};
++    SwitchableSetting<int, true> fsr_sharpening_slider{linkage,
++                                                       25,
++                                                       0,
++                                                       200,
++                                                       "fsr_sharpening_slider",
++                                                       Category::Renderer,
++                                                       Specialization::Scalar |
++                                                           Specialization::Percentage,
++                                                       true,
++                                                       true};
++
++    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
+ 
++    // Renderer (Advanced)
+     SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
+ #ifdef ANDROID
+                                                       GpuAccuracy::Low,
+ #else
+-                                                      GpuAccuracy::Medium,
++                                                      GpuAccuracy::High,
+ #endif
+                                                       "gpu_accuracy",
+                                                       Category::RendererAdvanced,
+@@ -427,10 +451,10 @@ struct Values {
+                                                       true,
+                                                       true};
+ 
+-    GpuAccuracy current_gpu_accuracy{GpuAccuracy::Medium};
++    GpuAccuracy current_gpu_accuracy{GpuAccuracy::High};
+ 
+     SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
+-                                                      DmaAccuracy::Default,
++                                                      DmaAccuracy::Unsafe,
+                                                       "dma_accuracy",
+                                                       Category::RendererAdvanced,
+                                                       Specialization::Default,
+@@ -442,24 +466,34 @@ struct Values {
+                                                            "vram_usage_mode",
+                                                            Category::RendererAdvanced};
+ 
+-    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
+-                                                      "nvdec_emulation", Category::RendererAdvanced};
+-
+     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
+ #ifdef ANDROID
+                                                            AnisotropyMode::Default,
+ #else
+-                                                           AnisotropyMode::Automatic,
++                                                           AnisotropyMode::Default,
+ #endif
+                                                            "max_anisotropy",
+                                                            Category::RendererAdvanced};
++
++    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
++                                                      "nvdec_emulation", Category::RendererAdvanced};
++
+     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
+-                                                            AstcDecodeMode::Gpu,
++#ifdef ANDROID
++                                                            AstcDecodeMode::Cpu,
++#else
++                                                            AstcDecodeMode::Cpu,
++#endif
+                                                             "accelerate_astc",
+                                                             Category::RendererAdvanced};
+ 
++    SwitchableSetting<AstcRecompression, true> astc_recompression{linkage,
++                                                                  AstcRecompression::Uncompressed,
++                                                                  "astc_recompression",
++                                                                  Category::RendererAdvanced};
++
+     SwitchableSetting<FramePacingMode, true> frame_pacing_mode{linkage,
+-                                                               FramePacingMode::Target_Auto,
++                                                               FramePacingMode::Target_30,
+                                                                FramePacingMode::Target_Auto,
+                                                                FramePacingMode::Target_120,
+                                                                "frame_pacing_mode",
+@@ -468,11 +502,37 @@ struct Values {
+                                                                true,
+                                                                true};
+ 
+-    SwitchableSetting<AstcRecompression, true> astc_recompression{linkage,
+-                                                                  AstcRecompression::Uncompressed,
+-                                                                  "astc_recompression",
+-                                                                  Category::RendererAdvanced};
++    SwitchableSetting<bool> fence_sync{linkage,
++                                       true,
++                                       "fence_sync",
++                                       Category::RendererAdvanced,
++                                       Specialization::Default,
++                                       true,
++                                       true};
++    SwitchableSetting<u8, true> fence_tick_delay{linkage,
++                                                 6,
++                                                 0,
++                                                 12,
++                                                 "fence_tick_delay",
++                                                 Category::RendererAdvanced,
++                                                 Specialization::Scalar,
++                                                 true,
++                                                 true,
++                                                 &fence_sync};
+ 
++    SwitchableSetting<bool> delay_fence{linkage,
++                                        false,
++                                        "delay_fence",
++                                        Category::RendererAdvanced,
++                                        Specialization::Default,
++                                        true,
++                                        true};
++
++    SwitchableSetting<bool> renderer_force_max_clock{linkage, true, "force_max_clock",
++                                                     Category::RendererAdvanced};
++
++    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
++                                                   Category::RendererAdvanced};
+ 
+     SwitchableSetting<bool> sync_memory_operations{linkage,
+                                                    false,
+@@ -482,22 +542,6 @@ struct Values {
+                                                    true,
+                                                    true};
+ 
+-    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
+-                                                     Category::RendererAdvanced};
+-
+-    SwitchableSetting<bool> use_disk_shader_cache{linkage, true, "use_disk_shader_cache",
+-                                                  Category::RendererAdvanced};
+-
+-    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
+-        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
+-        Specialization::Default};
+-
+-    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
+-                                                     Category::RendererAdvanced};
+-
+-    SwitchableSetting<bool> use_video_framerate{linkage, false, "use_video_framerate",
+-                                                Category::RendererAdvanced};
+-
+     SwitchableSetting<bool> use_reactive_flushing{linkage,
+ #ifdef ANDROID
+                                                   false,
+@@ -507,17 +551,27 @@ struct Values {
+                                                   "use_reactive_flushing",
+                                                   Category::RendererAdvanced};
+ 
+-    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
+-                                                   Category::RendererAdvanced};
++    SwitchableSetting<bool> use_video_framerate{linkage, false, "use_video_framerate",
++                                                Category::RendererAdvanced};
+ 
+     SwitchableSetting<bool> enable_buffer_history{linkage,
+-                                                  false,
++                                                  true,
+                                                   "enable_buffer_history",
+                                                   Category::RendererAdvanced,
+                                                   Specialization::Default,
+                                                   true,
+                                                   true};
+ 
++    SwitchableSetting<bool> use_disk_shader_cache{linkage, false, "use_disk_shader_cache",
++                                                  Category::RendererAdvanced};
++
++    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
++        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
++        Specialization::Default};
++
++    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
++                                                     Category::RendererAdvanced};
++
+ #ifdef ANDROID
+     SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
+                                                  false,
+@@ -528,15 +582,7 @@ struct Values {
+                                                  true};
+ #endif
+ 
+-    // Renderer Hacks //
+-    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
+-                                                  GpuOverclock::Medium,
+-                                                  "fast_gpu_time",
+-                                                  Category::RendererHacks,
+-                                                  Specialization::Default,
+-                                                        true,
+-                                                        true};
+-
++    // Renderer (Hacks)
+     SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
+                                                         false,
+                                                         "skip_cpu_inner_invalidation",
+@@ -544,6 +590,15 @@ struct Values {
+                                                         Specialization::Default,
+                                                         true,
+                                                         true};
++
++    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
++                                                     Category::RendererHacks};
++
++    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
++                                                     Category::RendererHacks};
++
++    SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage, false, "use_asynchronous_gpu_emulation", Category::RendererHacks};
++
+     SwitchableSetting<bool> async_presentation{linkage,
+ #ifdef ANDROID
+                                                true,
+@@ -552,47 +607,39 @@ struct Values {
+ #endif
+                                                "async_presentation", Category::RendererHacks};
+ 
+-    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
+-                                                     Category::RendererHacks};
+-
+-    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
+-                                                     Category::RendererHacks};
+-
+     SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
+                                                      Category::RendererHacks};
+ 
++    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
++                                                  Category::RendererHacks};
++
+     SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
+-                                                  GpuUnswizzleSize::Large,
++                                                  GpuUnswizzleSize::Normal,
+                                                   "gpu_unswizzle_texture_size",
+                                                   Category::RendererHacks,
+                                                   Specialization::Default};
+ 
+     SwitchableSetting<GpuUnswizzle> gpu_unswizzle_stream_size{linkage,
+-                                                  GpuUnswizzle::Medium,
++                                                  GpuUnswizzle::Normal,
+                                                   "gpu_unswizzle_stream_size",
+                                                   Category::RendererHacks,
+                                                   Specialization::Default};
+ 
+     SwitchableSetting<GpuUnswizzleChunk> gpu_unswizzle_chunk_size{linkage,
+-                                                  GpuUnswizzleChunk::Medium,
++                                                  GpuUnswizzleChunk::VeryLow,
+                                                   "gpu_unswizzle_chunk_size",
+                                                   Category::RendererHacks,
+                                                   Specialization::Default};
+ 
+-    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
+-                                                  Category::RendererHacks};
+-
+-    SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
+-#if defined(ANDROID)
+-                                           ExtendedDynamicState::EDS1,
+-#elif defined(__APPLE__)
+-                                           ExtendedDynamicState::Disabled,
+-#else
+-                                           ExtendedDynamicState::EDS2,
+-#endif
+-                                           "dyna_state",
+-                                           Category::RendererExtensions};
++    SwitchableSetting<GpuOverclock> fast_gpu_time{linkage,
++                                                  GpuOverclock::Normal,
++                                                  "fast_gpu_time",
++                                                  Category::RendererHacks,
++                                                  Specialization::Default,
++                                                        true,
++                                                        true};
+ 
++    // Renderer (Extensions)
+     SwitchableSetting<u32, true> sample_shading{linkage,
+                                                 0,
+                                                 0,
+@@ -601,13 +648,23 @@ struct Values {
+                                                 Category::RendererExtensions,
+                                                 Specialization::Scalar};
+ 
++    SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
++#if defined (ANDROID) || defined (__APPLE__)
++                                           ExtendedDynamicState::Disabled,
++#else
++                                           ExtendedDynamicState::Disabled,
++#endif
++                                           "dyna_state",
++                                           Category::RendererExtensions};
++
+     SwitchableSetting<bool> vertex_input_dynamic_state{linkage,
+ #if defined (ANDROID)
+                                                        false,
+ #else
+-                                                       true,
++                                                       false,
+ #endif
+                                                        "vertex_input_dynamic_state", Category::RendererExtensions};
++    SwitchableSetting<bool> provoking_vertex{linkage, false, "provoking_vertex", Category::RendererExtensions};
+ 
+     Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
+     Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
+@@ -629,51 +686,6 @@ struct Values {
+                                                          true,
+                                                          true};
+ 
+-    // System
+-    SwitchableSetting<Language, true> language_index{linkage,
+-                                                     Language::EnglishAmerican,
+-                                                     "language_index",
+-                                                     Category::System};
+-    SwitchableSetting<Region, true> region_index{linkage, Region::Usa, "region_index", Category::System};
+-    SwitchableSetting<TimeZone, true> time_zone_index{linkage, TimeZone::Auto, "time_zone_index", Category::System};
+-    Setting<u32> serial_battery{linkage, 0, "serial_battery", Category::System};
+-    Setting<u32> serial_unit{linkage, 0, "serial_unit", Category::System};
+-    // Measured in seconds since epoch
+-    SwitchableSetting<bool> custom_rtc_enabled{linkage, false, "custom_rtc_enabled", Category::System, Specialization::Paired, true, true};
+-    SwitchableSetting<s64> custom_rtc{
+-                                      linkage, 0,    "custom_rtc",       Category::System, Specialization::Time,
+-                                      false,   true, &custom_rtc_enabled};
+-    SwitchableSetting<s64, true> custom_rtc_offset{linkage,
+-                                                   0,
+-                                                   (std::numeric_limits<int>::min)(),
+-                                                   (std::numeric_limits<int>::max)(),
+-                                                   "custom_rtc_offset",
+-                                                   Category::System,
+-                                                   Specialization::Countable,
+-                                                   true,
+-                                                   true};
+-    SwitchableSetting<bool> rng_seed_enabled{
+-                                             linkage, false, "rng_seed_enabled", Category::System, Specialization::Paired, true, true};
+-    SwitchableSetting<u32> rng_seed{
+-                                    linkage, 0,    "rng_seed",       Category::System, Specialization::Hex,
+-                                    true,    true, &rng_seed_enabled};
+-    Setting<std::string> device_name{
+-        linkage, "Eden", "device_name", Category::System, Specialization::Default, true, true};
+-
+-    Setting<s32> current_user{linkage, 0, "current_user", Category::System};
+-
+-    SwitchableSetting<ConsoleMode> use_docked_mode{linkage,
+-#ifdef ANDROID
+-                                                   ConsoleMode::Handheld,
+-#else
+-                                                   ConsoleMode::Docked,
+-#endif
+-                                                   "use_docked_mode",
+-                                                   Category::System,
+-                                                   Specialization::Radio,
+-                                                   true,
+-                                                   true};
+-
+     // Controls
+     InputSetting<std::array<PlayerInput, 10>> players;
+ 
+@@ -789,6 +801,17 @@ struct Values {
+                                          Category::Debugging};
+     Setting<bool> perform_vulkan_check{linkage, true, "perform_vulkan_check", Category::Debugging};
+     Setting<bool> disable_web_applet{linkage, true, "disable_web_applet", Category::Debugging};
++    Setting<u32> serial_unit{linkage, 0, "serial_unit", Category::Debugging};
++    Setting<u32> serial_battery{linkage, 0, "serial_battery", Category::Debugging};
++    SwitchableSetting<u16, true> debug_knobs{linkage,
++                                           0,
++                                           0,
++                                           65535,
++                                           "debug_knobs",
++                                           Category::Debugging,
++                                           Specialization::Countable,
++                                           true,
++                                           true};
+ 
+     // GPU Logging
+     Setting<bool> gpu_logging_enabled{linkage, false, "gpu_logging_enabled", Category::Debugging};
+@@ -802,16 +825,6 @@ struct Values {
+     Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
+                                            Category::Debugging};
+ 
+-    SwitchableSetting<u16, true> debug_knobs{linkage,
+-                                           0,
+-                                           0,
+-                                           65535,
+-                                           "debug_knobs",
+-                                           Category::Core,
+-                                           Specialization::Countable,
+-                                           true,
+-                                           true};
+-
+     // Miscellaneous
+     Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
+     Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
+@@ -843,11 +856,8 @@ extern Values values;
+ bool getDebugKnobAt(u8 i);
+ 
+ void UpdateGPUAccuracy();
+-bool IsGPULevelLow();
+-bool IsGPULevelMedium();
+ bool IsGPULevelHigh();
+ 
+-bool IsDMALevelDefault();
+ bool IsDMALevelSafe();
+ 
+ bool IsFastmemEnabled();
+diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
+index 638be4127f..9628bbf9af 100644
+--- a/src/common/settings_enums.h
++++ b/src/common/settings_enums.h
+@@ -128,13 +128,13 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+     Roc, Rok, Singapore, Turkey, Uct, Universal, Utc, WSu, Wet, Zulu);
+ ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
+ ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
+-ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
+-ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
++ENUM(AstcRecompression, Uncompressed, Bc1, Bc3, Bc7);
++ENUM(FramePacingMode, Target_Auto, Target_20, Target_30, Target_40, Target_50, Target_60, Target_90, Target_120);
+ ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
+ ENUM(VramUsageMode, Conservative, Aggressive);
+ ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
+-ENUM(GpuAccuracy, Low, Medium, High);
+-ENUM(DmaAccuracy, Default, Unsafe, Safe);
++ENUM(GpuAccuracy, Low, High);
++ENUM(DmaAccuracy, Unsafe, Safe);
+ ENUM(CpuBackend, Dynarmic, Nce);
+ ENUM(CpuAccuracy, Auto, Accurate, Unsafe, Paranoid, Debugging);
+ ENUM(CpuClock, Off, Boost, Fast)
+diff --git a/src/core/arm/dynarmic/arm_dynarmic_32.cpp b/src/core/arm/dynarmic/arm_dynarmic_32.cpp
+index 1520f128cf..c0d6ff9516 100644
+--- a/src/core/arm/dynarmic/arm_dynarmic_32.cpp
++++ b/src/core/arm/dynarmic/arm_dynarmic_32.cpp
+@@ -289,7 +289,6 @@ void ArmDynarmic32::MakeJit(Common::PageTable* page_table) {
+         config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_UnfuseFMA;
+         config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_IgnoreStandardFPCRValue;
+         config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_InaccurateNaN;
+-        config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_IgnoreGlobalMonitor;
+         break;
+     // Paranoia mode for debugging optimizations
+     case Settings::CpuAccuracy::Paranoid:
+diff --git a/src/core/arm/dynarmic/arm_dynarmic_64.cpp b/src/core/arm/dynarmic/arm_dynarmic_64.cpp
+index fe7fb5983f..db8f4424eb 100644
+--- a/src/core/arm/dynarmic/arm_dynarmic_64.cpp
++++ b/src/core/arm/dynarmic/arm_dynarmic_64.cpp
+@@ -340,7 +340,6 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
+         config.unsafe_optimizations = true;
+         config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_UnfuseFMA;
+         config.fastmem_address_space_bits = 64;
+-        config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_IgnoreGlobalMonitor;
+         break;
+     // Paranoia mode for debugging optimizations
+     case Settings::CpuAccuracy::Paranoid:
+diff --git a/src/core/file_sys/vfs/vfs_real.cpp b/src/core/file_sys/vfs/vfs_real.cpp
+index 1eafff6c06..e6caa8d088 100644
+--- a/src/core/file_sys/vfs/vfs_real.cpp
++++ b/src/core/file_sys/vfs/vfs_real.cpp
+@@ -33,7 +33,8 @@ namespace FS = Common::FS;
+ 
+ namespace {
+ 
+-constexpr size_t MaxOpenFiles = 512;
++// Increases the maximum open file limit to 1024
++constexpr size_t MaxOpenFiles = 1024;
+ 
+ constexpr FS::FileAccessMode ModeFlagsToFileAccessMode(OpenMode mode) {
+     switch (mode) {
+diff --git a/src/qt_common/config/uisettings.cpp b/src/qt_common/config/uisettings.cpp
+index f4f5688781..45d73a9235 100644
+--- a/src/qt_common/config/uisettings.cpp
++++ b/src/qt_common/config/uisettings.cpp
+@@ -31,39 +31,39 @@ namespace UISettings {
+ // UISetting::values.shortcuts, which is alphabetically ordered.
+ // clang-format off
+ const std::array<Shortcut, 33> default_hotkeys{{
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Mute/Unmute")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+M"),  std::string("Home+Dpad_Right"), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Volume Down")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("-"),       std::string("Home+Dpad_Down"), Qt::ApplicationShortcut, true}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Volume Up")).toStdString(),            QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("="),       std::string("Home+Dpad_Up"), Qt::ApplicationShortcut, true}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Capture Screenshot")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+P"),  std::string("Screenshot"), Qt::WidgetWithChildrenShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change Adapting Filter")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F8"),      std::string("Home+L"), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change Docked Mode")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F10"),     std::string("Home+X"), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change GPU Mode")).toStdString(),            QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F9"),      std::string("Home+R"), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Configure")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+,"),  std::string(""), Qt::WidgetWithChildrenShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Configure Current Game")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+."),  std::string(""), Qt::WidgetWithChildrenShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Continue/Pause Emulation")).toStdString(),   QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F4"),      std::string("Home+Plus"), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Mute/Unmute")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Volume Down")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, true}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Audio Volume Up")).toStdString(),            QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, true}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Capture Screenshot")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WidgetWithChildrenShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change Adapting Filter")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change Docked Mode")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Change GPU Mode")).toStdString(),            QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Configure")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WidgetWithChildrenShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Configure Current Game")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WidgetWithChildrenShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Continue/Pause Emulation")).toStdString(),   QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
+     {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Exit Fullscreen")).toStdString(),            QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Esc"),     std::string(""), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Exit Eden")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+Q"),  std::string("Home+Minus"), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Fullscreen")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F11"),     std::string("Home+B"), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Load File")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+O"),  std::string(""), Qt::WidgetWithChildrenShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Load/Remove Amiibo")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F2"),      std::string("Home+A"), Qt::WidgetWithChildrenShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Browse Public Game Lobby")).toStdString(),   QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+B"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Create Room")).toStdString(),                QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+N"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Direct Connect to Room")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+C"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Leave Room")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+L"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Show Current Room")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+R"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Restart Emulation")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F6"),      std::string("R+Plus+Minus"), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Stop Emulation")).toStdString(),             QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("F5"),      std::string("L+Plus+Minus"), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Record")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+F7"), std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Reset")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+F6"), std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Start/Stop")).toStdString(),             QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+F5"), std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Filter Bar")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+F"),  std::string(""), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Framerate Limit")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+U"),  std::string("Home+Y"), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Turbo Speed")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+Z"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Slow Speed")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+X"),  std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Mouse Panning")).toStdString(),       QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+F9"), std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Exit Eden")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Fullscreen")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Load File")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WidgetWithChildrenShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Load/Remove Amiibo")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WidgetWithChildrenShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Browse Public Game Lobby")).toStdString(),   QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Create Room")).toStdString(),                QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Direct Connect to Room")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Leave Room")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Show Current Room")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Restart Emulation")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Stop Emulation")).toStdString(),             QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Record")).toStdString(),                 QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Reset")).toStdString(),                  QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "TAS Start/Stop")).toStdString(),             QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Filter Bar")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Framerate Limit")).toStdString(),     QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Turbo Speed")).toStdString(),         QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Slow Speed")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Mouse Panning")).toStdString(),       QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
+     {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Renderdoc Capture")).toStdString(),   QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::ApplicationShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Status Bar")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+S"),  std::string(""), Qt::WindowShortcut, false}},
+-    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Performance Overlay")).toStdString(), QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string("Ctrl+V"),  std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Status Bar")).toStdString(),          QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
++    {QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Toggle Performance Overlay")).toStdString(), QStringLiteral(QT_TRANSLATE_NOOP("Hotkeys", "Main Window")).toStdString(), {std::string(""),        std::string(""), Qt::WindowShortcut, false}},
+ }};
+ // clang-format on
+ 
+diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
+index 4549a36345..dd2c0dd47a 100644
+--- a/src/qt_common/config/uisettings.h
++++ b/src/qt_common/config/uisettings.h
+@@ -98,18 +98,18 @@ struct Values {
+ 
+     Setting<bool> single_window_mode{linkage, true, "singleWindowMode", Category::Ui};
+     Setting<bool> fullscreen{linkage, false, "fullscreen", Category::Ui};
+-    Setting<bool> show_filter_bar{linkage, true, "showFilterBar", Category::Ui};
++    Setting<bool> show_filter_bar{linkage, false, "showFilterBar", Category::Ui};
+     Setting<bool> show_status_bar{linkage, true, "showStatusBar", Category::Ui};
+ 
+     SwitchableSetting<ConfirmStop> confirm_before_stopping{linkage,
+-                                                           ConfirmStop::Ask_Always,
++                                                           ConfirmStop::Ask_Never,
+                                                            "confirmStop",
+                                                            Category::UiGeneral,
+                                                            Settings::Specialization::Default,
+                                                            true,
+                                                            true};
+ 
+-    Setting<bool> first_start{linkage, true, "firstStart", Category::Ui};
++    Setting<bool> first_start{linkage, false, "firstStart", Category::Ui};
+     Setting<bool> pause_when_in_background{linkage,
+                                            false,
+                                            "pauseWhenInBackground",
+@@ -140,7 +140,7 @@ struct Values {
+                                       true,
+                                       true};
+ 
+-    Setting<bool> check_for_updates{linkage, true, "check_for_updates", Category::UiGeneral};
++    Setting<bool> check_for_updates{linkage, false, "check_for_updates", Category::UiGeneral};
+ 
+     // Linux/MinGW may support (requires libdl support)
+     SwitchableSetting<bool> enable_gamemode{linkage,
+@@ -207,16 +207,16 @@ struct Values {
+ 
+     // Game List
+     Setting<bool> show_add_ons{linkage, true, "show_add_ons", Category::UiGameList};
+-    Setting<u32> game_icon_size{linkage, 64, "game_icon_size", Category::UiGameList};
++    Setting<u32> game_icon_size{linkage, 256, "game_icon_size", Category::UiGameList};
+     Setting<u32> folder_icon_size{linkage, 48, "folder_icon_size", Category::UiGameList};
+     Setting<u8> row_1_text_id{linkage, 3, "row_1_text_id", Category::UiGameList};
+-    Setting<u8> row_2_text_id{linkage, 2, "row_2_text_id", Category::UiGameList};
++    Setting<u8> row_2_text_id{linkage, 0, "row_2_text_id", Category::UiGameList};
+     Setting<Settings::GameListMode> game_list_mode{linkage, Settings::GameListMode::TreeView,
+                                                    "game_list_mode", Category::UiGameList};
+     Setting<bool> show_game_name{linkage, true, "show_game_name", Category::UiGameList};
+ 
+     std::atomic_bool is_game_list_reload_pending{false};
+-    Setting<bool> cache_game_list{linkage, true, "cache_game_list", Category::UiGameList};
++    Setting<bool> cache_game_list{linkage, false, "cache_game_list", Category::UiGameList};
+     Setting<bool> favorites_expanded{linkage, true, "favorites_expanded", Category::UiGameList};
+     QVector<u64> favorited_ids;
+     QMap<u64, QDir> ryujinx_link_paths;
+@@ -225,7 +225,7 @@ struct Values {
+     Setting<bool> show_perf_overlay{linkage, false, "show_perf_overlay", Category::UiGameList};
+ 
+     // Compatibility List
+-    Setting<bool> show_compat{linkage, true, "show_compat", Category::UiGameList};
++    Setting<bool> show_compat{linkage, false, "show_compat", Category::UiGameList};
+ 
+     // Size & File Types Column
+     Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
+diff --git a/src/shader_recompiler/CMakeLists.txt b/src/shader_recompiler/CMakeLists.txt
+index e91803c8c6..d02ee268f0 100644
+--- a/src/shader_recompiler/CMakeLists.txt
++++ b/src/shader_recompiler/CMakeLists.txt
+@@ -243,7 +243,7 @@ add_library(shader_recompiler STATIC
+ 
+ )
+ 
+-target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit SPIRV-Tools::SPIRV-Tools)
++target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit)
+ 
+ if (MSVC)
+     target_compile_options(shader_recompiler PRIVATE
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.cpp b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
+index 313a1deb30..bdb15fa728 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
+@@ -9,7 +9,6 @@
+ #include <type_traits>
+ #include <utility>
+ #include <vector>
+-#include <spirv-tools/optimizer.hpp>
+ 
+ #include "common/settings.h"
+ #include "shader_recompiler/backend/spirv/emit_spirv.h"
+@@ -22,15 +21,7 @@ namespace Shader::Backend::SPIRV {
+ namespace {
+ template <class Func>
+ struct FuncTraits {};
+-    thread_local std::unique_ptr<spvtools::Optimizer> thread_optimizer;
+ 
+-    spvtools::Optimizer& GetThreadOptimizer() {
+-        if (!thread_optimizer) {
+-            thread_optimizer = std::make_unique<spvtools::Optimizer>(SPV_ENV_VULKAN_1_3);
+-            thread_optimizer->RegisterPerformancePasses();
+-        }
+-        return *thread_optimizer;
+-    }
+ template <class ReturnType_, class... Args>
+ struct FuncTraits<ReturnType_ (*)(Args...)> {
+     using ReturnType = ReturnType_;
+@@ -501,8 +492,7 @@ void PatchPhiNodes(IR::Program& program, EmitContext& ctx) {
+         }
+ } // Anonymous namespace
+ 
+-std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
+-                           IR::Program& program, Bindings& bindings, bool optimize) {
++std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
+     EmitContext ctx{profile, runtime_info, program, bindings};
+     const Id main{DefineMain(ctx, program)};
+     DefineEntryPoint(program, ctx, main);
+@@ -514,29 +504,7 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
+     SetupCapabilities(profile, program.info, ctx);
+     SetupTransformFeedbackCapabilities(ctx, main);
+     PatchPhiNodes(program, ctx);
+-
+-    if (!optimize) {
+-        return ctx.Assemble();
+-    } else {
+-        std::vector<u32> spirv = ctx.Assemble();
+-
+-        // Use thread-local optimizer instead of creating a new one
+-        auto& spv_opt = GetThreadOptimizer();
+-        spv_opt.SetMessageConsumer([](spv_message_level_t, const char*, const spv_position_t&, const char* m) {
+-            LOG_ERROR(HW_GPU, "spirv-opt: {}", m);
+-        });
+-
+-        spvtools::OptimizerOptions opt_options;
+-        opt_options.set_run_validator(false);
+-
+-        std::vector<u32> result;
+-        if (!spv_opt.Run(spirv.data(), spirv.size(), &result, opt_options)) {
+-            LOG_ERROR(HW_GPU,
+-                      "Failed to optimize SPIRV shader output, continuing without optimization");
+-            result = std::move(spirv);
+-        }
+-        return result;
+-    }
++    return ctx.Assemble();
+ }
+ 
+ Id EmitPhi(EmitContext& ctx, IR::Inst* inst) {
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.h b/src/shader_recompiler/backend/spirv/emit_spirv.h
+index 6bb8596925..89a1aaa7b2 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv.h
++++ b/src/shader_recompiler/backend/spirv/emit_spirv.h
+@@ -33,13 +33,10 @@ constexpr u32 RESCALING_LAYOUT_WORDS_OFFSET = offsetof(RescalingLayout, rescalin
+ constexpr u32 RESCALING_LAYOUT_DOWN_FACTOR_OFFSET = offsetof(RescalingLayout, down_factor);
+ constexpr u32 RENDERAREA_LAYOUT_OFFSET = offsetof(RenderAreaLayout, render_area);
+ 
+-[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
+-                                         IR::Program& program, Bindings& bindings, bool optimize);
+-
+-[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program,
+-                                                bool optimize) {
++[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings);
++[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program) {
+     Bindings binding;
+-    return EmitSPIRV(profile, {}, program, binding, optimize);
++    return EmitSPIRV(profile, {}, program, binding);
+ }
+ 
+ } // namespace Shader::Backend::SPIRV
+diff --git a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+index 2d4feca02c..809879c981 100644
+--- a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
++++ b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
+@@ -376,6 +376,14 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+         .offset_end = 0x700,
+         .alignment = 16,
+     };
++    // Additional biases cover games (e.g. Zelda TOTK) that use
++    // storage buffers at index 6 or extended offset ranges.
++    static constexpr Bias extended_index_bias{
++        .index = 6,
++        .offset_begin = 0,
++        .offset_end = 0x800,
++        .alignment = 16,
++    };
+     // Track the low address of the instruction
+     const std::optional<LowAddrInfo> low_addr_info{TrackLowAddress(&inst)};
+     if (!low_addr_info) {
+@@ -385,6 +393,9 @@ void CollectStorageBuffers(IR::Block& block, IR::Inst& inst, StorageInfo& info)
+     // First try to find storage buffers in the NVN address
+     const IR::U32 low_addr{low_addr_info->value};
+     std::optional<StorageBufferAddr> storage_buffer{Track(low_addr, &nvn_bias)};
++    if (!storage_buffer) {
++        storage_buffer = Track(low_addr, &extended_index_bias);
++    }
+     if (!storage_buffer) {
+         // If it fails, track without a bias
+         storage_buffer = Track(low_addr, nullptr);
+diff --git a/src/video_core/buffer_cache/buffer_base.h b/src/video_core/buffer_cache/buffer_base.h
+index bec2dac246..d7eb21612f 100644
+--- a/src/video_core/buffer_cache/buffer_base.h
++++ b/src/video_core/buffer_cache/buffer_base.h
+@@ -121,12 +121,21 @@ public:
+         return size_bytes;
+     }
+ 
++    u64 getWriteTick() const noexcept {
++        return write_tick;
++    }
++
++    void setWriteTick(u64 write_tick_) {
++        write_tick = write_tick_;
++    }
++
+ private:
+     VAddr cpu_addr = 0;
+     BufferFlagBits flags{};
+     int stream_score = 0;
+     size_t lru_id = SIZE_MAX;
+     size_t size_bytes = 0;
++    u64 write_tick = 0;
+ };
+ 
+ } // namespace VideoCommon
+diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
+index 014b4a318e..36161149f9 100644
+--- a/src/video_core/buffer_cache/buffer_cache.h
++++ b/src/video_core/buffer_cache/buffer_cache.h
+@@ -31,23 +31,27 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
+     immediately_free = (Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive);
+ #endif
+     if (!runtime.CanReportMemoryUsage()) {
+-        minimum_memory = DEFAULT_EXPECTED_MEMORY;
+-        critical_memory = DEFAULT_CRITICAL_MEMORY;
++        minimum_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100);
++        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
+         return;
+     }
+ 
+     const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-    const s64 min_spacing_expected = device_local_memory - 1_GiB;
+-    const s64 min_spacing_critical = device_local_memory - 512_MiB;
++    const u64 local_memory = static_cast<u64>(device_local_memory);
++    const s64 max_expected = device_local_memory - 2_GiB - 512_MiB;
++    const s64 max_critical = device_local_memory - 1_GiB - 512_MiB;
+     const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-    const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+-    const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+-    minimum_memory = static_cast<u64>(
+-        (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
+-                 DEFAULT_EXPECTED_MEMORY));
+-    critical_memory = static_cast<u64>(
+-        (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+-                 DEFAULT_CRITICAL_MEMORY));
++    const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 37 : 50)) / 100;
++    const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
++    if (local_memory > 4_GiB) {
++        minimum_memory = static_cast<u64>(max_expected);
++        critical_memory = static_cast<u64>(max_critical);
++    } else {
++        minimum_memory = static_cast<u64>(
++            (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
++        critical_memory = static_cast<u64>(
++            (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
++    }
+ }
+ 
+ template <class P>
+@@ -1434,6 +1438,10 @@ void BufferCache<P>::UpdateComputeTextureBuffers() {
+ 
+ template <class P>
+ void BufferCache<P>::MarkWrittenBuffer(BufferId buffer_id, DAddr device_addr, u32 size) {
++    if constexpr (!IS_OPENGL) {
++        Buffer& buffer = slot_buffers[buffer_id];
++        buffer.setWriteTick(runtime.CurrentTick());
++    }
+     memory_tracker.MarkRegionAsGpuModified(device_addr, size);
+     gpu_modified_ranges.Add(device_addr, size);
+     uncommitted_gpu_modified_ranges.Add(device_addr, size);
+@@ -1446,16 +1454,31 @@ BufferId BufferCache<P>::FindBuffer(DAddr device_addr, u32 size) {
+     }
+     const u64 page = device_addr >> CACHING_PAGEBITS;
+     const BufferId buffer_id = page_table[page];
+-    if (!buffer_id) {
+-        return CreateBuffer(device_addr, size);
+-    }
+-    const Buffer& buffer = slot_buffers[buffer_id];
+-    if (buffer.IsInBounds(device_addr, size)) {
+-        return buffer_id;
++    if (buffer_id) {
++        Buffer& buffer = slot_buffers[buffer_id];
++        WaitForGpuFenceIfNeeded(buffer);
++        if (buffer.IsInBounds(device_addr, size)) {
++            return buffer_id;
++        }
+     }
+     return CreateBuffer(device_addr, size);
+ }
+ 
++template <class P>
++void BufferCache<P>::WaitForGpuFenceIfNeeded(Buffer& buffer) {
++    if constexpr (!IS_OPENGL) {
++        const bool fence_sync = Settings::values.fence_sync.GetValue();
++        if (fence_sync) {
++            const u64 gpu_tick_delay = static_cast<u64>(Settings::values.fence_tick_delay.GetValue());
++            const u64 buffer_tick = buffer.getWriteTick();
++            const u64 gpu_tick = runtime.KnownGpuTick();
++            if (buffer_tick > gpu_tick + gpu_tick_delay) {
++                runtime.Wait(buffer_tick);
++            }
++        }
++    }
++}
++
+ template <class P>
+ typename BufferCache<P>::OverlapResult BufferCache<P>::ResolveOverlaps(DAddr device_addr,
+                                                                        u32 wanted_size) {
+diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
+index 08524bd854..a040253931 100644
+--- a/src/video_core/buffer_cache/buffer_cache_base.h
++++ b/src/video_core/buffer_cache/buffer_cache_base.h
+@@ -187,8 +187,8 @@ class BufferCache : public VideoCommon::ChannelSetupCaches<BufferCacheChannelInf
+     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+ #endif
+ 
+-    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB;
+-    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB;
++    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 512_MiB + 256_MiB;
++    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 512_MiB + 768_MiB;
+ 
+     // Debug Flags.
+ 
+@@ -416,6 +416,8 @@ private:
+ 
+     [[nodiscard]] BufferId FindBuffer(DAddr device_addr, u32 size);
+ 
++    void WaitForGpuFenceIfNeeded(Buffer& buffer);
++
+     [[nodiscard]] OverlapResult ResolveOverlaps(DAddr device_addr, u32 wanted_size);
+ 
+     void JoinOverlap(BufferId new_buffer_id, BufferId overlap_id, bool accumulate_stream_score);
+diff --git a/src/video_core/dma_pusher.cpp b/src/video_core/dma_pusher.cpp
+index 3844a8e2f9..3cc5d34ec9 100644
+--- a/src/video_core/dma_pusher.cpp
++++ b/src/video_core/dma_pusher.cpp
+@@ -83,11 +83,14 @@ bool DmaPusher::Step() {
+     }
+ 
+     if (header.size > 0) {
+-        if (Settings::IsDMALevelDefault() ? (Settings::IsGPULevelMedium() || Settings::IsGPULevelHigh()) : Settings::IsDMALevelSafe()) {
+-            Tegra::Memory::GpuGuestMemory<Tegra::CommandHeader, Tegra::Memory::GuestMemoryFlags::SafeRead>headers(memory_manager, dma_state.dma_get, header.size, &command_headers);
++        const bool use_safe = Settings::IsDMALevelSafe();
++        if (use_safe) {
++            Tegra::Memory::GpuGuestMemory<Tegra::CommandHeader,
++                Tegra::Memory::GuestMemoryFlags::SafeRead>headers(memory_manager, dma_state.dma_get, header.size, &command_headers);
+             ProcessCommands(headers);
+         } else {
+-            Tegra::Memory::GpuGuestMemory<Tegra::CommandHeader, Tegra::Memory::GuestMemoryFlags::UnsafeRead>headers(memory_manager, dma_state.dma_get, header.size, &command_headers);
++            Tegra::Memory::GpuGuestMemory<Tegra::CommandHeader,
++                Tegra::Memory::GuestMemoryFlags::UnsafeRead>headers(memory_manager, dma_state.dma_get, header.size, &command_headers);
+             ProcessCommands(headers);
+         }
+     }
+diff --git a/src/video_core/fence_manager.h b/src/video_core/fence_manager.h
+index e4c4329e81..a194fc1b5c 100644
+--- a/src/video_core/fence_manager.h
++++ b/src/video_core/fence_manager.h
+@@ -72,11 +72,11 @@ public:
+     }
+ 
+     void SignalFence(std::function<void()>&& func) {
++        const bool delay_fence = Settings::values.delay_fence.GetValue();
++        const bool should_flush = ShouldFlush();
+         if constexpr (!can_async_check) {
+             TryReleasePendingFences<false>();
+         }
+-        const bool should_flush = ShouldFlush();
+-        const bool delay_fence = Settings::IsGPULevelHigh() || (Settings::IsGPULevelMedium() && should_flush);
+         CommitAsyncFlushes();
+         TFence new_fence = CreateFence(!should_flush);
+         if constexpr (can_async_check) {
+diff --git a/src/video_core/host1x/ffmpeg/ffmpeg.cpp b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+index 486fd9365c..88a064d509 100644
+--- a/src/video_core/host1x/ffmpeg/ffmpeg.cpp
++++ b/src/video_core/host1x/ffmpeg/ffmpeg.cpp
+@@ -32,7 +32,7 @@ constexpr std::array PreferredGpuDecoders = {
+     AV_HWDEVICE_TYPE_CUDA,
+     AV_HWDEVICE_TYPE_D3D11VA,
+     AV_HWDEVICE_TYPE_DXVA2,
+-    AV_HWDEVICE_TYPE_D3D12VA,
++//    AV_HWDEVICE_TYPE_D3D12VA,
+ #elif defined(__FreeBSD__)
+     AV_HWDEVICE_TYPE_VDPAU,
+ #elif defined(__APPLE__)
+diff --git a/src/video_core/query_cache/query_cache.h b/src/video_core/query_cache/query_cache.h
+index 4ed42487aa..ca6d29325b 100644
+--- a/src/video_core/query_cache/query_cache.h
++++ b/src/video_core/query_cache/query_cache.h
+@@ -260,7 +260,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+     };
+     u8* pointer = impl->device_memory.template GetPointer<u8>(cpu_addr);
+     u8* pointer_timestamp = impl->device_memory.template GetPointer<u8>(cpu_addr + 8);
+-    bool is_synced = !Settings::IsGPULevelHigh() && is_fence;
++    bool is_synced = Settings::values.fence_sync.GetValue() && is_fence;
+     std::function<void()> operation([this, is_synced, streamer, query_base = query, query_location,
+                                      pointer, pointer_timestamp] {
+         if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
+diff --git a/src/video_core/renderer_opengl/gl_shader_cache.cpp b/src/video_core/renderer_opengl/gl_shader_cache.cpp
+index aac7732005..cf62b02c97 100644
+--- a/src/video_core/renderer_opengl/gl_shader_cache.cpp
++++ b/src/video_core/renderer_opengl/gl_shader_cache.cpp
+@@ -181,7 +181,6 @@ ShaderCache::ShaderCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+       state_tracker{state_tracker_}, shader_notify{shader_notify_},
+       use_asynchronous_shaders{device.UseAsynchronousShaders()},
+       strict_context_required{device.StrictContextRequired()},
+-      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
+       profile{
+           .supported_spirv = 0x00010000,
+ 
+@@ -348,10 +347,6 @@ void ShaderCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading,
+     if (!use_asynchronous_shaders) {
+         workers.reset();
+     }
+-
+-    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
+-        this->optimize_spirv_output = false;
+-    }
+ }
+ 
+ GraphicsPipeline* ShaderCache::CurrentGraphicsPipeline() {
+@@ -537,7 +532,7 @@ std::unique_ptr<GraphicsPipeline> ShaderCache::CreateGraphicsPipeline(
+             break;
+         case Settings::RendererBackend::OpenGL_SPIRV:
+             ConvertLegacyToGeneric(program, runtime_info);
+-            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output);
++            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
+             break;
+         default:
+             UNREACHABLE();
+@@ -598,7 +593,7 @@ std::unique_ptr<ComputePipeline> ShaderCache::CreateComputePipeline(
+         code = EmitGLASM(profile, info, program);
+         break;
+     case Settings::RendererBackend::OpenGL_SPIRV:
+-        code_spirv = EmitSPIRV(profile, program, this->optimize_spirv_output);
++        code_spirv = EmitSPIRV(profile, program);
+         break;
+     default:
+         UNREACHABLE();
+diff --git a/src/video_core/renderer_opengl/gl_shader_cache.h b/src/video_core/renderer_opengl/gl_shader_cache.h
+index 3398ba6f51..02e54539fc 100644
+--- a/src/video_core/renderer_opengl/gl_shader_cache.h
++++ b/src/video_core/renderer_opengl/gl_shader_cache.h
+@@ -76,7 +76,6 @@ private:
+     VideoCore::ShaderNotify& shader_notify;
+     const bool use_asynchronous_shaders;
+     const bool strict_context_required;
+-    bool optimize_spirv_output{};
+ 
+     GraphicsPipelineKey graphics_key{};
+     GraphicsPipeline* current_pipeline{};
+diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
+index 958988f27e..88cc165215 100644
+--- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
++++ b/src/video_core/renderer_opengl/gl_texture_cache.cpp
+@@ -455,6 +455,9 @@ OGLTexture MakeImage(const VideoCommon::ImageInfo& info, GLenum gl_internal_form
+     case Settings::AstcRecompression::Bc3:
+         return is_srgb ? GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT : GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+         break;
++    case Settings::AstcRecompression::Bc7:
++        return is_srgb ? GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM : GL_COMPRESSED_RGBA_BPTC_UNORM;
++        break;
+     default:
+         return is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+     }
+diff --git a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
+index 930f06daf6..184b4952f7 100644
+--- a/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
++++ b/src/video_core/renderer_vulkan/maxwell_to_vk.cpp
+@@ -245,12 +245,15 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
+                 tuple.usage |= usage_storage;
+             }
+             break;
+-        case Settings::AstcRecompression::Bc1:
+-            tuple.format = is_srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
++        case Settings::AstcRecompression::Bc7:
++            tuple.format = is_srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+             break;
+         case Settings::AstcRecompression::Bc3:
+             tuple.format = is_srgb ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+             break;
++        case Settings::AstcRecompression::Bc1:
++            tuple.format = is_srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
++            break;
+         }
+     }
+     // Transcode on hardware that doesn't support BCn natively
+diff --git a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+index 74f06427dd..37314b4ea2 100644
+--- a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+@@ -388,6 +388,18 @@ void BufferCacheRuntime::TickFrame(Common::SlotVector<Buffer>& slot_buffers) noe
+     }
+ }
+ 
++u64 BufferCacheRuntime::CurrentTick() {
++    return scheduler.GetMasterSemaphore().CurrentTick();
++}
++
++u64 BufferCacheRuntime::KnownGpuTick() {
++    return scheduler.GetMasterSemaphore().KnownGpuTick();
++}
++
++void BufferCacheRuntime::Wait(u64 buffer_tick) {
++    scheduler.Wait(buffer_tick);
++}
++
+ void BufferCacheRuntime::Finish() {
+     scheduler.Finish();
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_buffer_cache.h b/src/video_core/renderer_vulkan/vk_buffer_cache.h
+index b73fcd162b..dad9038c6d 100644
+--- a/src/video_core/renderer_vulkan/vk_buffer_cache.h
++++ b/src/video_core/renderer_vulkan/vk_buffer_cache.h
+@@ -88,6 +88,12 @@ public:
+ 
+     void TickFrame(Common::SlotVector<Buffer>& slot_buffers) noexcept;
+ 
++    u64 CurrentTick();
++
++    u64 KnownGpuTick();
++
++    void Wait(u64 buffer_tick);
++
+     void Finish();
+ 
+     u64 GetDeviceLocalMemory() const;
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 5f86506961..f8864d216a 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -369,7 +369,6 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+       texture_cache{texture_cache_}, shader_notify{shader_notify_},
+       use_asynchronous_shaders{Settings::values.use_asynchronous_shaders.GetValue()},
+       use_vulkan_pipeline_cache{Settings::values.use_vulkan_driver_pipeline_cache.GetValue()},
+-      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
+       workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers(),
+               "VkPipelineBuilder"),
+       serialization_thread(1, "VkPipelineSerialization") {
+@@ -663,10 +662,6 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+     if (state.statistics) {
+         state.statistics->Report();
+     }
+-
+-    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
+-        this->optimize_spirv_output = false;
+-    }
+ }
+ 
+ GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
+@@ -771,7 +766,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+ 
+         const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
+         ConvertLegacyToGeneric(program, runtime_info);
+-        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
++        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding)};
+         device.SaveShader(code);
+         modules[stage_index] = BuildShader(device, code);
+ 
+@@ -889,7 +884,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
+                     max_shared_memory / 1024);
+         program.shared_memory_size = max_shared_memory;
+     }
+-    const std::vector<u32> code{EmitSPIRV(profile, program, this->optimize_spirv_output)};
++    const std::vector<u32> code{EmitSPIRV(profile, program)};
+     device.SaveShader(code);
+     vk::ShaderModule spv_module{BuildShader(device, code)};
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+index 1f7dab935c..490f9da81a 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.h
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+@@ -153,7 +153,6 @@ private:
+     VideoCore::ShaderNotify& shader_notify;
+     bool use_asynchronous_shaders{};
+     bool use_vulkan_pipeline_cache{};
+-    bool optimize_spirv_output{};
+ 
+     GraphicsPipelineCacheKey graphics_key{};
+     GraphicsPipeline* current_pipeline{};
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+index 226619d8d6..fc4bda3022 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
++++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+@@ -48,15 +48,6 @@ Scheduler::Scheduler(const Device& device_, StateTracker& state_tracker_)
+       master_semaphore{std::make_unique<MasterSemaphore>(device)},
+       command_pool{std::make_unique<CommandPool>(*master_semaphore, device)} {
+ 
+-    /*// PRE-OPTIMIZATION: Warm up the pool to prevent mid-frame spikes
+-    {
+-        std::scoped_lock rl{reserve_mutex};
+-        chunk_reserve.reserve(2048); // Prevent vector resizing
+-        for (int i = 0; i < 1024; ++i) {
+-            chunk_reserve.push_back(std::make_unique<CommandChunk>());
+-        }
+-    }*/
+-
+     AcquireNewChunk();
+     AllocateWorkerCommandBuffer();
+     worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index 0e4c274d94..e6fda7fe3c 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -179,9 +179,18 @@ bool Swapchain::AcquireNextImage() {
+     case Settings::FramePacingMode::Target_Auto:
+         scheduler.Wait(resource_ticks[image_index]);
+         break;
++    case Settings::FramePacingMode::Target_20:
++        scheduler.Wait(resource_ticks[image_index], 20.0);
++        break;
+     case Settings::FramePacingMode::Target_30:
+         scheduler.Wait(resource_ticks[image_index], 30.0);
+         break;
++    case Settings::FramePacingMode::Target_40:
++        scheduler.Wait(resource_ticks[image_index], 40.0);
++        break;
++    case Settings::FramePacingMode::Target_50:
++        scheduler.Wait(resource_ticks[image_index], 50.0);
++        break;
+     case Settings::FramePacingMode::Target_60:
+         scheduler.Wait(resource_ticks[image_index], 60.0);
+         break;
+diff --git a/src/video_core/surface.cpp b/src/video_core/surface.cpp
+index 1998849e84..677d0c89f5 100644
+--- a/src/video_core/surface.cpp
++++ b/src/video_core/surface.cpp
+@@ -453,6 +453,8 @@ u64 TranscodedAstcSize(u64 base_size, PixelFormat format) {
+         return uncompressed_size / 8;
+     case Settings::AstcRecompression::Bc3:
+         return uncompressed_size / 4;
++    case Settings::AstcRecompression::Bc7:
++        return uncompressed_size / 4;
+     default:
+         return uncompressed_size;
+     }
+diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
+index efae825885..0984630dab 100644
+--- a/src/video_core/texture_cache/texture_cache.h
++++ b/src/video_core/texture_cache/texture_cache.h
+@@ -58,25 +58,28 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+ 
+     if constexpr (HAS_DEVICE_MEMORY_INFO) {
+         const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+-        const s64 min_spacing_expected = device_local_memory - 1_GiB;
+-        const s64 min_spacing_critical = device_local_memory - 512_MiB;
++        const u64 local_memory = static_cast<u64>(device_local_memory);
++        const s64 max_expected = device_local_memory - 2_GiB;
++        const s64 max_critical = device_local_memory - 1_GiB;
+         const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+-        const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+-        const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+-        expected_memory = static_cast<u64>(
+-            (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
+-                     DEFAULT_EXPECTED_MEMORY));
+-        critical_memory = static_cast<u64>(
+-            (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+-                     DEFAULT_CRITICAL_MEMORY));
+-        minimum_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
+-
+-        lowmemorydevice = false;
++        const s64 threshold_expected = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100;
++        const s64 threshold_critical = (mem_threshold * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100;
++        if (local_memory > 4_GiB) {
++            expected_memory = static_cast<u64>(max_expected);
++            critical_memory = static_cast<u64>(max_critical);
++            minimum_memory = static_cast<u64>(1_GiB);
++        } else {
++            expected_memory = static_cast<u64>(
++                (std::max)(threshold_expected, DEFAULT_EXPECTED_MEMORY));
++            critical_memory = static_cast<u64>(
++                (std::max)(threshold_critical, DEFAULT_CRITICAL_MEMORY));
++            minimum_memory = static_cast<u64>(device_local_memory - critical_memory);
++            lowmemorydevice = true;
++        }
+     } else {
+-        expected_memory = DEFAULT_EXPECTED_MEMORY + 512_MiB;
+-        critical_memory = DEFAULT_CRITICAL_MEMORY + 1_GiB;
+-        minimum_memory = 0;
+-
++        expected_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 50 : 66)) / 100);
++        critical_memory = static_cast<u64>((TARGET_THRESHOLD * (TARGET_THRESHOLD == 4_GiB ? 75 : 83)) / 100);
++        minimum_memory = static_cast<u64>(TARGET_THRESHOLD - critical_memory);
+         lowmemorydevice = true;
+     }
+ 
+@@ -126,8 +129,8 @@ void TextureCache<P>::RunGarbageCollector() {
+     const auto Configure = [&](bool allow_aggressive) {
+         high_priority_mode = total_used_memory >= expected_memory;
+         aggressive_mode = allow_aggressive && total_used_memory >= critical_memory;
+-        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
+-        num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
++        ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 30ULL : 60ULL;
++        num_iterations = aggressive_mode ? 60 : (high_priority_mode ? 30 : 10);
+     };
+ 
+     const auto Cleanup = [this, &num_iterations, &high_priority_mode,
+@@ -138,35 +141,19 @@ void TextureCache<P>::RunGarbageCollector() {
+         --num_iterations;
+         auto& image = slot_images[image_id];
+ 
+-        // Never delete recently allocated sparse textures (within 3 frames)
+-        const bool is_recently_allocated = image.allocation_tick >= frame_tick - 3;
+-        if (is_recently_allocated && image.info.is_sparse) {
+-            return false;
+-        }
+-
+         if (True(image.flags & ImageFlagBits::IsDecoding)) {
+             // This image is still being decoded, deleting it will invalidate the slot
+             // used by the async decoder thread.
+             return false;
+         }
+ 
+-        // Prioritize large sparse textures for cleanup
+-        const bool is_large_sparse = lowmemorydevice &&
+-                                     image.info.is_sparse &&
+-                                     image.guest_size_bytes >= 256_MiB;
+-
+-        if (!aggressive_mode && !is_large_sparse &&
+-            True(image.flags & ImageFlagBits::CostlyLoad)) {
++        if (!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) {
+             return false;
+         }
+ 
+         const bool must_download =
+             image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
+-        if (!high_priority_mode && !is_large_sparse && must_download) {
+-            return false;
+-        }
+-
+-        if (must_download && !is_large_sparse) {
++        if (!aggressive_mode && must_download) {
+             auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
+             const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
+             image.DownloadMemory(map, copies);
+@@ -181,39 +168,17 @@ void TextureCache<P>::RunGarbageCollector() {
+         UnregisterImage(image_id);
+         DeleteImage(image_id, image.scale_tick > frame_tick + 5);
+ 
+-        if (total_used_memory < critical_memory) {
+-            if (aggressive_mode) {
+-                // Sink the aggresiveness.
++        if (aggressive_mode && total_used_memory < critical_memory) {
+                 num_iterations >>= 2;
+                 aggressive_mode = false;
+-                return false;
+-            }
+-            if (high_priority_mode && total_used_memory < expected_memory) {
++        } else if (high_priority_mode && total_used_memory < expected_memory) {
+                 num_iterations >>= 1;
+                 high_priority_mode = false;
+-            }
+         }
+         return false;
+     };
+ 
+-    // Aggressively clear massive sparse textures
+-    if (total_used_memory >= expected_memory) {
+-        lru_cache.ForEachItemBelow(frame_tick, [&](ImageId image_id) {
+-            auto& image = slot_images[image_id];
+-            // Only target sparse textures that are old enough
+-            if (lowmemorydevice &&
+-                image.info.is_sparse &&
+-                image.guest_size_bytes >= 256_MiB &&
+-                image.allocation_tick < frame_tick - 3) {
+-                LOG_DEBUG(HW_GPU, "GC targeting old sparse texture at 0x{:X} ({} MiB, age: {} frames)",
+-                         image.gpu_addr, image.guest_size_bytes / (1024 * 1024),
+-                         frame_tick - image.allocation_tick);
+-                return Cleanup(image_id);
+-            }
+-            return false;
+-        });
+-    }
+-
++    // Try to remove anything old enough and not high priority.
+     Configure(false);
+     lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
+ 
+@@ -1196,10 +1161,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+     }
+ 
+     image.flags &= ~ImageFlagBits::CpuModified;
+-    if( lowmemorydevice && image.info.format == PixelFormat::BC1_RGBA_UNORM && MapSizeBytes(image) >= 256_MiB ) {
+-        return;
+-    }
+-
+     TrackImage(image, image_id);
+ 
+     if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
+@@ -1221,7 +1182,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+         image.info.resources.layers == 1 &&
+         MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
+         False(image.flags & ImageFlagBits::GpuModified)) {
+-
+         QueueAsyncUnswizzle(image, image_id);
+         return;
+     }
+@@ -1510,11 +1470,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+         return;
+     }
+ 
+-    if(current_unswizzle_frame > 0) {
+-        current_unswizzle_frame--;
+-        return;
+-    }
+-
+     PendingUnswizzle& task = unswizzle_queue.front();
+     Image& image = slot_images[task.image_id];
+ 
+@@ -1575,9 +1530,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+         runtime.FreeDeferredStagingBuffer(task.staging_buffer);
+         image.flags &= ~ImageFlagBits::IsDecoding;
+         unswizzle_queue.pop_front();
+-
+-        // Wait 4 frames to process the next entry
+-        current_unswizzle_frame = 4u;
+     }
+ }
+ 
+@@ -1667,27 +1619,6 @@ template <class P>
+ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
+     ImageInfo new_info = info;
+     const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
+-
+-    // Proactive cleanup for large sparse texture allocations
+-    if (lowmemorydevice && new_info.is_sparse && size_bytes >= 256_MiB) {
+-        const u64 estimated_alloc_size = size_bytes;
+-
+-        if (total_used_memory + estimated_alloc_size >= critical_memory) {
+-            LOG_DEBUG(HW_GPU, "Large sparse texture allocation ({} MiB) - running aggressive GC. "
+-                       "Current memory: {} MiB, Critical: {} MiB",
+-                       size_bytes / (1024 * 1024),
+-                       total_used_memory / (1024 * 1024),
+-                       critical_memory / (1024 * 1024));
+-            RunGarbageCollector();
+-
+-            // If still over threshold after GC, try one more aggressive pass
+-            if (total_used_memory + estimated_alloc_size >= critical_memory) {
+-                LOG_DEBUG(HW_GPU, "Still critically low on memory, running second GC pass");
+-                RunGarbageCollector();
+-            }
+-        }
+-    }
+-
+     const bool broken_views = runtime.HasBrokenTextureViewFormats();
+     const bool native_bgr = runtime.HasNativeBgr();
+     join_overlap_ids.clear();
+diff --git a/src/video_core/texture_cache/texture_cache_base.h b/src/video_core/texture_cache/texture_cache_base.h
+index 4b4061f21d..0df4761546 100644
+--- a/src/video_core/texture_cache/texture_cache_base.h
++++ b/src/video_core/texture_cache/texture_cache_base.h
+@@ -118,8 +118,8 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
+     static constexpr s64 TARGET_THRESHOLD = 4_GiB;
+ #endif
+ 
+-    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 125_MiB;
+-    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 625_MiB;
++    static constexpr s64 DEFAULT_EXPECTED_MEMORY = 1_GiB + 256_MiB;
++    static constexpr s64 DEFAULT_CRITICAL_MEMORY = 1_GiB + 768_MiB;
+     static constexpr size_t GC_EMERGENCY_COUNTS = 2;
+ 
+     using Runtime = typename P::Runtime;
+@@ -538,7 +538,6 @@ private:
+     std::vector<std::unique_ptr<AsyncDecodeContext>> async_decodes;
+ 
+     std::deque<PendingUnswizzle> unswizzle_queue;
+-    u8 current_unswizzle_frame;
+ 
+     // Join caching
+     boost::container::small_vector<ImageId, 4> join_overlap_ids;
+diff --git a/src/yuzu/main.cpp b/src/yuzu/main.cpp
+index f8528d9671..270b2e1d6a 100644
+--- a/src/yuzu/main.cpp
++++ b/src/yuzu/main.cpp
+@@ -107,8 +107,8 @@ int main(int argc, char* argv[]) {
+     QCoreApplication::setApplicationName(QStringLiteral("eden"));
+ 
+ #ifdef _WIN32
+-    // Increases the maximum open file limit to 8192
+-    _setmaxstdio(8192);
++    // Increases the maximum open file limit to 2048
++    _setmaxstdio(2048);
+ #elif defined(__APPLE__)
+     // If you start a bundle (binary) on OSX without the Terminal, the working directory is "/".
+     // But since we require the working directory to be the executable path for the location of
+diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
+index 2e7cef0953..a8a85f9394 100644
+--- a/src/yuzu/main_window.cpp
++++ b/src/yuzu/main_window.cpp
+@@ -3727,9 +3727,6 @@ void MainWindow::OnToggleDockedMode() {
+ void MainWindow::OnToggleGpuAccuracy() {
+     switch (Settings::values.gpu_accuracy.GetValue()) {
+     case Settings::GpuAccuracy::Low:
+-        Settings::values.gpu_accuracy.SetValue(Settings::GpuAccuracy::Medium);
+-        break;
+-    case Settings::GpuAccuracy::Medium:
+         Settings::values.gpu_accuracy.SetValue(Settings::GpuAccuracy::High);
+         break;
+     case Settings::GpuAccuracy::High:
