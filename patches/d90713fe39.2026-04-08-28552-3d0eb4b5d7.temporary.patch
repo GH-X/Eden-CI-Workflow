@@ -1,0 +1,257 @@
+diff --git a/src/core/hle/service/nvdrv/devices/nvdisp_disp0.cpp b/src/core/hle/service/nvdrv/devices/nvdisp_disp0.cpp
+index f26f5347eb..0563eaeb2c 100644
+--- a/src/core/hle/service/nvdrv/devices/nvdisp_disp0.cpp
++++ b/src/core/hle/service/nvdrv/devices/nvdisp_disp0.cpp
+@@ -89,6 +89,10 @@ void nvdisp_disp0::Composite(std::span<const Nvnflinger::HwcLayer> sorted_layers
+     system.GetPerfStats().BeginSystemFrame();
+ }
+ 
++void nvdisp_disp0::WaitForComposite() {
++    system.GPU().WaitForComposite();
++}
++
+ Kernel::KEvent* nvdisp_disp0::QueryEvent(u32 event_id) {
+     LOG_CRITICAL(Service_NVDRV, "Unknown DISP Event {}", event_id);
+     return nullptr;
+diff --git a/src/core/hle/service/nvdrv/devices/nvdisp_disp0.h b/src/core/hle/service/nvdrv/devices/nvdisp_disp0.h
+index 1082b85c2b..13d2aaa445 100644
+--- a/src/core/hle/service/nvdrv/devices/nvdisp_disp0.h
++++ b/src/core/hle/service/nvdrv/devices/nvdisp_disp0.h
+@@ -37,6 +37,8 @@ public:
+     /// Performs a screen flip, compositing each buffer.
+     void Composite(std::span<const Nvnflinger::HwcLayer> sorted_layers);
+ 
++    void WaitForComposite();
++
+     Kernel::KEvent* QueryEvent(u32 event_id) override;
+ 
+ private:
+diff --git a/src/core/hle/service/nvnflinger/hardware_composer.cpp b/src/core/hle/service/nvnflinger/hardware_composer.cpp
+index cfd999497b..ec76e13f1b 100644
+--- a/src/core/hle/service/nvnflinger/hardware_composer.cpp
++++ b/src/core/hle/service/nvnflinger/hardware_composer.cpp
+@@ -57,18 +57,8 @@ u32 HardwareComposer::ComposeLocked(f32* out_speed_scale, Display& display,
+     // Set default speed limit to 100%.
+     *out_speed_scale = 1.0f;
+ 
+-    // If no layers are available, skip the logic.
+-    bool any_visible = false;
+-    for (auto& layer : display.stack.layers) {
+-        if (layer->visible) {
+-            any_visible = true;
+-            break;
+-        }
+-    }
+-    if (!any_visible) {
+-        *out_speed_scale = 1.0f;
+-        return 1;
+-    }
++    nvdisp.WaitForComposite();
++    this->ReleaseFramebuffersLocked(display);
+ 
+     // Determine the number of vsync periods to wait before composing again.
+     std::optional<s32> swap_interval{};
+@@ -158,55 +148,30 @@ u32 HardwareComposer::ComposeLocked(f32* out_speed_scale, Display& display,
+         nvdisp.Composite(composition_stack);
+     }
+ 
+-    // Batch framebuffer releases, instead of one-into-one.
+-    std::vector<std::pair<Layer*, Framebuffer*>> to_release;
+-    for (auto& [layer_id, framebuffer] : m_framebuffers) {
+-        if (!framebuffer.is_acquired)
+-            continue;
+-
+-        auto layer = display.stack.FindLayer(layer_id);
+-        if (!layer)
+-            continue;
+-
+-        // Overlay layers always release after every compose
+-        // Non-overlay layers release based on their swap interval
+-        if (layer->is_overlay || framebuffer.release_frame_number <= m_frame_number) {
+-            to_release.emplace_back(layer.get(), &framebuffer);
+-        }
+-    }
+-    for (auto& [layer, framebuffer] : to_release) {
+-        layer->buffer_item_consumer->ReleaseBuffer(framebuffer->item, android::Fence::NoFence());
+-        framebuffer->is_acquired = false;
+-    }
+-
+     // Advance by 1 frame (60 FPS compositing)
+     m_frame_number += 1;
+ 
+-    // Release any necessary framebuffers (non-overlay layers only, as overlays are already released above).
++    return 1;
++}
++
++void HardwareComposer::ReleaseFramebuffersLocked(Display& display) {
+     for (auto& [layer_id, framebuffer] : m_framebuffers) {
+         if (!framebuffer.is_acquired) {
+-            // Already released.
+             continue;
+         }
+ 
+-        if (framebuffer.release_frame_number > m_frame_number) {
++        const auto layer = display.stack.FindLayer(layer_id);
++        if (!layer) {
+             continue;
+         }
+ 
+-        if (const auto layer = display.stack.FindLayer(layer_id); layer != nullptr) {
+-            // Skip overlay layers as they were already released above
+-            if (layer->is_overlay) {
+-                continue;
+-            }
+-
+-            // TODO: support release fence
+-            // This is needed to prevent screen tearing
+-            layer->buffer_item_consumer->ReleaseBuffer(framebuffer.item, android::Fence::NoFence());
+-            framebuffer.is_acquired = false;
++        if (!layer->is_overlay && framebuffer.release_frame_number > m_frame_number) {
++            continue;
+         }
+-    }
+ 
+-    return 1;
++        layer->buffer_item_consumer->ReleaseBuffer(framebuffer.item, android::Fence::NoFence());
++        framebuffer.is_acquired = false;
++    }
+ }
+ 
+ void HardwareComposer::RemoveLayerLocked(Display& display, ConsumerId consumer_id) {
+diff --git a/src/core/hle/service/nvnflinger/hardware_composer.h b/src/core/hle/service/nvnflinger/hardware_composer.h
+index e9b7194612..4727ab866a 100644
+--- a/src/core/hle/service/nvnflinger/hardware_composer.h
++++ b/src/core/hle/service/nvnflinger/hardware_composer.h
+@@ -52,6 +52,7 @@ private:
+ private:
+     bool TryAcquireFramebufferLocked(Layer& layer, Framebuffer& framebuffer);
+     CacheStatus CacheFramebufferLocked(Layer& layer, ConsumerId consumer_id);
++    void ReleaseFramebuffersLocked(Display& display);
+ };
+ 
+ } // namespace Service::Nvnflinger
+diff --git a/src/video_core/gpu.cpp b/src/video_core/gpu.cpp
+index d65658323e..7d2f0f21e8 100644
+--- a/src/video_core/gpu.cpp
++++ b/src/video_core/gpu.cpp
+@@ -10,6 +10,7 @@
+ #include <condition_variable>
+ #include <list>
+ #include <memory>
++#include <utility>
+ 
+ #include "common/assert.h"
+ #include "common/settings.h"
+@@ -115,7 +116,7 @@ struct GPU::Impl {
+     [[nodiscard]] u64 RequestSyncOperation(Func&& action) {
+         std::unique_lock lck{sync_request_mutex};
+         const u64 fence = ++last_sync_fence;
+-        sync_requests.emplace_back(action);
++        sync_requests.emplace_back(std::forward<Func>(action));
+         return fence;
+     }
+ 
+@@ -290,9 +291,9 @@ struct GPU::Impl {
+ 
+     void RequestComposite(std::vector<Tegra::FramebufferConfig>&& layers,
+                           std::vector<Service::Nvidia::NvFence>&& fences) {
+-        size_t num_fences{fences.size()};
++        const size_t num_fences{fences.size()};
+         size_t current_request_counter{};
+-        {
++        if (num_fences != 0) {
+             std::unique_lock<std::mutex> lk(request_swap_mutex);
+             if (free_swap_counters.empty()) {
+                 current_request_counter = request_swap_counters.size();
+@@ -303,28 +304,40 @@ struct GPU::Impl {
+                 free_swap_counters.pop_front();
+             }
+         }
+-        const auto wait_fence =
+-            RequestSyncOperation([this, current_request_counter, &layers, &fences, num_fences] {
+-                auto& syncpoint_manager = host1x.GetSyncpointManager();
+-                if (num_fences == 0) {
+-                    renderer->Composite(layers);
+-                }
+-                const auto executer = [this, current_request_counter, layers_copy = layers]() {
+-                    {
+-                        std::unique_lock<std::mutex> lk(request_swap_mutex);
+-                        if (--request_swap_counters[current_request_counter] != 0) {
+-                            return;
+-                        }
+-                        free_swap_counters.push_back(current_request_counter);
++        pending_composite_fence = RequestSyncOperation(
++        [this, current_request_counter, num_fences, composite_layers = std::move(layers), composite_fences = std::move(fences)] {
++            if (num_fences == 0) {
++                renderer->Composite(composite_layers);
++                return;
++            }
++            auto& syncpoint_manager = system.Host1x().GetSyncpointManager();
++            const auto executer = [this, current_request_counter, composite_layers]() {
++                {
++                    std::unique_lock<std::mutex> lk(request_swap_mutex);
++                    if (--request_swap_counters[current_request_counter] != 0) {
++                        return;
+                     }
+-                    renderer->Composite(layers_copy);
+-                };
+-                for (size_t i = 0; i < num_fences; i++) {
+-                    syncpoint_manager.RegisterGuestAction(fences[i].id, fences[i].value, executer);
++                    free_swap_counters.push_back(current_request_counter);
+                 }
+-            });
++                renderer->Composite(composite_layers);
++            };
++            for (size_t i = 0; i < num_fences; i++) {
++                syncpoint_manager.RegisterGuestAction(composite_fences[i].id, composite_fences[i].value, executer);
++            }
++        });
+         gpu_thread.TickGPU();
+-        WaitForSyncOperation(wait_fence);
++    }
++
++    void WaitForComposite() {
++        const u64 fence = pending_composite_fence;
++        if (fence == 0) {
++            return;
++        }
++        pending_composite_fence = 0;
++        if (shutting_down.load(std::memory_order_relaxed)) {
++            return;
++        }
++        WaitForSyncOperation(fence);
+     }
+ 
+     std::vector<u8> GetAppletCaptureBuffer() {
+@@ -380,6 +393,7 @@ struct GPU::Impl {
+     std::deque<size_t> free_swap_counters;
+     std::deque<size_t> request_swap_counters;
+     std::mutex request_swap_mutex;
++    u64 pending_composite_fence{};
+ };
+ 
+ GPU::GPU(Core::System& system, bool is_async, bool use_nvdec)
+@@ -495,6 +509,10 @@ void GPU::RequestComposite(std::vector<Tegra::FramebufferConfig>&& layers,
+     impl->RequestComposite(std::move(layers), std::move(fences));
+ }
+ 
++void GPU::WaitForComposite() {
++    impl->WaitForComposite();
++}
++
+ std::vector<u8> GPU::GetAppletCaptureBuffer() {
+     return impl->GetAppletCaptureBuffer();
+ }
+diff --git a/src/video_core/gpu.h b/src/video_core/gpu.h
+index 538c4da85a..05bd720312 100644
+--- a/src/video_core/gpu.h
++++ b/src/video_core/gpu.h
+@@ -218,6 +218,8 @@ public:
+     void RequestComposite(std::vector<Tegra::FramebufferConfig>&& layers,
+                           std::vector<Service::Nvidia::NvFence>&& fences);
+ 
++    void WaitForComposite();
++
+     std::vector<u8> GetAppletCaptureBuffer();
+ 
+     /// Performs any additional setup necessary in order to begin GPU emulation.

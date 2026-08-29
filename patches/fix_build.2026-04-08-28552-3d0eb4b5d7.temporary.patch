@@ -1,0 +1,663 @@
+diff --git a/.patch/httplib/0002-fix-zstd.patch b/.patch/httplib/0002-fix-zstd.patch
+deleted file mode 100644
+index f54485ea53..0000000000
+--- a/.patch/httplib/0002-fix-zstd.patch
++++ /dev/null
+@@ -1,89 +0,0 @@
+-From 509be32bbfa6eb95014860f7c9ea6d45c8ddaa56 Mon Sep 17 00:00:00 2001
+-From: crueter <crueter@eden-emu.dev>
+-Date: Sun, 8 Mar 2026 15:11:12 -0400
+-Subject: [PATCH] [cmake] Simplify zstd find logic, and support pre-existing
+- zstd target
+-
+-Some deduplication work on the zstd required/if-available logic. Also
+-adds support for pre-existing `zstd::libzstd` which is useful for
+-projects that bundle their own zstd in a way that doesn't get caught by
+-`CONFIG`
+-
+-Signed-off-by: crueter <crueter@eden-emu.dev>
+----
+- CMakeLists.txt | 46 ++++++++++++++++++++++++++--------------------
+- 1 file changed, 26 insertions(+), 20 deletions(-)
+-
+-diff --git a/CMakeLists.txt b/CMakeLists.txt
+-index 1874e36be0..8d31198006 100644
+---- a/CMakeLists.txt
+-+++ b/CMakeLists.txt
+-@@ -241,28 +241,34 @@ endif()
+- # NOTE:
+- # zstd < 1.5.6 does not provide the CMake imported target `zstd::libzstd`.
+- # Older versions must be consumed via their pkg-config file.
+--if(HTTPLIB_REQUIRE_ZSTD)
+--	find_package(zstd 1.5.6 CONFIG)
+--	if(NOT zstd_FOUND)
+--		find_package(PkgConfig REQUIRED)
+--		pkg_check_modules(zstd REQUIRED IMPORTED_TARGET libzstd)
+--		add_library(zstd::libzstd ALIAS PkgConfig::zstd)
+--	endif()
+--	set(HTTPLIB_IS_USING_ZSTD TRUE)
+--elseif(HTTPLIB_USE_ZSTD_IF_AVAILABLE)
+--	find_package(zstd 1.5.6 CONFIG QUIET)
+--	if(NOT zstd_FOUND)
+--		find_package(PkgConfig QUIET)
+--		if(PKG_CONFIG_FOUND)
+--			pkg_check_modules(zstd QUIET IMPORTED_TARGET libzstd)
+--
+--			if(TARGET PkgConfig::zstd)
+-+if (HTTPLIB_REQUIRE_ZSTD)
+-+	set(HTTPLIB_ZSTD_REQUESTED ON)
+-+	set(HTTPLIB_ZSTD_REQUIRED REQUIRED)
+-+elseif (HTTPLIB_USE_ZSTD_IF_AVAILABLE)
+-+	set(HTTPLIB_ZSTD_REQUESTED ON)
+-+	set(HTTPLIB_ZSTD_REQUIRED QUIET)
+-+endif()
+-+
+-+if (HTTPLIB_ZSTD_REQUESTED)
+-+	if (TARGET zstd::libzstd)
+-+		set(HTTPLIB_IS_USING_ZSTD TRUE)
+-+	else()
+-+		find_package(zstd 1.5.6 CONFIG QUIET)
+-+
+-+		if (NOT zstd_FOUND)
+-+			find_package(PkgConfig ${HTTPLIB_ZSTD_REQUIRED})
+-+			pkg_check_modules(zstd ${HTTPLIB_ZSTD_REQUIRED} IMPORTED_TARGET libzstd)
+-+
+-+			if (TARGET PkgConfig::zstd)
+- 				add_library(zstd::libzstd ALIAS PkgConfig::zstd)
+- 			endif()
+- 		endif()
+-+
+-+		# This will always be true if zstd is required.
+-+		# If zstd *isn't* found when zstd is set to required,
+-+		# CMake will error out earlier in this block.
+-+		set(HTTPLIB_IS_USING_ZSTD ${zstd_FOUND})
+- 	endif()
+--	# Both find_package and PkgConf set a XXX_FOUND var
+--	set(HTTPLIB_IS_USING_ZSTD ${zstd_FOUND})
+- endif()
+- 
+- # Used for default, common dirs that the end-user can change (if needed)
+-@@ -317,13 +323,13 @@ if(HTTPLIB_COMPILE)
+- 			$<BUILD_INTERFACE:${_httplib_build_includedir}/httplib.h>
+- 			$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/httplib.h>
+- 	)
+--	
+-+
+- 	# Add C++20 module support if requested
+- 	# Include from separate file to prevent parse errors on older CMake versions
+- 	if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+- 		include(cmake/modules.cmake)
+- 	endif()
+--	
+-+
+- 	set_target_properties(${PROJECT_NAME}
+- 		PROPERTIES
+- 			VERSION ${${PROJECT_NAME}_VERSION}
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 42717c496d..fe25a33c15 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -170,6 +170,31 @@ if (MSVC AND NOT CXX_CLANG)
+     set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} /W3 /WX-")
+ endif()
+ 
++# Set runtime library to MD/MDd for all configurations
++if(MSVC)
++    if (YUZU_USE_BUNDLED_QT AND ARCHITECTURE_arm64)
++        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++        set(libflag MT)
++    else()
++        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
++        set(libflag MD)
++    endif()
++
++    # Force all projects (including external dependencies) to use the same runtime
++    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /${libflag}")
++    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /${libflag}d")
++    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /${libflag}")
++    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /${libflag}d")
++
++    # Add this to ensure Cubeb uses the same runtime
++    add_compile_options(
++        $<$<COMPILE_LANGUAGE:C,CXX>:$<$<CONFIG:Debug>:/${libflag}d>>
++        $<$<COMPILE_LANGUAGE:C,CXX>:$<$<CONFIG:Release>:/${libflag}>>
++        $<$<COMPILE_LANGUAGE:C,CXX>:$<$<CONFIG:RelWithDebInfo>:/${libflag}>>
++        $<$<COMPILE_LANGUAGE:C,CXX>:$<$<CONFIG:MinSizeRel>:/${libflag}>>
++    )
++endif()
++
+ # TODO(crueter): Cleanup, each dep that has a bundled option should allow to choose between bundled, external, system
+ cmake_dependent_option(YUZU_USE_EXTERNAL_SDL2 "Build SDL2 from external source" OFF "NOT MSVC;NOT ANDROID" OFF)
+ cmake_dependent_option(YUZU_USE_BUNDLED_SDL2 "Download bundled SDL2 build" "${MSVC}" "NOT ANDROID" OFF)
+@@ -562,9 +587,9 @@ if (ENABLE_QT)
+     if (YUZU_USE_BUNDLED_QT)
+         # Qt 6.8+ is broken on macOS (??)
+         if (APPLE)
+-            AddQt(6.7.3)
++            AddQt(Eden-CI/Qt 6.7.3)
+         else()
+-            AddQt(6.9.3)
++            AddQt(Eden-CI/Qt 6.11.1)
+         endif()
+ 
+         set(YUZU_STATIC_BUILD ON)
+@@ -695,25 +720,6 @@ if (MSVC AND CXX_CLANG)
+     link_libraries(llvm-mingw-runtime)
+ endif()
+ 
+-# Set runtime library to MD/MDd for all configurations
+-if(MSVC)
+-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+-
+-    # Force all projects (including external dependencies) to use the same runtime
+-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
+-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD")
+-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd")
+-
+-    # Add this to ensure Cubeb uses the same runtime
+-    add_compile_options(
+-        $<$<CONFIG:Debug>:/MDd>
+-        $<$<CONFIG:Release>:/MD>
+-        $<$<CONFIG:RelWithDebInfo>:/MD>
+-        $<$<CONFIG:MinSizeRel>:/MD>
+-    )
+-endif()
+-
+ add_subdirectory(src)
+ 
+ # Set yuzu project or yuzu-cmd project as default StartUp Project in Visual Studio depending on whether QT is enabled or not
+diff --git a/CMakeModules/CPMUtil.cmake b/CMakeModules/CPMUtil.cmake
+index b992f24083..d8f969bc04 100644
+--- a/CMakeModules/CPMUtil.cmake
++++ b/CMakeModules/CPMUtil.cmake
+@@ -3,7 +3,7 @@
+ 
+ set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/.cache/cpm" CACHE STRING "" FORCE)
+ 
+-if(MSVC OR ANDROID)
++if(MSVC OR ANDROID OR IOS)
+     set(BUNDLED_DEFAULT ON)
+ else()
+     set(BUNDLED_DEFAULT OFF)
+@@ -247,7 +247,9 @@ function(AddJsonPackage)
+ 
+     set(multiValueArgs OPTIONS)
+ 
+-    cmake_parse_arguments(JSON "" "${oneValueArgs}" "${multiValueArgs}"
++    set(options MODULE)
++
++    cmake_parse_arguments(JSON "${options}" "${oneValueArgs}" "${multiValueArgs}"
+         "${ARGN}")
+ 
+     list(LENGTH ARGN argnLength)
+@@ -277,6 +279,10 @@ function(AddJsonPackage)
+     parse_object(${object})
+ 
+     if(ci)
++        if (JSON_MODULE)
++            set(EXTRA_ARGS MODULE)
++        endif()
++
+         AddCIPackage(
+             VERSION ${version}
+             NAME ${name}
+@@ -284,8 +290,8 @@ function(AddJsonPackage)
+             PACKAGE ${package}
+             EXTENSION ${extension}
+             MIN_VERSION ${min_version}
+-            DISABLED_PLATFORMS ${disabled_platforms})
+-
++            DISABLED_PLATFORMS ${disabled_platforms}
++            ${EXTRA_ARGS})
+     else()
+         if (NOT DEFINED JSON_FORCE_BUNDLED_PACKAGE)
+             set(JSON_FORCE_BUNDLED_PACKAGE OFF)
+@@ -690,8 +696,10 @@ function(AddCIPackage)
+         set(pkgname linux-amd64)
+     elseif(PLATFORM_LINUX AND ARCHITECTURE_arm64)
+         set(pkgname linux-aarch64)
+-    elseif(APPLE)
++    elseif(APPLE AND NOT IOS)
+         set(pkgname macos-universal)
++    elseif(IOS AND ARCHITECTURE_arm64)
++        set(pkgname ios-aarch64)
+     endif()
+ 
+     if (DEFINED pkgname AND NOT "${pkgname}" IN_LIST DISABLED_PLATFORMS)
+@@ -724,7 +732,11 @@ function(AddCIPackage)
+ endfunction()
+ 
+ # Utility function for Qt
+-function(AddQt version)
++function(AddQt repo version)
++    if (NOT DEFINED repo)
++        message(FATAL_ERROR "[CPMUtil] AddQt: repo is required")
++    endif()
++
+     if (NOT DEFINED version)
+         message(FATAL_ERROR "[CPMUtil] AddQt: version is required")
+     endif()
+@@ -734,7 +746,7 @@ function(AddQt version)
+         PACKAGE Qt6
+         VERSION ${version}
+         MIN_VERSION 6
+-        REPO crueter-ci/Qt
++        REPO ${repo}
+         DISABLED_PLATFORMS
+             android-x86_64 android-aarch64
+             freebsd-amd64 solaris-amd64 openbsd-amd64
+diff --git a/cpmfile.json b/cpmfile.json
+index 1bb29afae4..f2a7e0d892 100644
+--- a/cpmfile.json
++++ b/cpmfile.json
+@@ -4,7 +4,7 @@
+         "package": "OpenSSL",
+         "name": "openssl",
+         "repo": "crueter-ci/OpenSSL",
+-        "version": "3.6.0-1cb0d36b39",
++        "version": "4.0.0-11b7b6ea3b",
+         "min_version": "3"
+     },
+     "boost": {
+@@ -87,6 +87,7 @@
+         "bundled": true
+     },
+     "llvm-mingw": {
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/28552/cpmfile/clang-rt-builtins.tar.zst",
+         "repo": "eden-emu/llvm-mingw",
+         "git_host": "git.eden-emu.dev",
+         "tag": "%VERSION%",
+diff --git a/docs/CPMUtil/AddCIPackage.md b/docs/CPMUtil/AddCIPackage.md
+index bc7c1ccfad..7319b514ff 100644
+--- a/docs/CPMUtil/AddCIPackage.md
++++ b/docs/CPMUtil/AddCIPackage.md
+@@ -18,3 +18,4 @@
+   - `linux-amd64`
+   - `linux-aarch64`
+   - `macos-universal`
++  - `ios-aarch64`
+diff --git a/docs/CPMUtil/AddJsonPackage.md b/docs/CPMUtil/AddJsonPackage.md
+index 464cd1731b..e655d794f5 100644
+--- a/docs/CPMUtil/AddJsonPackage.md
++++ b/docs/CPMUtil/AddJsonPackage.md
+@@ -61,7 +61,8 @@ In order: OpenSSL CI, Boost (tag + artifact), Opus (options + find_args), discor
+         "version": "3.6.0",
+         "min_version": "1.1.1",
+         "disabled_platforms": [
+-            "macos-universal"
++            "macos-universal",
++            "ios-aarch64"
+         ]
+     },
+     "boost": {
+diff --git a/externals/cpmfile.json b/externals/cpmfile.json
+index b8472774ae..c96be0fdb7 100644
+--- a/externals/cpmfile.json
++++ b/externals/cpmfile.json
+@@ -28,13 +28,11 @@
+     "httplib": {
+         "repo": "yhirose/cpp-httplib",
+         "tag": "v%VERSION%",
+-        "hash": "5efa8140aadffe105dcf39935b732476e95755f6c7473ada3d0b64df2bc02c557633ae3948a25b45e1cf67e89a3ff6329fb30362e4ac033b9a1d1e453aa2eded",
+-        "git_version": "0.37.0",
+-        "version": "0.18.7",
++        "hash": "159ed94965018f2a371d45a3bfc1961e5fb1549e501ded70a6b4532d7fe99d0579c18b5195aff6e35f96f399b426cea2650ec9fb75ef80d4c9edeccb51f2e6c9",
++        "git_version": "0.46.0",
+         "find_args": "MODULE GLOBAL",
+         "patches": [
+-            "0001-mingw.patch",
+-            "0002-fix-zstd.patch"
++            "0001-mingw.patch"
+         ],
+         "options": [
+             "HTTPLIB_REQUIRE_OPENSSL ON",
+@@ -235,6 +233,7 @@
+         "min_version": "4.1"
+     },
+     "tzdb": {
++        "url": "https://raw.githubusercontent.com/GH-X/Eden-CI-Workflow/refs/heads/28552/cpmfile/230326.tar.gz",
+         "package": "nx_tzdb",
+         "repo": "eden-emu/tzdb_to_nx",
+         "git_host": "git.eden-emu.dev",
+diff --git a/externals/demangle/llvm/Demangle/ItaniumDemangle.h b/externals/demangle/llvm/Demangle/ItaniumDemangle.h
+index 0dc3d73372..a2bac5d735 100644
+--- a/externals/demangle/llvm/Demangle/ItaniumDemangle.h
++++ b/externals/demangle/llvm/Demangle/ItaniumDemangle.h
+@@ -1259,7 +1259,7 @@ class ParameterPack final : public Node {
+   // Setup OutputBuffer for a pack expansion, unless we're already expanding
+   // one.
+   void initializePackExpansion(OutputBuffer &OB) const {
+-    if (OB.CurrentPackMax == std::numeric_limits<unsigned>::max()) {
++    if (OB.CurrentPackMax == (std::numeric_limits<unsigned>::max)()) {
+       OB.CurrentPackMax = static_cast<unsigned>(Data.size());
+       OB.CurrentPackIndex = 0;
+     }
+@@ -1353,7 +1353,7 @@ public:
+   const Node *getChild() const { return Child; }
+ 
+   void printLeft(OutputBuffer &OB) const override {
+-    constexpr unsigned Max = std::numeric_limits<unsigned>::max();
++    constexpr unsigned Max = (std::numeric_limits<unsigned>::max)();
+     ScopedOverride<unsigned> SavePackIdx(OB.CurrentPackIndex, Max);
+     ScopedOverride<unsigned> SavePackMax(OB.CurrentPackMax, Max);
+     size_t StreamPos = OB.getCurrentPosition();
+diff --git a/externals/demangle/llvm/Demangle/Utility.h b/externals/demangle/llvm/Demangle/Utility.h
+index 30dfbfc8dc..0d2e613ea9 100644
+--- a/externals/demangle/llvm/Demangle/Utility.h
++++ b/externals/demangle/llvm/Demangle/Utility.h
+@@ -88,8 +88,8 @@ public:
+ 
+   /// If a ParameterPackExpansion (or similar type) is encountered, the offset
+   /// into the pack that we're currently printing.
+-  unsigned CurrentPackIndex = std::numeric_limits<unsigned>::max();
+-  unsigned CurrentPackMax = std::numeric_limits<unsigned>::max();
++  unsigned CurrentPackIndex = (std::numeric_limits<unsigned>::max)();
++  unsigned CurrentPackMax = (std::numeric_limits<unsigned>::max)();
+ 
+   /// When zero, we're printing template args and '>' needs to be parenthesized.
+   /// Use a counter so we can simply increment inside parentheses.
+diff --git a/externals/tz/tz/tz.cpp b/externals/tz/tz/tz.cpp
+index 04fa6cc8a9..c18129d5ee 100644
+--- a/externals/tz/tz/tz.cpp
++++ b/externals/tz/tz/tz.cpp
+@@ -466,8 +466,8 @@ CalendarTimeInternal* timesub(const time_t* timep, s64 offset, const Rule* sp,
+         int signed_y = static_cast<s32>(y);
+         tmp->tm_year = signed_y - TM_YEAR_BASE;
+     }
+-    else if ((!std::is_signed_v<time_t> || std::numeric_limits<s32>::min() + TM_YEAR_BASE <= y) &&
+-        y - TM_YEAR_BASE <= std::numeric_limits<s32>::max()) {
++    else if ((!std::is_signed_v<time_t> || (std::numeric_limits<s32>::min)() + TM_YEAR_BASE <= y) &&
++        y - TM_YEAR_BASE <= (std::numeric_limits<s32>::max)()) {
+         tmp->tm_year = static_cast<s32>(y - TM_YEAR_BASE);
+     }
+     else {
+@@ -558,8 +558,8 @@ CalendarTimeInternal* localsub(Rule const* sp, time_t const* timep, s64 setname,
+             else {
+                 newy += years;
+             }
+-            if (!(std::numeric_limits<s32>::min() <= newy &&
+-                newy <= std::numeric_limits<s32>::max())) {
++            if (!((std::numeric_limits<s32>::min)() <= newy &&
++                newy <= (std::numeric_limits<s32>::max)())) {
+                 return nullptr;
+             }
+             result->tm_year = static_cast<s32>(newy);
+diff --git a/externals/tz/tz/tz.h b/externals/tz/tz/tz.h
+index dae4459bcb..fb860ce989 100644
+--- a/externals/tz/tz/tz.h
++++ b/externals/tz/tz/tz.h
+@@ -26,10 +26,10 @@ constexpr size_t TZ_MAX_CHARS = 50;
+ constexpr size_t MY_TZNAME_MAX = 255;
+ constexpr size_t TZNAME_MAXIMUM = 255;
+ constexpr size_t TZ_MAX_LEAPS = 50;
+-constexpr s64 TIME_T_MAX = std::numeric_limits<s64>::max();
+-constexpr s64 TIME_T_MIN = std::numeric_limits<s64>::min();
++constexpr s64 TIME_T_MAX = (std::numeric_limits<s64>::max)();
++constexpr s64 TIME_T_MIN = (std::numeric_limits<s64>::min)();
+ constexpr size_t CHARS_EXTRA = 3;
+-constexpr size_t MAX_ZONE_CHARS = std::max(TZ_MAX_CHARS + CHARS_EXTRA, sizeof("UTC"));
++constexpr size_t MAX_ZONE_CHARS = (std::max)(TZ_MAX_CHARS + CHARS_EXTRA, sizeof("UTC"));
+ constexpr size_t MAX_TZNAME_CHARS = 2 * (MY_TZNAME_MAX + 1);
+ 
+ struct ttinfo {
+@@ -51,7 +51,7 @@ struct Rule {
+     std::array<s64, TZ_MAX_TIMES> ats;
+     std::array<u8, TZ_MAX_TIMES> types;
+     std::array<ttinfo, TZ_MAX_TYPES> ttis;
+-    std::array<char, std::max(MAX_ZONE_CHARS, MAX_TZNAME_CHARS)> chars;
++    std::array<char, (std::max)(MAX_ZONE_CHARS, MAX_TZNAME_CHARS)> chars;
+     s32 defaulttype;
+     std::array <u8, 0x12C4> padding1;
+ };
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 7df229d9f4..89bbf48df2 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -175,7 +175,7 @@ else()
+         add_compile_definitions(_FILE_OFFSET_BITS=64)
+     endif()
+ 
+-    if (YUZU_STATIC_BUILD AND NOT APPLE)
++    if (YUZU_STATIC_BUILD AND NOT APPLE AND NOT MSVC)
+         add_compile_options(-static)
+ 
+         # yuzu-cmd requires us to explicitly link libpthread, libgcc, and libstdc++ as static
+diff --git a/src/android/app/src/main/jni/CMakeLists.txt b/src/android/app/src/main/jni/CMakeLists.txt
+index c68e206d24..b6fe2d7722 100644
+--- a/src/android/app/src/main/jni/CMakeLists.txt
++++ b/src/android/app/src/main/jni/CMakeLists.txt
+@@ -33,3 +33,5 @@ if (ENABLE_UPDATE_CHECKER)
+ endif()
+ 
+ set(CPACK_PACKAGE_EXECUTABLES ${CPACK_PACKAGE_EXECUTABLES} yuzu-android)
++
++target_link_options(yuzu-android PRIVATE "-Wl,-Bsymbolic")
+diff --git a/src/common/dynamic_library.cpp b/src/common/dynamic_library.cpp
+index 566fbed631..cc86b3a740 100644
+--- a/src/common/dynamic_library.cpp
++++ b/src/common/dynamic_library.cpp
+@@ -2,6 +2,11 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include <string>
++
++#ifndef _WIN32
++#include <cstring>
++#endif
++
+ #include <utility>
+ 
+ #include <fmt/ranges.h>
+diff --git a/src/common/logging.h b/src/common/logging.h
+index eabc683f63..2d5a2cfa93 100644
+--- a/src/common/logging.h
++++ b/src/common/logging.h
+@@ -89,7 +89,7 @@ void FmtLogMessageImpl(Class log_class, Level log_level, const char* filename, u
+ 
+ template <typename... Args>
+ void FmtLogMessage(Class log_class, Level log_level, const char* filename, unsigned int line_num, const char* function, fmt::format_string<Args...> format, const Args&... args) {
+-    FmtLogMessageImpl(log_class, log_level, filename, line_num, function, format, fmt::make_format_args(args...));
++    FmtLogMessageImpl(log_class, log_level, filename, line_num, function, format.get(), fmt::make_format_args(args...));
+ }
+ 
+ /// Implements a log message filter which allows different log classes to have different minimum
+diff --git a/src/common/settings_setting.h b/src/common/settings_setting.h
+index 076aceef29..d808ae185b 100644
+--- a/src/common/settings_setting.h
++++ b/src/common/settings_setting.h
+@@ -6,6 +6,7 @@
+ 
+ #pragma once
+ 
++#include <algorithm>
+ #include <limits>
+ #include <map>
+ #include <optional>
+@@ -14,6 +15,7 @@
+ #include <typeindex>
+ #include <typeinfo>
+ #include <fmt/core.h>
++#include <fmt/ranges.h>
+ #include "common/common_types.h"
+ #include "common/settings_common.h"
+ #include "common/settings_enums.h"
+diff --git a/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.cpp b/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.cpp
+index 506624669b..6b359e99a5 100644
+--- a/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.cpp
++++ b/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.cpp
+@@ -109,7 +109,7 @@ Result AesCtrCounterExtendedStorage::GetEntryList(Entry* out_entries, s32* out_e
+     R_UNLESS(out_entries != nullptr || entry_count == 0, ResultNullptrArgument);
+ 
+     // Check that our range is valid.
+-    BucketTree::Offsets table_offsets;
++    BucketTree::Offsets table_offsets{};
+     R_TRY(m_table.GetOffsets(std::addressof(table_offsets)));
+ 
+     R_UNLESS(table_offsets.IsInclude(offset, size), ResultOutOfRange);
+@@ -167,7 +167,7 @@ size_t AesCtrCounterExtendedStorage::Read(u8* buffer, size_t size, size_t offset
+     ASSERT(Common::IsAligned(offset, BlockSize));
+     ASSERT(Common::IsAligned(size, BlockSize));
+ 
+-    BucketTree::Offsets table_offsets;
++    BucketTree::Offsets table_offsets{};
+     ASSERT(R_SUCCEEDED(m_table.GetOffsets(std::addressof(table_offsets))));
+ 
+     ASSERT(table_offsets.IsInclude(offset, size));
+diff --git a/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.h b/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.h
+index d0e9ceed05..85d08af0d9 100644
+--- a/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.h
++++ b/src/core/file_sys/fssystem/fssystem_aes_ctr_counter_extended_storage.h
+@@ -89,7 +89,7 @@ public:
+     virtual size_t Read(u8* buffer, size_t size, size_t offset) const override;
+ 
+     virtual size_t GetSize() const override {
+-        BucketTree::Offsets offsets;
++        BucketTree::Offsets offsets{};
+         ASSERT(R_SUCCEEDED(m_table.GetOffsets(std::addressof(offsets))));
+ 
+         return offsets.end_offset;
+diff --git a/src/core/file_sys/fssystem/fssystem_bucket_tree.cpp b/src/core/file_sys/fssystem/fssystem_bucket_tree.cpp
+index ce3b62f26d..bddc1dbfdc 100644
+--- a/src/core/file_sys/fssystem/fssystem_bucket_tree.cpp
++++ b/src/core/file_sys/fssystem/fssystem_bucket_tree.cpp
+@@ -270,7 +270,7 @@ Result BucketTree::Find(Visitor* visitor, s64 virtual_address) {
+     R_UNLESS(virtual_address >= 0, ResultInvalidOffset);
+     R_UNLESS(!this->IsEmpty(), ResultOutOfRange);
+ 
+-    BucketTree::Offsets offsets;
++    BucketTree::Offsets offsets{};
+     R_TRY(this->GetOffsets(std::addressof(offsets)));
+ 
+     R_TRY(visitor->Initialize(this, offsets));
+diff --git a/src/core/file_sys/fssystem/fssystem_compressed_storage.h b/src/core/file_sys/fssystem/fssystem_compressed_storage.h
+index 223d51647e..70fbf5aa00 100644
+--- a/src/core/file_sys/fssystem/fssystem_compressed_storage.h
++++ b/src/core/file_sys/fssystem/fssystem_compressed_storage.h
+@@ -125,7 +125,7 @@ private:
+             }
+ 
+             // Get the table offsets.
+-            BucketTree::Offsets table_offsets;
++            BucketTree::Offsets table_offsets{};
+             R_TRY(m_table.GetOffsets(std::addressof(table_offsets)));
+ 
+             // Validate arguments.
+@@ -177,7 +177,7 @@ private:
+             ASSERT(out != nullptr);
+ 
+             // Get our table offsets.
+-            BucketTree::Offsets offsets;
++            BucketTree::Offsets offsets{};
+             R_TRY(m_table.GetOffsets(std::addressof(offsets)));
+ 
+             // Set the output.
+@@ -195,7 +195,7 @@ private:
+             R_SUCCEED_IF(size == 0);
+ 
+             // Get the table offsets.
+-            BucketTree::Offsets table_offsets;
++            BucketTree::Offsets table_offsets{};
+             R_TRY(m_table.GetOffsets(std::addressof(table_offsets)));
+ 
+             // Validate arguments.
+diff --git a/src/core/file_sys/fssystem/fssystem_indirect_storage.cpp b/src/core/file_sys/fssystem/fssystem_indirect_storage.cpp
+index 7544e70b2a..83527bfd78 100644
+--- a/src/core/file_sys/fssystem/fssystem_indirect_storage.cpp
++++ b/src/core/file_sys/fssystem/fssystem_indirect_storage.cpp
+@@ -52,7 +52,7 @@ Result IndirectStorage::GetEntryList(Entry* out_entries, s32* out_entry_count, s
+     R_UNLESS(out_entries != nullptr || entry_count == 0, ResultNullptrArgument);
+ 
+     // Check that our range is valid.
+-    BucketTree::Offsets table_offsets;
++    BucketTree::Offsets table_offsets{};
+     R_TRY(m_table.GetOffsets(std::addressof(table_offsets)));
+ 
+     R_UNLESS(table_offsets.IsInclude(offset, size), ResultOutOfRange);
+diff --git a/src/core/file_sys/fssystem/fssystem_indirect_storage.h b/src/core/file_sys/fssystem/fssystem_indirect_storage.h
+index d4b95fd273..8503a7cbd8 100644
+--- a/src/core/file_sys/fssystem/fssystem_indirect_storage.h
++++ b/src/core/file_sys/fssystem/fssystem_indirect_storage.h
+@@ -164,7 +164,7 @@ Result IndirectStorage::OperatePerEntry(s64 offset, s64 size, F func) {
+     R_SUCCEED_IF(size == 0);
+ 
+     // Get the table offsets.
+-    BucketTree::Offsets table_offsets;
++    BucketTree::Offsets table_offsets{};
+     R_TRY(m_table.GetOffsets(std::addressof(table_offsets)));
+ 
+     // Validate arguments.
+diff --git a/src/core/file_sys/fssystem/fssystem_sparse_storage.cpp b/src/core/file_sys/fssystem/fssystem_sparse_storage.cpp
+index 8574a11dde..d3ca46c9cf 100644
+--- a/src/core/file_sys/fssystem/fssystem_sparse_storage.cpp
++++ b/src/core/file_sys/fssystem/fssystem_sparse_storage.cpp
+@@ -18,7 +18,7 @@ size_t SparseStorage::Read(u8* buffer, size_t size, size_t offset) const {
+     SparseStorage* self = const_cast<SparseStorage*>(this);
+ 
+     if (self->GetEntryTable().IsEmpty()) {
+-        BucketTree::Offsets table_offsets;
++        BucketTree::Offsets table_offsets{};
+         ASSERT(R_SUCCEEDED(self->GetEntryTable().GetOffsets(std::addressof(table_offsets))));
+         ASSERT(table_offsets.IsInclude(offset, size));
+ 
+diff --git a/src/shader_recompiler/frontend/maxwell/structured_control_flow.cpp b/src/shader_recompiler/frontend/maxwell/structured_control_flow.cpp
+index eaf1d88f2e..eaf81f023d 100644
+--- a/src/shader_recompiler/frontend/maxwell/structured_control_flow.cpp
++++ b/src/shader_recompiler/frontend/maxwell/structured_control_flow.cpp
+@@ -979,7 +979,7 @@ private:
+     Environment& env;
+     IR::AbstractSyntaxList& syntax_list;
+     bool uses_demote_to_helper{};
+-    const Flow::Block dummy_flow_block;
++    const Flow::Block dummy_flow_block{};
+ };
+ } // Anonymous namespace
+ 
+diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
+index 014b4a318e..5f9f202e30 100644
+--- a/src/video_core/buffer_cache/buffer_cache.h
++++ b/src/video_core/buffer_cache/buffer_cache.h
+@@ -816,7 +816,7 @@ void BufferCache<P>::BindHostVertexBuffers() {
+         auto& flags = maxwell3d->dirty.flags;
+         u32 enabled_mask = enabled_vertex_buffers_mask;
+         HostBindings<Buffer> bindings{};
+-        u32 last_index = std::numeric_limits<u32>::max();
++        u32 last_index = (std::numeric_limits<u32>::max)();
+         const auto flush_bindings = [&]() {
+             if (bindings.buffers.empty()) {
+                 return;
+@@ -824,7 +824,7 @@ void BufferCache<P>::BindHostVertexBuffers() {
+             bindings.max_index = bindings.min_index + static_cast<u32>(bindings.buffers.size());
+             runtime.BindVertexBuffers(bindings);
+             bindings = HostBindings<Buffer>{};
+-            last_index = std::numeric_limits<u32>::max();
++            last_index = (std::numeric_limits<u32>::max)();
+         };
+         while (enabled_mask != 0) {
+             const u32 index = std::countr_zero(enabled_mask);
+diff --git a/tools/cpm/package/fetch.sh b/tools/cpm/package/fetch.sh
+index b03a824146..54ea8c64c4 100755
+--- a/tools/cpm/package/fetch.sh
++++ b/tools/cpm/package/fetch.sh
+@@ -83,7 +83,7 @@ ci_package() {
+ 		android-aarch64 android-x86_64 \
+ 		solaris-amd64 freebsd-amd64 openbsd-amd64 \
+ 		linux-amd64 linux-aarch64 \
+-		macos-universal; do
++		macos-universal ios-aarch64; do
+ 		echo "-- * platform $platform"
+ 
+ 		case $DISABLED in
+diff --git a/tools/cpm/package/util/interactive.sh b/tools/cpm/package/util/interactive.sh
+index 99db77e20d..07087e5d10 100755
+--- a/tools/cpm/package/util/interactive.sh
++++ b/tools/cpm/package/util/interactive.sh
+@@ -151,7 +151,7 @@ mingw-amd64 mingw-arm64
+ android-aarch64 android-x86_64
+ solaris-amd64 freebsd-amd64 openbsd-amd64
+ linux-amd64 linux-aarch64
+-macos-universal"
++macos-universal ios-aarch64"
+ 
+ 	DISABLED_PLATFORMS="$reply"
+ fi

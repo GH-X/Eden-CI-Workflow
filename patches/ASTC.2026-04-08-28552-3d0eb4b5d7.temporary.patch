@@ -1,0 +1,1024 @@
+diff --git a/src/video_core/host_shaders/astc_decoder.comp b/src/video_core/host_shaders/astc_decoder.comp
+index da21b4bde8..e059c683ff 100644
+--- a/src/video_core/host_shaders/astc_decoder.comp
++++ b/src/video_core/host_shaders/astc_decoder.comp
+@@ -40,7 +43,11 @@ layout(binding = BINDING_INPUT_BUFFER, std430) readonly restrict buffer InputBuf
+     uvec4 astc_data[];
+ };
+ 
++#ifdef VULKAN
++layout(binding = BINDING_OUTPUT_IMAGE) uniform writeonly restrict image2DArray dest_image;
++#else
+ layout(binding = BINDING_OUTPUT_IMAGE, rgba8) uniform writeonly restrict image2DArray dest_image;
++#endif
+ 
+ const uint GOB_SIZE_X_SHIFT = 6;
+ const uint GOB_SIZE_Y_SHIFT = 3;
+@@ -70,14 +77,8 @@ uvec4 local_buff;
+ uvec4 color_endpoint_data;
+ int color_bitsread = 0;
+ 
+-// Global "vector" to be pushed into when decoding
+-// At most will require BLOCK_WIDTH x BLOCK_HEIGHT in single plane mode
+-// At most will require BLOCK_WIDTH x BLOCK_HEIGHT x 2 in dual plane mode
+-// So the maximum would be 144 (12 x 12) elements, x 2 for two planes
+-#define DIVCEIL(number, divisor) (number + divisor - 1) / divisor
+-#define ARRAY_NUM_ELEMENTS 144
+-#define VECTOR_ARRAY_SIZE DIVCEIL(ARRAY_NUM_ELEMENTS * 2, 4)
+-uint result_vector[ARRAY_NUM_ELEMENTS * 2];
++#define MAX_WEIGHT_VALUES 64
++uint result_vector[MAX_WEIGHT_VALUES];
+ 
+ int result_index = 0;
+ uint result_vector_max_index;
+@@ -485,7 +486,7 @@ void DecodeColorValues(uvec4 modes, uint num_partitions, uint color_data_bits, o
+         A = ReplicateBitTo9((bitval & 1));
+         switch (encoding) {
+         case JUST_BITS:
+-            color_values[++out_index] = FastReplicateTo8(bitval, bitlen);
++            color_values[out_index++] = FastReplicateTo8(bitval, bitlen);
+             break;
+         case TRIT: {
+             D = QuintTritValue(val);
+@@ -564,7 +565,7 @@ void DecodeColorValues(uvec4 modes, uint num_partitions, uint color_data_bits, o
+             uint T = (D * C) + B;
+             T ^= A;
+             T = (A & 0x80) | (T >> 2);
+-            color_values[++out_index] = T;
++            color_values[out_index++] = T;
+         }
+     }
+ }
+@@ -589,17 +590,169 @@ ivec4 BlueContract(int a, int r, int g, int b) {
+     return ivec4(a, (r + b) >> 1, (g + b) >> 1, b);
+ }
+ 
++bool IsHDRColorEndpointMode(uint cem) {
++    return cem == 2u || cem == 3u || cem == 7u || cem == 11u || cem == 14u || cem == 15u;
++}
++
++int SignExtend(int value, uint nbits) {
++    int sign_bit = 1 << (nbits - 1u);
++    return (value ^ sign_bit) - sign_bit;
++}
++
++void DecodeHDREndpointMode7(uint v0, uint v1, uint v2, uint v3, out ivec3 e0, out ivec3 e1) {
++    uint modeval = ((v0 & 0xC0u) >> 6u) | ((v1 & 0x80u) >> 5u) | ((v2 & 0x80u) >> 4u);
++
++    uint majcomp;
++    uint mode;
++    if ((modeval & 0xCu) != 0xCu) {
++        majcomp = modeval >> 2u;
++        mode = modeval & 3u;
++    } else if (modeval != 0xFu) {
++        majcomp = modeval & 3u;
++        mode = 4u;
++    } else {
++        majcomp = 0u;
++        mode = 5u;
++    }
++
++    int red = int(v0 & 0x3Fu);
++    int green = int(v1 & 0x1Fu);
++    int blue = int(v2 & 0x1Fu);
++    int scale = int(v3 & 0x1Fu);
++
++    uint x0 = (v1 >> 6u) & 1u;
++    uint x1 = (v1 >> 5u) & 1u;
++    uint x2 = (v2 >> 6u) & 1u;
++    uint x3 = (v2 >> 5u) & 1u;
++    uint x4 = (v3 >> 7u) & 1u;
++    uint x5 = (v3 >> 6u) & 1u;
++    uint x6 = (v3 >> 5u) & 1u;
++
++    uint ohm = 1u << mode;
++    if ((ohm & 0x30u) != 0u) green |= int(x0 << 6u);
++    if ((ohm & 0x3Au) != 0u) green |= int(x1 << 5u);
++    if ((ohm & 0x30u) != 0u) blue |= int(x2 << 6u);
++    if ((ohm & 0x3Au) != 0u) blue |= int(x3 << 5u);
++    if ((ohm & 0x3Du) != 0u) scale |= int(x6 << 5u);
++    if ((ohm & 0x2Du) != 0u) scale |= int(x5 << 6u);
++    if ((ohm & 0x04u) != 0u) scale |= int(x4 << 7u);
++    if ((ohm & 0x3Bu) != 0u) red |= int(x4 << 6u);
++    if ((ohm & 0x04u) != 0u) red |= int(x3 << 6u);
++    if ((ohm & 0x10u) != 0u) red |= int(x5 << 7u);
++    if ((ohm & 0x0Fu) != 0u) red |= int(x2 << 7u);
++    if ((ohm & 0x05u) != 0u) red |= int(x1 << 8u);
++    if ((ohm & 0x0Au) != 0u) red |= int(x0 << 8u);
++    if ((ohm & 0x05u) != 0u) red |= int(x0 << 9u);
++    if ((ohm & 0x02u) != 0u) red |= int(x6 << 9u);
++    if ((ohm & 0x01u) != 0u) red |= int(x3 << 10u);
++    if ((ohm & 0x02u) != 0u) red |= int(x5 << 10u);
++
++    int shamts[6] = int[](1, 1, 2, 3, 4, 5);
++    int shamt = shamts[mode];
++    red <<= shamt;
++    green <<= shamt;
++    blue <<= shamt;
++    scale <<= shamt;
++
++    if (mode != 5u) {
++        green = red - green;
++        blue = red - blue;
++    }
++
++    if (majcomp == 1u) {
++        int t = red; red = green; green = t;
++    }
++    if (majcomp == 2u) {
++        int t = red; red = blue; blue = t;
++    }
++
++    e1 = ivec3(clamp(red, 0, 0xFFF), clamp(green, 0, 0xFFF), clamp(blue, 0, 0xFFF));
++    e0 = ivec3(clamp(red - scale, 0, 0xFFF), clamp(green - scale, 0, 0xFFF),
++              clamp(blue - scale, 0, 0xFFF));
++}
++
++void DecodeHDREndpointMode11(uint v0, uint v1, uint v2, uint v3, uint v4, uint v5, out ivec3 e0,
++                             out ivec3 e1) {
++    uint majcomp = ((v4 & 0x80u) >> 7u) | ((v5 & 0x80u) >> 6u);
++    if (majcomp == 3u) {
++        e0 = ivec3(int(v0 << 4u), int(v2 << 4u), int((v4 & 0x7Fu) << 5u));
++        e1 = ivec3(int(v1 << 4u), int(v3 << 4u), int((v5 & 0x7Fu) << 5u));
++        return;
++    }
++
++    uint mode = ((v1 & 0x80u) >> 7u) | ((v2 & 0x80u) >> 6u) | ((v3 & 0x80u) >> 5u);
++    int va = int(v0 | ((v1 & 0x40u) << 2u));
++    int vb0 = int(v2 & 0x3Fu);
++    int vb1 = int(v3 & 0x3Fu);
++    int vc = int(v1 & 0x3Fu);
++    int vd0 = int(v4 & 0x7Fu);
++    int vd1 = int(v5 & 0x7Fu);
++
++    int dbitstab[8] = int[](7, 6, 7, 6, 5, 6, 5, 6);
++    vd0 = SignExtend(vd0, uint(dbitstab[mode]));
++    vd1 = SignExtend(vd1, uint(dbitstab[mode]));
++
++    uint x0 = (v2 >> 6u) & 1u;
++    uint x1 = (v3 >> 6u) & 1u;
++    uint x2 = (v4 >> 6u) & 1u;
++    uint x3 = (v5 >> 6u) & 1u;
++    uint x4 = (v4 >> 5u) & 1u;
++    uint x5 = (v5 >> 5u) & 1u;
++
++    uint ohm = 1u << mode;
++    if ((ohm & 0xA4u) != 0u) va |= int(x0 << 9u);
++    if ((ohm & 0x08u) != 0u) va |= int(x2 << 9u);
++    if ((ohm & 0x50u) != 0u) va |= int(x4 << 9u);
++    if ((ohm & 0x50u) != 0u) va |= int(x5 << 10u);
++    if ((ohm & 0xA0u) != 0u) va |= int(x1 << 10u);
++    if ((ohm & 0xC0u) != 0u) va |= int(x2 << 11u);
++    if ((ohm & 0x04u) != 0u) vc |= int(x1 << 6u);
++    if ((ohm & 0xE8u) != 0u) vc |= int(x3 << 6u);
++    if ((ohm & 0x20u) != 0u) vc |= int(x2 << 7u);
++    if ((ohm & 0x5Bu) != 0u) vb0 |= int(x0 << 6u);
++    if ((ohm & 0x5Bu) != 0u) vb1 |= int(x1 << 6u);
++    if ((ohm & 0x12u) != 0u) vb0 |= int(x2 << 7u);
++    if ((ohm & 0x12u) != 0u) vb1 |= int(x3 << 7u);
++
++    int shamt = (int(mode) >> 1) ^ 3;
++    va <<= shamt;
++    vb0 <<= shamt;
++    vb1 <<= shamt;
++    vc <<= shamt;
++    vd0 <<= shamt;
++    vd1 <<= shamt;
++
++    int r1 = clamp(va, 0, 0xFFF);
++    int g1 = clamp(va - vb0, 0, 0xFFF);
++    int b1 = clamp(va - vb1, 0, 0xFFF);
++    int r0 = clamp(va - vc, 0, 0xFFF);
++    int g0 = clamp(va - vb0 - vc - vd0, 0, 0xFFF);
++    int b0 = clamp(va - vb1 - vc - vd1, 0, 0xFFF);
++
++    if (majcomp == 1u) {
++        int t;
++        t = r0; r0 = g0; g0 = t;
++        t = r1; r1 = g1; g1 = t;
++    } else if (majcomp == 2u) {
++        int t;
++        t = r0; r0 = b0; b0 = t;
++        t = r1; r1 = b1; b1 = t;
++    }
++    e0 = ivec3(r0, g0, b0);
++    e1 = ivec3(r1, g1, b1);
++}
++
+ void ComputeEndpoints(out uvec4 ep1, out uvec4 ep2, uint color_endpoint_mode, uint color_values[32],
+                       inout uint colvals_index) {
+ #define READ_UINT_VALUES(N)                                                                        \
+     uvec4 V[2];                                                                                    \
+     for (uint i = 0; i < N; i++) {                                                                 \
+-        V[i / 4][i % 4] = color_values[++colvals_index];                      \
++        V[i / 4][i % 4] = color_values[colvals_index++];                      \
+     }
+ #define READ_INT_VALUES(N)                                                                         \
+     ivec4 V[2];                                                                                    \
+     for (uint i = 0; i < N; i++) {                                                                 \
+-        V[i / 4][i % 4] = int(color_values[++colvals_index]);                      \
++        V[i / 4][i % 4] = int(color_values[colvals_index++]);                      \
+     }
+ 
+     switch (color_endpoint_mode) {
+@@ -715,8 +868,86 @@ void ComputeEndpoints(out uvec4 ep1, out uvec4 ep2, uint color_endpoint_mode, ui
+         }
+         break;
+     }
++    case 2: {
++        READ_UINT_VALUES(2)
++        uint y0, y1;
++        if (V[0].y >= V[0].x) {
++            y0 = V[0].x << 4u;
++            y1 = V[0].y << 4u;
++        } else {
++            y0 = (V[0].y << 4u) + 8u;
++            y1 = (V[0].x << 4u) - 8u;
++        }
++        ep1 = uvec4(0x780u, y0, y0, y0);
++        ep2 = uvec4(0x780u, y1, y1, y1);
++        break;
++    }
++    case 3: {
++        READ_UINT_VALUES(2)
++        uint y0, d;
++        if ((V[0].x & 0x80u) != 0u) {
++            y0 = ((V[0].y & 0xE0u) << 4u) | ((V[0].x & 0x7Fu) << 2u);
++            d = (V[0].y & 0x1Fu) << 2u;
++        } else {
++            y0 = ((V[0].y & 0xF0u) << 4u) | ((V[0].x & 0x7Fu) << 1u);
++            d = (V[0].y & 0x0Fu) << 1u;
++        }
++        const uint y1 = min(y0 + d, 0xFFFu);
++        ep1 = uvec4(0x780u, y0, y0, y0);
++        ep2 = uvec4(0x780u, y1, y1, y1);
++        break;
++    }
++    case 7: {
++        READ_UINT_VALUES(4)
++        ivec3 e0, e1;
++        DecodeHDREndpointMode7(V[0].x, V[0].y, V[0].z, V[0].w, e0, e1);
++        ep1 = uvec4(0x780u, uint(e0.x), uint(e0.y), uint(e0.z));
++        ep2 = uvec4(0x780u, uint(e1.x), uint(e1.y), uint(e1.z));
++        break;
++    }
++    case 11: {
++        READ_UINT_VALUES(6)
++        ivec3 e0, e1;
++        DecodeHDREndpointMode11(V[0].x, V[0].y, V[0].z, V[0].w, V[1].x, V[1].y, e0, e1);
++        ep1 = uvec4(0x780u, uint(e0.x), uint(e0.y), uint(e0.z));
++        ep2 = uvec4(0x780u, uint(e1.x), uint(e1.y), uint(e1.z));
++        break;
++    }
++    case 14: {
++        READ_UINT_VALUES(8)
++        ivec3 e0, e1;
++        DecodeHDREndpointMode11(V[0].x, V[0].y, V[0].z, V[0].w, V[1].x, V[1].y, e0, e1);
++        ep1 = uvec4(V[1].z, uint(e0.x), uint(e0.y), uint(e0.z));
++        ep2 = uvec4(V[1].w, uint(e1.x), uint(e1.y), uint(e1.z));
++        break;
++    }
++    case 15: {
++        READ_UINT_VALUES(8)
++        ivec3 e0, e1;
++        DecodeHDREndpointMode11(V[0].x, V[0].y, V[0].z, V[0].w, V[1].x, V[1].y, e0, e1);
++        const uint mode = ((V[1].z >> 7u) & 1u) | ((V[1].w >> 6u) & 2u);
++        int a6 = int(V[1].z & 0x7Fu);
++        int a7 = int(V[1].w & 0x7Fu);
++        int alpha0, alpha1;
++        if (mode == 3u) {
++            alpha0 = a6 << 5;
++            alpha1 = a7 << 5;
++        } else {
++            a6 |= (a7 << int(mode + 1u)) & 0x780;
++            a7 &= int(0x3Fu >> mode);
++            a7 ^= int(0x20u >> mode);
++            a7 -= int(0x20u >> mode);
++            a6 <<= int(4u - mode);
++            a7 <<= int(4u - mode);
++            a7 += a6;
++            alpha0 = a6;
++            alpha1 = clamp(a7, 0, 0xFFF);
++        }
++        ep1 = uvec4(uint(alpha0), uint(e0.x), uint(e0.y), uint(e0.z));
++        ep2 = uvec4(uint(alpha1), uint(e1.x), uint(e1.y), uint(e1.z));
++        break;
++    }
+     default: {
+-        // HDR mode, or more likely a bug computing the color_endpoint_mode
+         ep1 = uvec4(0xFF, 0xFF, 0, 0);
+         ep2 = uvec4(0xFF, 0xFF, 0, 0);
+         break;
+@@ -988,6 +1219,10 @@ void DecompressBlock(ivec3 coord) {
+         FillError(coord);
+         return;
+     }
++    if (GetNumWeightValues(size_params, dual_plane) > MAX_WEIGHT_VALUES) {
++        FillError(coord);
++        return;
++    }
+     uint partition_index = 1;
+     uvec4 color_endpoint_mode = uvec4(0);
+     uint ced_pointer = 0;
+@@ -1002,6 +1237,10 @@ void DecompressBlock(ivec3 coord) {
+     const uint base_mode = base_cem & 3;
+     const uint max_weight = DecodeMaxWeight(mode);
+     const uint weight_bits = GetPackedBitSize(size_params, dual_plane, max_weight);
++    if (weight_bits < 24 || weight_bits > 96) {
++        FillError(coord);
++        return;
++    }
+     uint remaining_bits = 128 - weight_bits - total_bitsread;
+     uint extra_cem_bits = 0;
+     if (base_mode > 0) {
+@@ -1016,6 +1255,7 @@ void DecompressBlock(ivec3 coord) {
+             extra_cem_bits += 8;
+             break;
+         default:
++            FillError(coord);
+             return;
+         }
+     }
+@@ -1025,6 +1265,7 @@ void DecompressBlock(ivec3 coord) {
+     if (remaining_bits > 128) {
+         // Bad data, more remaining bits than 4 bytes
+         // return early
++        FillError(coord);
+         return;
+     }
+     // Read color data...
+@@ -1112,13 +1353,42 @@ void DecompressBlock(ivec3 coord) {
+             if (num_partitions > 1) {
+                 local_partition = Select2DPartition(partition_index, i, j, num_partitions);
+             }
+-            const uvec4 C0 = ReplicateByteTo16(endpoints0[local_partition]);
+-            const uvec4 C1 = ReplicateByteTo16(endpoints1[local_partition]);
++            const uint local_cem = color_endpoint_mode[local_partition];
+             const uvec4 weight_vec = GetUnquantizedWeightVector(j, i, size_params, plane_index, dual_plane);
+-            const vec4 Cf =
+-                vec4((C0 * (uvec4(64) - weight_vec) + C1 * weight_vec + uvec4(32)) / 64);
+-            const vec4 p = (Cf / 65535.0f);
+-            imageStore(dest_image, coord + ivec3(i, j, 0), p.gbar);
++
++            vec4 p;
++            if (IsHDRColorEndpointMode(local_cem)) {
++                const uvec4 C0 = endpoints0[local_partition] << 4u;
++                const uvec4 C1 = endpoints1[local_partition] << 4u;
++                const uvec4 C = (C0 * (uvec4(64) - weight_vec) + C1 * weight_vec + uvec4(32)) / 64u;
++                const uvec4 E = (C & uvec4(0xF800u)) >> 11u;
++                const uvec4 M = C & uvec4(0x7FFu);
++                const uvec4 Mt_lo = 3u * M;
++                const uvec4 Mt_mid = 4u * M - 512u;
++                const uvec4 Mt_hi = 5u * M - 2048u;
++                const uvec4 Mt =
++                    mix(Mt_lo, mix(Mt_mid, Mt_hi, greaterThanEqual(M, uvec4(1536u))),
++                        greaterThanEqual(M, uvec4(512u)));
++                const uvec4 Cf = (E << 10u) + (Mt >> 3u);
++                const uvec4 half_bits = mix(Cf, uvec4(0x7BFFu), greaterThanEqual(Cf, uvec4(0x7C00u)));
++                p = vec4(unpackHalf2x16(half_bits.x).x, unpackHalf2x16(half_bits.y).x,
++                        unpackHalf2x16(half_bits.z).x, unpackHalf2x16(half_bits.w).x);
++
++                if (local_cem == 14u) {
++                    const uint a0 = ReplicateByteTo16(uvec4(endpoints0[local_partition].x)).x;
++                    const uint a1 = ReplicateByteTo16(uvec4(endpoints1[local_partition].x)).x;
++                    const uint Ca = (a0 * (64u - weight_vec.x) + a1 * weight_vec.x + 32u) / 64u;
++                    p.x = float(Ca) / 65535.0f;
++                }
++            } else {
++                const uvec4 C0 = ReplicateByteTo16(endpoints0[local_partition]);
++                const uvec4 C1 = ReplicateByteTo16(endpoints1[local_partition]);
++                const vec4 Cf =
++                    vec4((C0 * (uvec4(64) - weight_vec) + C1 * weight_vec + uvec4(32)) / 64);
++                p = Cf / 65535.0f;
++            }
++
++            imageStore(dest_image, coord + ivec3(i, j, 0), clamp(p, 0.0f, 1.0f).gbar);
+         }
+     }
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+index d45a57f7bb..9cbab33721 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+@@ -26,6 +26,7 @@
+ #include "video_core/host_shaders/vulkan_uint8_comp_spv.h"
+ #include "video_core/host_shaders/block_linear_unswizzle_3d_bcn_comp_spv.h"
+ #include "video_core/renderer_vulkan/vk_compute_pass.h"
++#include "video_core/surface.h"
+ #include "video_core/renderer_vulkan/vk_descriptor_pool.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
+diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+index 48aa5ec476..693fd23d87 100644
+--- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <optional>
+ #include <span>
+ #include <memory>
+ #include <vector>
+@@ -128,9 +129,27 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
+     return usage;
+ }
+ 
+-[[nodiscard]] VkImageCreateInfo MakeImageCreateInfo(const Device& device, const ImageInfo& info) {
+-    const auto format_info =
++[[nodiscard]] bool WillUseAcceleratedAstcDecode(const Device& device, const ImageInfo& info) {
++    if (!IsPixelFormatASTC(info.format) || device.IsOptimalAstcSupported()) {
++        return false;
++    }
++    if (Settings::values.accelerate_astc.GetValue() != Settings::AstcDecodeMode::Gpu) {
++        return false;
++    }
++    return Settings::values.astc_recompression.GetValue() ==
++              Settings::AstcRecompression::Uncompressed &&
++          info.size.depth == 1;
++}
++
++[[nodiscard]] VkImageCreateInfo MakeImageCreateInfo(const Device& device, const ImageInfo& info,
++                                                    std::optional<VkFormat> format_override = {}) {
++    auto format_info =
+         MaxwellToVK::SurfaceFormat(device, FormatType::Optimal, false, info.format);
++    if (format_override) {
++        format_info.format = *format_override;
++        format_info.attachable = false;
++        format_info.storage = true;
++    }
+     VkImageCreateFlags flags{};
+     if (info.type == ImageType::e2D && info.resources.layers >= 6 &&
+         info.size.width == info.size.height && !device.HasBrokenCubeImageCompatibility()) {
+@@ -164,11 +183,12 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
+ }
+ 
+ [[nodiscard]] vk::Image MakeImage(const Device& device, const MemoryAllocator& allocator,
+-                                  const ImageInfo& info, std::span<const VkFormat> view_formats) {
++                                  const ImageInfo& info, std::span<const VkFormat> view_formats,
++                                  std::optional<VkFormat> format_override = {}) {
+     if (info.type == ImageType::Buffer) {
+         return vk::Image{};
+     }
+-    VkImageCreateInfo image_ci = MakeImageCreateInfo(device, info);
++    VkImageCreateInfo image_ci = MakeImageCreateInfo(device, info, format_override);
+     const VkImageFormatListCreateInfo image_format_list = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO,
+         .pNext = nullptr,
+@@ -230,6 +250,10 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
+     }
+ }
+ 
++[[nodiscard]] bool IsLdrAstcFormat(VkFormat format) {
++    return format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK && format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
++}
++
+ [[nodiscard]] VkImageAspectFlags ImageViewAspectMask(const VideoCommon::ImageViewInfo& info) {
+     if (info.IsRenderTarget()) {
+         return ImageAspectMask(info.format);
+@@ -1573,15 +1597,14 @@ void TextureCacheRuntime::TickFrame() {}
+ Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu_addr_,
+              VAddr cpu_addr_)
+     : VideoCommon::ImageBase(info_, gpu_addr_, cpu_addr_), scheduler{&runtime_.scheduler},
+-      runtime{&runtime_}, original_image(MakeImage(runtime_.device, runtime_.memory_allocator, info,
+-                                                   runtime->ViewFormats(info.format))),
++      runtime{&runtime_},
++      original_image(MakeImage(runtime_.device, runtime_.memory_allocator, info,
++                               runtime->ViewFormats(info.format))),
+       aspect_mask(ImageAspectMask(info.format)) {
+     if (IsPixelFormatASTC(info.format) && !runtime->device.IsOptimalAstcSupported()) {
+         switch (Settings::values.accelerate_astc.GetValue()) {
+         case Settings::AstcDecodeMode::Gpu:
+-            if (Settings::values.astc_recompression.GetValue() ==
+-                    Settings::AstcRecompression::Uncompressed &&
+-                info.size.depth == 1) {
++            if (WillUseAcceleratedAstcDecode(runtime->device, info)) {
+                 flags |= VideoCommon::ImageFlagBits::AcceleratedUpload;
+             }
+             break;
+@@ -1603,13 +1626,12 @@ Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu
+     }
+     current_image = &Image::original_image;
+     storage_image_views.resize(info.resources.levels);
+-    if (IsPixelFormatASTC(info.format) && !runtime->device.IsOptimalAstcSupported() &&
+-        Settings::values.astc_recompression.GetValue() ==
+-            Settings::AstcRecompression::Uncompressed) {
++    if (WillUseAcceleratedAstcDecode(runtime->device, info)) {
+         const auto& device = runtime->device.GetLogical();
++        const VkFormat storage_format = VK_FORMAT_A8B8G8R8_UNORM_PACK32;
+         for (s32 level = 0; level < info.resources.levels; ++level) {
+             storage_image_views[level] =
+-                MakeStorageView(device, level, *original_image, VK_FORMAT_A8B8G8R8_UNORM_PACK32);
++                MakeStorageView(device, level, *original_image, storage_format);
+         }
+     }
+ }
+@@ -1958,8 +1980,11 @@ void Image::DownloadMemory(const StagingBufferRef& map, std::span<const BufferIm
+ VkImageView Image::StorageImageView(s32 level) noexcept {
+     auto& view = storage_image_views[level];
+     if (!view) {
+-        const auto format_info =
++        auto format_info =
+             MaxwellToVK::SurfaceFormat(runtime->device, FormatType::Optimal, true, info.format);
++        if (WillUseAcceleratedAstcDecode(runtime->device, info)) {
++            format_info.format = VK_FORMAT_A8B8G8R8_UNORM_PACK32;
++        }
+         view = MakeStorageView(runtime->device.GetLogical(), level, *(this->*current_image),
+                                format_info.format);
+     }
+@@ -2136,9 +2161,18 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
+         .pNext = nullptr,
+         .usage = ImageUsageFlags(format_info, format),
+     };
++    const VkImageViewASTCDecodeModeEXT astc_decode_mode{
++        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT,
++        .pNext = &image_view_usage,
++        .decodeMode = VK_FORMAT_R8G8B8A8_UNORM,
++    };
++    const void* view_next = &image_view_usage;
++    if (device->IsExtAstcDecodeModeSupported() && IsLdrAstcFormat(format_info.format)) {
++        view_next = &astc_decode_mode;
++    }
+     const VkImageViewCreateInfo create_info{
+         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+-        .pNext = &image_view_usage,
++        .pNext = view_next,
+         .flags = 0,
+         .image = image.Handle(),
+         .viewType = VkImageViewType{},
+diff --git a/src/video_core/textures/astc.cpp b/src/video_core/textures/astc.cpp
+index b7b5f5bd4a..0b6d06c49a 100644
+--- a/src/video_core/textures/astc.cpp
++++ b/src/video_core/textures/astc.cpp
+@@ -1269,6 +1269,209 @@ static inline u32 Select2DPartition(s32 seed, s32 x, s32 y, s32 partitionCount,
+     return SelectPartition(seed, x, y, 0, partitionCount, smallBlock);
+ }
+ 
++static constexpr bool IsHDRColorEndpointMode(u32 cem) {
++    switch (cem) {
++    case 2:
++    case 3:
++    case 7:
++    case 11:
++    case 14:
++    case 15:
++        return true;
++    default:
++        return false;
++    }
++}
++
++static constexpr s32 SignExtend(s32 value, u32 nbits) {
++    const s32 sign_bit = 1 << (nbits - 1);
++    return (value ^ sign_bit) - sign_bit;
++}
++
++struct HDREndpointRGB {
++    s32 r0, g0, b0;
++    s32 r1, g1, b1;
++};
++
++static void DecodeHDREndpointMode7(u32 v0, u32 v1, u32 v2, u32 v3, s32& r0, s32& g0, s32& b0,
++                                    s32& r1, s32& g1, s32& b1) {
++    const u32 modeval = ((v0 & 0xC0) >> 6) | ((v1 & 0x80) >> 5) | ((v2 & 0x80) >> 4);
++
++    u32 majcomp;
++    u32 mode;
++    if ((modeval & 0xC) != 0xC) {
++        majcomp = modeval >> 2;
++        mode = modeval & 3;
++    } else if (modeval != 0xF) {
++        majcomp = modeval & 3;
++        mode = 4;
++    } else {
++        majcomp = 0;
++        mode = 5;
++    }
++
++    s32 red = static_cast<s32>(v0 & 0x3f);
++    s32 green = static_cast<s32>(v1 & 0x1f);
++    s32 blue = static_cast<s32>(v2 & 0x1f);
++    s32 scale = static_cast<s32>(v3 & 0x1f);
++
++    const u32 x0 = (v1 >> 6) & 1;
++    const u32 x1 = (v1 >> 5) & 1;
++    const u32 x2 = (v2 >> 6) & 1;
++    const u32 x3 = (v2 >> 5) & 1;
++    const u32 x4 = (v3 >> 7) & 1;
++    const u32 x5 = (v3 >> 6) & 1;
++    const u32 x6 = (v3 >> 5) & 1;
++
++    const u32 ohm = 1u << mode;
++    if (ohm & 0x30)
++        green |= static_cast<s32>(x0 << 6);
++    if (ohm & 0x3A)
++        green |= static_cast<s32>(x1 << 5);
++    if (ohm & 0x30)
++        blue |= static_cast<s32>(x2 << 6);
++    if (ohm & 0x3A)
++        blue |= static_cast<s32>(x3 << 5);
++    if (ohm & 0x3D)
++        scale |= static_cast<s32>(x6 << 5);
++    if (ohm & 0x2D)
++        scale |= static_cast<s32>(x5 << 6);
++    if (ohm & 0x04)
++        scale |= static_cast<s32>(x4 << 7);
++    if (ohm & 0x3B)
++        red |= static_cast<s32>(x4 << 6);
++    if (ohm & 0x04)
++        red |= static_cast<s32>(x3 << 6);
++    if (ohm & 0x10)
++        red |= static_cast<s32>(x5 << 7);
++    if (ohm & 0x0F)
++        red |= static_cast<s32>(x2 << 7);
++    if (ohm & 0x05)
++        red |= static_cast<s32>(x1 << 8);
++    if (ohm & 0x0A)
++        red |= static_cast<s32>(x0 << 8);
++    if (ohm & 0x05)
++        red |= static_cast<s32>(x0 << 9);
++    if (ohm & 0x02)
++        red |= static_cast<s32>(x6 << 9);
++    if (ohm & 0x01)
++        red |= static_cast<s32>(x3 << 10);
++    if (ohm & 0x02)
++        red |= static_cast<s32>(x5 << 10);
++
++    static constexpr int shamts[6] = {1, 1, 2, 3, 4, 5};
++    const s32 shamt = shamts[mode];
++    red <<= shamt;
++    green <<= shamt;
++    blue <<= shamt;
++    scale <<= shamt;
++
++    if (mode != 5) {
++        green = red - green;
++        blue = red - blue;
++    }
++
++    if (majcomp == 1)
++        std::swap(red, green);
++    if (majcomp == 2)
++        std::swap(red, blue);
++
++    r1 = std::clamp(red, 0, 0xFFF);
++    g1 = std::clamp(green, 0, 0xFFF);
++    b1 = std::clamp(blue, 0, 0xFFF);
++
++    r0 = std::clamp(red - scale, 0, 0xFFF);
++    g0 = std::clamp(green - scale, 0, 0xFFF);
++    b0 = std::clamp(blue - scale, 0, 0xFFF);
++}
++
++static HDREndpointRGB DecodeHDREndpointMode11(u32 v0, u32 v1, u32 v2, u32 v3, u32 v4, u32 v5) {
++    const u32 majcomp = ((v4 & 0x80) >> 7) | ((v5 & 0x80) >> 6);
++    if (majcomp == 3) {
++        HDREndpointRGB result;
++        result.r0 = static_cast<s32>(v0 << 4);
++        result.g0 = static_cast<s32>(v2 << 4);
++        result.b0 = static_cast<s32>((v4 & 0x7f) << 5);
++        result.r1 = static_cast<s32>(v1 << 4);
++        result.g1 = static_cast<s32>(v3 << 4);
++        result.b1 = static_cast<s32>((v5 & 0x7f) << 5);
++        return result;
++    }
++
++    const u32 mode = ((v1 & 0x80) >> 7) | ((v2 & 0x80) >> 6) | ((v3 & 0x80) >> 5);
++    s32 va = static_cast<s32>(v0 | ((v1 & 0x40) << 2));
++    s32 vb0 = static_cast<s32>(v2 & 0x3f);
++    s32 vb1 = static_cast<s32>(v3 & 0x3f);
++    s32 vc = static_cast<s32>(v1 & 0x3f);
++    s32 vd0 = static_cast<s32>(v4 & 0x7f);
++    s32 vd1 = static_cast<s32>(v5 & 0x7f);
++
++    static constexpr int dbitstab[8] = {7, 6, 7, 6, 5, 6, 5, 6};
++    vd0 = SignExtend(vd0, dbitstab[mode]);
++    vd1 = SignExtend(vd1, dbitstab[mode]);
++
++    const u32 x0 = (v2 >> 6) & 1;
++    const u32 x1 = (v3 >> 6) & 1;
++    const u32 x2 = (v4 >> 6) & 1;
++    const u32 x3 = (v5 >> 6) & 1;
++    const u32 x4 = (v4 >> 5) & 1;
++    const u32 x5 = (v5 >> 5) & 1;
++
++    const u32 ohm = 1u << mode;
++    if (ohm & 0xA4)
++        va |= static_cast<s32>(x0 << 9);
++    if (ohm & 0x08)
++        va |= static_cast<s32>(x2 << 9);
++    if (ohm & 0x50)
++        va |= static_cast<s32>(x4 << 9);
++    if (ohm & 0x50)
++        va |= static_cast<s32>(x5 << 10);
++    if (ohm & 0xA0)
++        va |= static_cast<s32>(x1 << 10);
++    if (ohm & 0xC0)
++        va |= static_cast<s32>(x2 << 11);
++    if (ohm & 0x04)
++        vc |= static_cast<s32>(x1 << 6);
++    if (ohm & 0xE8)
++        vc |= static_cast<s32>(x3 << 6);
++    if (ohm & 0x20)
++        vc |= static_cast<s32>(x2 << 7);
++    if (ohm & 0x5B)
++        vb0 |= static_cast<s32>(x0 << 6);
++    if (ohm & 0x5B)
++        vb1 |= static_cast<s32>(x1 << 6);
++    if (ohm & 0x12)
++        vb0 |= static_cast<s32>(x2 << 7);
++    if (ohm & 0x12)
++        vb1 |= static_cast<s32>(x3 << 7);
++
++    const s32 shamt = (static_cast<s32>(mode) >> 1) ^ 3;
++    va <<= shamt;
++    vb0 <<= shamt;
++    vb1 <<= shamt;
++    vc <<= shamt;
++    vd0 <<= shamt;
++    vd1 <<= shamt;
++
++    HDREndpointRGB result;
++    result.r1 = std::clamp(va, 0, 0xFFF);
++    result.g1 = std::clamp(va - vb0, 0, 0xFFF);
++    result.b1 = std::clamp(va - vb1, 0, 0xFFF);
++
++    result.r0 = std::clamp(va - vc, 0, 0xFFF);
++    result.g0 = std::clamp(va - vb0 - vc - vd0, 0, 0xFFF);
++    result.b0 = std::clamp(va - vb1 - vc - vd1, 0, 0xFFF);
++
++    if (majcomp == 1) {
++        std::swap(result.r0, result.g0);
++        std::swap(result.r1, result.g1);
++    } else if (majcomp == 2) {
++        std::swap(result.r0, result.b0);
++        std::swap(result.r1, result.b1);
++    }
++    return result;
++}
++
+ // Section C.2.14
+ static void ComputeEndpoints(Pixel& ep1, Pixel& ep2, const u32*& colorValues,
+                              u32 colorEndpointMode) {
+@@ -1382,8 +1585,84 @@ static void ComputeEndpoints(Pixel& ep1, Pixel& ep2, const u32*& colorValues,
+         ep2.ClampByte();
+     } break;
+ 
++    case 2: {
++        READ_UINT_VALUES(2)
++        u32 y0, y1;
++        if (v[1] >= v[0]) {
++            y0 = v[0] << 4;
++            y1 = v[1] << 4;
++        } else {
++            y0 = (v[1] << 4) + 8;
++            y1 = (v[0] << 4) - 8;
++        }
++        ep1 = Pixel(0x780, y0, y0, y0);
++        ep2 = Pixel(0x780, y1, y1, y1);
++    } break;
++
++    case 3: {
++        READ_UINT_VALUES(2)
++        u32 y0, d;
++        if (v[0] & 0x80) {
++            y0 = ((v[1] & 0xE0) << 4) | ((v[0] & 0x7F) << 2);
++            d = (v[1] & 0x1F) << 2;
++        } else {
++            y0 = ((v[1] & 0xF0) << 4) | ((v[0] & 0x7F) << 1);
++            d = (v[1] & 0x0F) << 1;
++        }
++        const u32 y1 = (std::min)(y0 + d, 0xFFFU);
++        ep1 = Pixel(0x780, y0, y0, y0);
++        ep2 = Pixel(0x780, y1, y1, y1);
++    } break;
++
++    case 7: {
++        READ_UINT_VALUES(4)
++        s32 r0, g0, b0, r1, g1, b1;
++        DecodeHDREndpointMode7(v[0], v[1], v[2], v[3], r0, g0, b0, r1, g1, b1);
++        ep1 = Pixel(0x780, r0, g0, b0);
++        ep2 = Pixel(0x780, r1, g1, b1);
++    } break;
++
++    case 11: {
++        READ_UINT_VALUES(6)
++        const HDREndpointRGB rgb = DecodeHDREndpointMode11(v[0], v[1], v[2], v[3], v[4], v[5]);
++        ep1 = Pixel(0x780, rgb.r0, rgb.g0, rgb.b0);
++        ep2 = Pixel(0x780, rgb.r1, rgb.g1, rgb.b1);
++    } break;
++
++    case 14: {
++        READ_UINT_VALUES(8)
++        const HDREndpointRGB rgb = DecodeHDREndpointMode11(v[0], v[1], v[2], v[3], v[4], v[5]);
++        ep1 = Pixel(v[6], rgb.r0, rgb.g0, rgb.b0);
++        ep2 = Pixel(v[7], rgb.r1, rgb.g1, rgb.b1);
++    } break;
++
++    case 15: {
++        READ_UINT_VALUES(8)
++        const HDREndpointRGB rgb = DecodeHDREndpointMode11(v[0], v[1], v[2], v[3], v[4], v[5]);
++        const u32 mode = ((v[6] >> 7) & 1) | ((v[7] >> 6) & 2);
++        s32 a6 = static_cast<s32>(v[6] & 0x7F);
++        s32 a7 = static_cast<s32>(v[7] & 0x7F);
++        s32 alpha0, alpha1;
++        if (mode == 3) {
++            alpha0 = a6 << 5;
++            alpha1 = a7 << 5;
++        } else {
++            a6 |= (a7 << (mode + 1)) & 0x780;
++            a7 &= (0x3F >> mode);
++            a7 ^= 0x20 >> mode;
++            a7 -= 0x20 >> mode;
++            a6 <<= (4 - mode);
++            a7 <<= (4 - mode);
++            a7 += a6;
++            alpha0 = a6;
++            alpha1 = std::clamp(a7, 0, 0xFFF);
++        }
++        ep1 = Pixel(alpha0, rgb.r0, rgb.g0, rgb.b0);
++        ep2 = Pixel(alpha1, rgb.r1, rgb.g1, rgb.b1);
++    } break;
++
+     default:
+-        assert(false && "Unsupported color endpoint mode (is it HDR?)");
++        assert(false && "Unsupported color endpoint mode");
+         break;
+     }
+ 
+@@ -1414,6 +1693,39 @@ static void FillVoidExtentLDR(InputBitStream& strm, std::span<u32> outBuf, u32 b
+     }
+ }
+ 
++static float HalfToFloat(u16 h) {
++    const u32 sign = static_cast<u32>(h & 0x8000) << 16;
++    u32 exp = (h & 0x7C00) >> 10;
++    u32 mant = h & 0x3FF;
++    u32 bits;
++    if (exp == 0) {
++        if (mant == 0) {
++            bits = sign;
++        } else {
++            s32 e = 127 - 15 + 1;
++            while ((mant & 0x400) == 0) {
++                mant <<= 1;
++                --e;
++            }
++            mant &= 0x3FF;
++            bits = sign | (static_cast<u32>(e) << 23) | (mant << 13);
++        }
++    } else if (exp == 0x1F) {
++        bits = sign | 0x7F800000 | (mant << 13);
++    } else {
++        bits = sign | ((exp - 15 + 127) << 23) | (mant << 13);
++    }
++    float result;
++    std::memcpy(&result, &bits, sizeof(result));
++    return result;
++}
++
++static u16 HalfToClampedByte(u16 half_bits) {
++    const float value = HalfToFloat(half_bits);
++    const float clamped = std::clamp(value, 0.0f, 1.0f);
++    return static_cast<u16>(clamped * 255.0f + 0.5f);
++}
++
+ static void FillError(std::span<u32> outBuf, u32 blockWidth, u32 blockHeight) {
+     for (u32 j = 0; j < blockHeight; j++) {
+         for (u32 i = 0; i < blockWidth; i++) {
+@@ -1457,6 +1769,12 @@ static void DecompressBlock(std::span<const u8, 16> inBuf, const u32 blockWidth,
+         return;
+     }
+ 
++    if (weightParams.GetNumWeightValues() > 64) {
++        assert(false && "Too many weights in the weight grid");
++        FillError(outBuf, blockWidth, blockHeight);
++        return;
++    }
++
+     // Read num partitions
+     u32 nPartitions = strm.ReadBits<2>() + 1;
+     assert(nPartitions <= 4);
+@@ -1493,6 +1811,11 @@ static void DecompressBlock(std::span<const u8, 16> inBuf, const u32 blockWidth,
+ 
+     // Remaining bits are color endpoint data...
+     u32 nWeightBits = weightParams.GetPackedBitSize();
++    if (nWeightBits < 24 || nWeightBits > 96) {
++        assert(false && "Invalid weight bit count");
++        FillError(outBuf, blockWidth, blockHeight);
++        return;
++    }
+     s32 remainingBits = 128 - nWeightBits - static_cast<int>(strm.GetBitsRead());
+ 
+     // Consider extra bits prior to texel data...
+@@ -1631,22 +1954,44 @@ static void DecompressBlock(std::span<const u8, 16> inBuf, const u32 blockWidth,
+             Pixel p;
+             for (u32 c = 0; c < 4; c++) {
+                 u32 C0 = endpoints[partition][0].Component(c);
+-                C0 = ReplicateByteTo16(C0);
+                 u32 C1 = endpoints[partition][1].Component(c);
+-                C1 = ReplicateByteTo16(C1);
+ 
+                 u32 plane = 0;
+                 if (weightParams.m_bDualPlane && (((planeIdx + 1) & 3) == c)) {
+                     plane = 1;
+                 }
+-
+                 u32 weight = weights[plane][j * blockWidth + i];
+-                u32 C = (C0 * (64 - weight) + C1 * weight + 32) / 64;
+-                if (C == 65535) {
+-                    p.Component(c) = 255;
++
++                const bool is_hdr = IsHDRColorEndpointMode(colorEndpointMode[partition]) &&
++                                    !(colorEndpointMode[partition] == 14 && c == 0);
++
++                if (is_hdr) {
++                    C0 <<= 4;
++                    C1 <<= 4;
++                    const u32 C = (C0 * (64 - weight) + C1 * weight + 32) / 64;
++                    const u32 E = (C & 0xF800) >> 11;
++                    const u32 M = C & 0x7FF;
++                    u32 Mt;
++                    if (M < 512) {
++                        Mt = 3 * M;
++                    } else if (M >= 1536) {
++                        Mt = 5 * M - 2048;
++                    } else {
++                        Mt = 4 * M - 512;
++                    }
++                    const u32 Cf = (E << 10) + (Mt >> 3);
++                    const u16 half_bits = (Cf >= 0x7C00) ? u16{0x7BFF} : static_cast<u16>(Cf);
++                    p.Component(c) = HalfToClampedByte(half_bits);
+                 } else {
+-                    double Cf = static_cast<double>(C);
+-                    p.Component(c) = static_cast<u16>(255.0 * (Cf / 65536.0) + 0.5);
++                    C0 = ReplicateByteTo16(C0);
++                    C1 = ReplicateByteTo16(C1);
++                    const u32 C = (C0 * (64 - weight) + C1 * weight + 32) / 64;
++                    if (C == 65535) {
++                        p.Component(c) = 255;
++                    } else {
++                        double Cf = static_cast<double>(C);
++                        p.Component(c) = static_cast<u16>(255.0 * (Cf / 65536.0) + 0.5);
++                    }
+                 }
+             }
+ 
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 5075a79bcd..2266486799 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -803,14 +803,13 @@ bool Device::ComputeIsOptimalAstcSupported() const {
+     if (!features.features.textureCompressionASTC_LDR) {
+         return false;
+     }
+-    const auto format_feature_usage{VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+-                                    VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+-                                    VK_FORMAT_FEATURE_BLIT_DST_BIT |
+-                                    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+-                                    VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
++    const VkFormatFeatureFlags format_feature_usage{
++        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
++        VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
+     for (const auto format : astc_formats) {
+         const auto physical_format_properties{physical.GetFormatProperties(format)};
+-        if ((physical_format_properties.optimalTilingFeatures & format_feature_usage) == 0) {
++        if ((physical_format_properties.optimalTilingFeatures & format_feature_usage) !=
++            format_feature_usage) {
+             return false;
+         }
+     }
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index ad9d53ce16..745c6d3856 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -74,6 +74,7 @@ VK_DEFINE_HANDLE(VmaAllocator)
+ 
+ // Define miscellaneous extensions which may be used by the implementation here.
+ #define FOR_EACH_VK_EXTENSION(EXTENSION)                                                           \
++    EXTENSION(EXT, ASTC_DECODE_MODE, astc_decode_mode)                                             \
+     EXTENSION(EXT, CONDITIONAL_RENDERING, conditional_rendering)                                   \
+     EXTENSION(EXT, CONSERVATIVE_RASTERIZATION, conservative_rasterization)                         \
+     EXTENSION(EXT, DEPTH_RANGE_UNRESTRICTED, depth_range_unrestricted)                             \
+@@ -344,9 +345,8 @@ public:
+         return properties.float_controls;
+     }
+ 
+-    /// Returns true if ASTC is natively supported.
+     bool IsOptimalAstcSupported() const {
+-        return features.features.textureCompressionASTC_LDR;
++        return is_optimal_astc_supported;
+     }
+ 
+     /// Returns true if BCn is natively supported.
+@@ -730,6 +730,10 @@ public:
+         return extensions.conditional_rendering;
+     }
+ 
++    bool IsExtAstcDecodeModeSupported() const {
++        return extensions.astc_decode_mode;
++    }
++
+     bool HasTimelineSemaphore() const;
+ 
+     /// Returns the minimum supported version of SPIR-V.

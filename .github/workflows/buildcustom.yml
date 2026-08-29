@@ -50,6 +50,7 @@ jobs:
           echo '${{ toJSON(github.event.client_payload) }}' > ./payload.json
           jq . payload.json
           commit=$(echo "${{ inputs.build-commit }}" | awk -F- '{print $NF}' | grep -E "^([A-Za-z0-9]{10,40})$")
+          [ "$commit" != "" ] || commit='3d0eb4b5d7'
           ./.ci/fj/payloadcustom.sh --parse ${{ inputs.build-id }} ${{ inputs.clone-giturl }} $commit
 
       - name: Load payload environment
