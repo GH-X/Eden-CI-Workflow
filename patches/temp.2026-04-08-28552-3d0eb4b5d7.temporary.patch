@@ -1,0 +1,427 @@
+diff --git a/src/core/file_sys/patch_manager.cpp b/src/core/file_sys/patch_manager.cpp
+index 6af926eac0..c3eb3bb035 100644
+--- a/src/core/file_sys/patch_manager.cpp
++++ b/src/core/file_sys/patch_manager.cpp
+@@ -908,8 +908,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
+                     .type = PatchType::Mod,
+                     .program_id = title_id,
+                     .title_id = title_id,
+-                    .source = PatchSource::Unknown,
+-                    .location = f->GetFullPath(),
++                    .source = PatchSource::Unknown
+                 });
+             }
+ 
+@@ -956,8 +955,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
+                            .type = PatchType::Mod,
+                            .program_id = title_id,
+                            .title_id = title_id,
+-                           .source = PatchSource::Unknown,
+-                           .location = mod->GetFullPath()});
++                           .source = PatchSource::Unknown});
+         }
+     }
+ 
+diff --git a/src/core/file_sys/patch_manager.h b/src/core/file_sys/patch_manager.h
+index 755d924fd4..c326d433cc 100644
+--- a/src/core/file_sys/patch_manager.h
++++ b/src/core/file_sys/patch_manager.h
+@@ -47,7 +47,6 @@ struct Patch {
+     u64 program_id;
+     u64 title_id;
+     PatchSource source;
+-    std::string location;
+     u32 numeric_version{0};
+ };
+ 
+diff --git a/src/frontend_common/CMakeLists.txt b/src/frontend_common/CMakeLists.txt
+index f9b3805939..237258e89b 100644
+--- a/src/frontend_common/CMakeLists.txt
++++ b/src/frontend_common/CMakeLists.txt
+@@ -13,8 +13,7 @@ add_library(frontend_common STATIC
+     data_manager.h data_manager.cpp
+     play_time_manager.cpp
+     play_time_manager.h
+-    settings_generator.h settings_generator.cpp
+-    mod_manager.h mod_manager.cpp)
++    settings_generator.h settings_generator.cpp)
+ 
+ if (ENABLE_UPDATE_CHECKER)
+     target_link_libraries(frontend_common PRIVATE httplib::httplib)
+diff --git a/src/qt_common/CMakeLists.txt b/src/qt_common/CMakeLists.txt
+index 399fbe67a0..3c63312e31 100644
+--- a/src/qt_common/CMakeLists.txt
++++ b/src/qt_common/CMakeLists.txt
+@@ -24,8 +24,6 @@ add_library(qt_common STATIC
+     util/rom.h util/rom.cpp
+     util/applet.h util/applet.cpp
+     util/compress.h util/compress.cpp
+-    util/fs.h util/fs.cpp
+-    util/mod.h util/mod.cpp
+ 
+     abstract/frontend.h abstract/frontend.cpp
+     abstract/progress.h abstract/progress.cpp
+@@ -33,7 +31,9 @@ add_library(qt_common STATIC
+     qt_string_lookup.h
+     qt_compat.h
+ 
+-    discord/discord.h)
++    discord/discord.h
++    util/fs.h util/fs.cpp
++)
+ 
+ if (UNIX)
+     target_sources(qt_common PRIVATE gui_settings.cpp gui_settings.h)
+diff --git a/src/qt_common/abstract/frontend.h b/src/qt_common/abstract/frontend.h
+index 9b70f6849e..5a30e6849e 100644
+--- a/src/qt_common/abstract/frontend.h
++++ b/src/qt_common/abstract/frontend.h
+@@ -107,11 +107,5 @@ const QString GetSaveFileName(const QString& title, const QString& dir, const QS
+ const QString GetExistingDirectory(const QString& caption = QString(),
+                                    const QString& dir = QString());
+ 
+-int Choice(const QString& title = QString(), const QString& caption = QString(),
+-           const QStringList& options = {});
+-
+-const QString GetTextInput(const QString& title = QString(), const QString& caption = QString(),
+-                           const QString& defaultText = QString());
+-
+ } // namespace QtCommon::Frontend
+ #endif // FRONTEND_H
+diff --git a/src/yuzu/CMakeLists.txt b/src/yuzu/CMakeLists.txt
+index 1ed1fdff2a..eaa44b2a3a 100644
+--- a/src/yuzu/CMakeLists.txt
++++ b/src/yuzu/CMakeLists.txt
+@@ -241,7 +241,6 @@ add_executable(yuzu
+ 
+     configuration/system/new_user_dialog.h configuration/system/new_user_dialog.cpp configuration/system/new_user_dialog.ui
+     configuration/system/profile_avatar_dialog.h configuration/system/profile_avatar_dialog.cpp
+-    configuration/addon/mod_select_dialog.h configuration/addon/mod_select_dialog.cpp configuration/addon/mod_select_dialog.ui
+ 
+     render/performance_overlay.h render/performance_overlay.cpp render/performance_overlay.ui
+     libqt_common.h libqt_common.cpp
+diff --git a/src/yuzu/configuration/configure_per_game_addons.cpp b/src/yuzu/configuration/configure_per_game_addons.cpp
+index 7d0e15accc..c43e61e632 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.cpp
++++ b/src/yuzu/configuration/configure_per_game_addons.cpp
+@@ -14,7 +14,6 @@
+ #include <QHeaderView>
+ #include <QMenu>
+ #include <QStandardItemModel>
+-#include <QStandardPaths>
+ #include <QString>
+ #include <QTimer>
+ #include <QTreeView>
+@@ -22,14 +21,11 @@
+ #include "common/common_types.h"
+ #include "common/fs/fs.h"
+ #include "common/fs/path_util.h"
+-#include "configuration/addon/mod_select_dialog.h"
+ #include "core/core.h"
+ #include "core/file_sys/patch_manager.h"
++#include "core/file_sys/xts_archive.h"
+ #include "core/loader/loader.h"
+-#include "frontend_common/mod_manager.h"
+-#include "qt_common/abstract/frontend.h"
+ #include "qt_common/config/uisettings.h"
+-#include "qt_common/util/mod.h"
+ #include "ui_configure_per_game_addons.h"
+ #include "yuzu/configuration/configure_input.h"
+ #include "yuzu/configuration/configure_per_game_addons.h"
+@@ -43,14 +39,14 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
+     item_model = new QStandardItemModel(tree_view);
+     tree_view->setModel(item_model);
+     tree_view->setAlternatingRowColors(true);
+-    tree_view->setSelectionMode(QHeaderView::ExtendedSelection);
++    tree_view->setSelectionMode(QHeaderView::SingleSelection);
+     tree_view->setSelectionBehavior(QHeaderView::SelectRows);
+     tree_view->setVerticalScrollMode(QHeaderView::ScrollPerPixel);
+     tree_view->setHorizontalScrollMode(QHeaderView::ScrollPerPixel);
+     tree_view->setSortingEnabled(true);
+     tree_view->setEditTriggers(QHeaderView::NoEditTriggers);
+     tree_view->setUniformRowHeights(true);
+-    tree_view->setContextMenuPolicy(Qt::CustomContextMenu);
++    tree_view->setContextMenuPolicy(Qt::NoContextMenu);
+ 
+     item_model->insertColumns(0, 2);
+     item_model->setHeaderData(0, Qt::Horizontal, tr("Patch Name"));
+@@ -76,12 +72,6 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
+             &ConfigurePerGameAddons::OnItemChanged);
+     connect(item_model, &QStandardItemModel::itemChanged,
+             [] { UISettings::values.is_game_list_reload_pending.exchange(true); });
+-
+-    connect(ui->folder, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModFolder);
+-    connect(ui->zip, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModZip);
+-
+-    connect(tree_view, &QTreeView::customContextMenuRequested, this,
+-            &ConfigurePerGameAddons::showContextMenu);
+ }
+ 
+ ConfigurePerGameAddons::~ConfigurePerGameAddons() = default;
+@@ -140,146 +130,6 @@ void ConfigurePerGameAddons::SetTitleId(u64 id) {
+     this->title_id = id;
+ }
+ 
+-void ConfigurePerGameAddons::InstallMods(const QStringList& mods) {
+-    QStringList failed;
+-    for (const auto& mod : mods) {
+-        if (FrontendCommon::InstallMod(mod.toStdString(), title_id, true) ==
+-            FrontendCommon::Failed) {
+-            failed << QFileInfo(mod).baseName();
+-        }
+-    }
+-
+-    if (failed.empty()) {
+-        QtCommon::Frontend::Information(tr("Mod Install Succeeded"),
+-                                        tr("Successfully installed all mods."));
+-
+-        item_model->removeRows(0, item_model->rowCount());
+-        list_items.clear();
+-        LoadConfiguration();
+-
+-        UISettings::values.is_game_list_reload_pending.exchange(true);
+-    } else {
+-        QtCommon::Frontend::Critical(
+-            tr("Mod Install Failed"),
+-            tr("Failed to install the following mods:\n\t%1\nCheck the log for details.")
+-                .arg(failed.join(QStringLiteral("\n\t"))));
+-    }
+-}
+-
+-void ConfigurePerGameAddons::InstallModPath(const QString& path, const QString& fallbackName) {
+-    const auto mods = QtCommon::Mod::GetModFolders(path, fallbackName);
+-
+-    if (mods.size() > 1) {
+-        ModSelectDialog* dialog = new ModSelectDialog(mods, this);
+-        connect(dialog, &ModSelectDialog::modsSelected, this, &ConfigurePerGameAddons::InstallMods);
+-        dialog->show();
+-    } else if (!mods.empty()) {
+-        InstallMods(mods);
+-    }
+-}
+-
+-void ConfigurePerGameAddons::InstallModFolder() {
+-    const auto path = QtCommon::Frontend::GetExistingDirectory(
+-        tr("Mod Folder"), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+-    if (path.isEmpty()) {
+-        return;
+-    }
+-
+-    InstallModPath(path);
+-}
+-
+-void ConfigurePerGameAddons::InstallModZip() {
+-    // TODO(crueter): use GetOpenFileName to allow select multiple ZIPs
+-    const auto path = QtCommon::Frontend::GetOpenFileName(
+-        tr("Zipped Mod Location"),
+-        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+-        tr("Zipped Archives (*.zip)"));
+-    if (path.isEmpty()) {
+-        return;
+-    }
+-
+-    const QString extracted = QtCommon::Mod::ExtractMod(path);
+-    if (!extracted.isEmpty())
+-        InstallModPath(extracted, QFileInfo(path).baseName());
+-}
+-
+-void ConfigurePerGameAddons::AddonDeleteRequested(QList<QModelIndex> selected) {
+-    QList<QModelIndex> filtered;
+-    for (const QModelIndex& index : selected) {
+-        if (!index.data(PATCH_LOCATION).toString().isEmpty())
+-            filtered << index;
+-    }
+-
+-    if (filtered.empty()) {
+-        QtCommon::Frontend::Critical(tr("Invalid Selection"),
+-                                     tr("Only mods, cheats, and patches can be deleted.\nTo delete "
+-                                        "NAND-installed updates, right-click the game in the game "
+-                                        "list and click Remove -> Remove Installed Update."));
+-        return;
+-    }
+-
+-    const auto header = tr("You are about to delete the following installed mods:\n");
+-    QString selected_str;
+-    for (const QModelIndex& index : filtered) {
+-        selected_str = selected_str % index.data().toString() % QStringLiteral("\n");
+-    }
+-
+-    const auto footer = tr("\nOnce deleted, these can NOT be recovered. Are you 100% sure "
+-                           "you want to delete them?");
+-
+-    QString caption = header % selected_str % footer;
+-
+-    auto choice = QtCommon::Frontend::Warning(tr("Delete add-on(s)?"), caption,
+-                                              QtCommon::Frontend::StandardButton::Yes |
+-                                                  QtCommon::Frontend::StandardButton::No);
+-
+-    if (choice == QtCommon::Frontend::StandardButton::No)
+-        return;
+-
+-    for (const QModelIndex& index : filtered) {
+-        std::filesystem::remove_all(index.data(PATCH_LOCATION).toString().toStdString());
+-    }
+-
+-    QtCommon::Frontend::Information(tr("Successfully deleted"),
+-                                    tr("Successfully deleted all selected mods."));
+-
+-    item_model->removeRows(0, item_model->rowCount());
+-    list_items.clear();
+-    LoadConfiguration();
+-
+-    UISettings::values.is_game_list_reload_pending.exchange(true);
+-}
+-
+-void ConfigurePerGameAddons::showContextMenu(const QPoint& pos) {
+-    const QModelIndex index = tree_view->indexAt(pos);
+-    auto selected = tree_view->selectionModel()->selectedRows();
+-    if (index.isValid() && selected.empty()) {
+-        QModelIndex idx = item_model->index(index.row(), 0);
+-        if (idx.isValid())
+-            selected << idx;
+-    }
+-
+-    if (selected.empty())
+-        return;
+-
+-    QMenu menu(this);
+-
+-    QAction* remove = menu.addAction(tr("&Delete"));
+-    connect(remove, &QAction::triggered, this,
+-            [this, selected]() { AddonDeleteRequested(selected); });
+-
+-    if (selected.length() == 1) {
+-        auto loc = selected.at(0).data(PATCH_LOCATION).toString();
+-        if (QFileInfo::exists(loc)) {
+-            QAction* open = menu.addAction(tr("&Open in File Manager"));
+-            connect(open, &QAction::triggered, this,
+-                    [selected, loc]() { QDesktopServices::openUrl(QUrl::fromLocalFile(loc)); });
+-        }
+-    }
+-
+-    menu.exec(tree_view->viewport()->mapToGlobal(pos));
+-}
+-
+ void ConfigurePerGameAddons::changeEvent(QEvent* event) {
+     if (event->type() == QEvent::LanguageChange) {
+         RetranslateUI();
+@@ -325,13 +175,8 @@ void ConfigurePerGameAddons::LoadConfiguration() {
+                                         patch.source == FileSys::PatchSource::External &&
+                                         patch.numeric_version != 0;
+ 
+-        const bool is_mod = patch.type == FileSys::PatchType::Mod;
+-
+         if (is_external_update) {
+-            first_item->setData(static_cast<quint32>(patch.numeric_version), NUMERIC_VERSION);
+-        } else if (is_mod) {
+-            // qDebug() << patch.location;
+-            first_item->setData(QString::fromStdString(patch.location), PATCH_LOCATION);
++            first_item->setData(static_cast<quint32>(patch.numeric_version), Qt::UserRole);
+         }
+ 
+         bool patch_disabled = false;
+diff --git a/src/yuzu/configuration/configure_per_game_addons.h b/src/yuzu/configuration/configure_per_game_addons.h
+index 9dd3b06928..af2e16422c 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.h
++++ b/src/yuzu/configuration/configure_per_game_addons.h
+@@ -10,7 +10,6 @@
+ #include <vector>
+ 
+ #include <QList>
+-#include <QWidget>
+ 
+ #include "core/file_sys/vfs/vfs_types.h"
+ 
+@@ -32,8 +31,6 @@ class ConfigurePerGameAddons : public QWidget {
+     Q_OBJECT
+ 
+ public:
+-    enum PatchData { NUMERIC_VERSION = Qt::UserRole, PATCH_LOCATION };
+-
+     explicit ConfigurePerGameAddons(Core::System& system_, QWidget* parent = nullptr);
+     ~ConfigurePerGameAddons() override;
+ 
+@@ -44,18 +41,6 @@ public:
+ 
+     void SetTitleId(u64 id);
+ 
+-public slots:
+-    void InstallMods(const QStringList& mods);
+-    void InstallModPath(const QString& path, const QString& fallbackName = {});
+-
+-    void InstallModFolder();
+-    void InstallModZip();
+-
+-    void AddonDeleteRequested(QList<QModelIndex> selected);
+-
+-protected:
+-    void showContextMenu(const QPoint& pos);
+-
+ private:
+     void changeEvent(QEvent* event) override;
+     void RetranslateUI();
+diff --git a/src/yuzu/configuration/configure_per_game_addons.ui b/src/yuzu/configuration/configure_per_game_addons.ui
+index 632f9d422b..f9cf6f2c31 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.ui
++++ b/src/yuzu/configuration/configure_per_game_addons.ui
+@@ -17,21 +17,7 @@
+    <string>Add-Ons</string>
+   </property>
+   <layout class="QGridLayout" name="gridLayout">
+-   <item row="1" column="0">
+-    <widget class="QPushButton" name="zip">
+-     <property name="text">
+-      <string>Import Mod from ZIP</string>
+-     </property>
+-    </widget>
+-   </item>
+-   <item row="1" column="1">
+-    <widget class="QPushButton" name="folder">
+-     <property name="text">
+-      <string>Import Mod from Folder</string>
+-     </property>
+-    </widget>
+-   </item>
+-   <item row="0" column="0" colspan="2">
++   <item row="0" column="0">
+     <widget class="QScrollArea" name="scrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+@@ -42,7 +28,7 @@
+         <x>0</x>
+         <y>0</y>
+         <width>380</width>
+-        <height>249</height>
++        <height>280</height>
+        </rect>
+       </property>
+      </widget>
+diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
+index 2e7cef0953..5edd241189 100644
+--- a/src/yuzu/main_window.cpp
++++ b/src/yuzu/main_window.cpp
+@@ -88,7 +88,6 @@
+ #include "qt_common/util/content.h"
+ #include "qt_common/util/fs.h"
+ #include "qt_common/util/meta.h"
+-#include "qt_common/util/mod.h"
+ #include "qt_common/util/path.h"
+ 
+ // These are wrappers to avoid the calls to CreateDirectory and CreateFile because of the Windows
+@@ -3828,7 +3827,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+     Settings::SetConfiguringGlobal(false);
+     ConfigurePerGame dialog(this, title_id, file_name, vk_device_records, *QtCommon::system);
+     dialog.LoadFromFile(v_file);
+-
+     const auto result = dialog.exec();
+ 
+     if (result != QDialog::Accepted && !UISettings::values.configuration_applied) {
+@@ -3840,7 +3838,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+ 
+     const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
+     if (reload) {
+-        OnGameListRefresh();
++        game_list->PopulateAsync(UISettings::values.game_dirs);
+     }
+ 
+     // Do not cause the global config to write local settings into the config file
