@@ -72,22 +72,6 @@ index 399fbe67a0..3c63312e31 100644
  
  if (UNIX)
      target_sources(qt_common PRIVATE gui_settings.cpp gui_settings.h)
-diff --git a/src/qt_common/abstract/frontend.h b/src/qt_common/abstract/frontend.h
-index 9b70f6849e..5a30e6849e 100644
---- a/src/qt_common/abstract/frontend.h
-+++ b/src/qt_common/abstract/frontend.h
-@@ -107,11 +107,5 @@ const QString GetSaveFileName(const QString& title, const QString& dir, const QS
- const QString GetExistingDirectory(const QString& caption = QString(),
-                                    const QString& dir = QString());
- 
--int Choice(const QString& title = QString(), const QString& caption = QString(),
--           const QStringList& options = {});
--
--const QString GetTextInput(const QString& title = QString(), const QString& caption = QString(),
--                           const QString& defaultText = QString());
--
- } // namespace QtCommon::Frontend
- #endif // FRONTEND_H
 diff --git a/src/yuzu/CMakeLists.txt b/src/yuzu/CMakeLists.txt
 index 1ed1fdff2a..eaa44b2a3a 100644
 --- a/src/yuzu/CMakeLists.txt
