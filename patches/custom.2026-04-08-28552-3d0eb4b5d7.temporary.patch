@@ -2506,7 +2506,7 @@ index 226619d8d6..fc4bda3022 100644
      AllocateWorkerCommandBuffer();
      worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 0e4c274d94..508f3dc969 100644
+index 0e4c274d94..d12444ec40 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
 @@ -49,7 +49,7 @@ static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
@@ -2518,7 +2518,19 @@ index 0e4c274d94..508f3dc969 100644
              return mode;
          }
          switch (mode) {
-@@ -179,9 +179,18 @@ bool Swapchain::AcquireNextImage() {
+@@ -65,8 +65,10 @@ static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
+             return mode;
+         }
+     }();
++    if (setting == Settings::VSyncMode::Immediate && !has_imm) {
++        setting = Settings::VSyncMode::Mailbox;
++    }
+     if ((setting == Settings::VSyncMode::Mailbox && !has_mailbox) ||
+-        (setting == Settings::VSyncMode::Immediate && !has_imm) ||
+         (setting == Settings::VSyncMode::FifoRelaxed && !has_fifo_relaxed)) {
+         setting = Settings::VSyncMode::Fifo;
+     }
+@@ -179,9 +181,18 @@ bool Swapchain::AcquireNextImage() {
      case Settings::FramePacingMode::Target_Auto:
          scheduler.Wait(resource_ticks[image_index]);
          break;
@@ -2537,7 +2549,7 @@ index 0e4c274d94..508f3dc969 100644
      case Settings::FramePacingMode::Target_60:
          scheduler.Wait(resource_ticks[image_index], 60.0);
          break;
-@@ -195,13 +204,18 @@ bool Swapchain::AcquireNextImage() {
+@@ -195,13 +206,18 @@ bool Swapchain::AcquireNextImage() {
      };
  
  #ifdef __ANDROID__
@@ -3491,6 +3503,360 @@ index 90eeba6978..c3bd5ef2ec 100644
             <property name="leftMargin">
              <number>0</number>
             </property>
+diff --git a/src/yuzu/configuration/configure_cpu_debug.cpp b/src/yuzu/configuration/configure_cpu_debug.cpp
+deleted file mode 100644
+index 8cfef0cc1c..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.cpp
++++ /dev/null
+@@ -1,78 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#include "common/settings.h"
+-#include "core/core.h"
+-#include "ui_configure_cpu_debug.h"
+-#include "yuzu/configuration/configure_cpu_debug.h"
+-
+-ConfigureCpuDebug::ConfigureCpuDebug(const Core::System& system_, QWidget* parent)
+-    : QWidget(parent), ui{std::make_unique<Ui::ConfigureCpuDebug>()}, system{system_} {
+-    ui->setupUi(this);
+-
+-    SetConfiguration();
+-}
+-
+-ConfigureCpuDebug::~ConfigureCpuDebug() = default;
+-
+-void ConfigureCpuDebug::SetConfiguration() {
+-    const bool runtime_lock = !system.IsPoweredOn();
+-
+-    ui->cpuopt_page_tables->setEnabled(runtime_lock);
+-    ui->cpuopt_page_tables->setChecked(Settings::values.cpuopt_page_tables.GetValue());
+-    ui->cpuopt_block_linking->setEnabled(runtime_lock);
+-    ui->cpuopt_block_linking->setChecked(Settings::values.cpuopt_block_linking.GetValue());
+-    ui->cpuopt_return_stack_buffer->setEnabled(runtime_lock);
+-    ui->cpuopt_return_stack_buffer->setChecked(
+-        Settings::values.cpuopt_return_stack_buffer.GetValue());
+-    ui->cpuopt_fast_dispatcher->setEnabled(runtime_lock);
+-    ui->cpuopt_fast_dispatcher->setChecked(Settings::values.cpuopt_fast_dispatcher.GetValue());
+-    ui->cpuopt_context_elimination->setEnabled(runtime_lock);
+-    ui->cpuopt_context_elimination->setChecked(
+-        Settings::values.cpuopt_context_elimination.GetValue());
+-    ui->cpuopt_const_prop->setEnabled(runtime_lock);
+-    ui->cpuopt_const_prop->setChecked(Settings::values.cpuopt_const_prop.GetValue());
+-    ui->cpuopt_misc_ir->setEnabled(runtime_lock);
+-    ui->cpuopt_misc_ir->setChecked(Settings::values.cpuopt_misc_ir.GetValue());
+-    ui->cpuopt_reduce_misalign_checks->setEnabled(runtime_lock);
+-    ui->cpuopt_reduce_misalign_checks->setChecked(
+-        Settings::values.cpuopt_reduce_misalign_checks.GetValue());
+-    ui->cpuopt_fastmem->setEnabled(runtime_lock);
+-    ui->cpuopt_fastmem->setChecked(Settings::values.cpuopt_fastmem.GetValue());
+-    ui->cpuopt_fastmem_exclusives->setEnabled(runtime_lock);
+-    ui->cpuopt_fastmem_exclusives->setChecked(
+-        Settings::values.cpuopt_fastmem_exclusives.GetValue());
+-    ui->cpuopt_recompile_exclusives->setEnabled(runtime_lock);
+-    ui->cpuopt_recompile_exclusives->setChecked(
+-        Settings::values.cpuopt_recompile_exclusives.GetValue());
+-    ui->cpuopt_ignore_memory_aborts->setEnabled(runtime_lock);
+-    ui->cpuopt_ignore_memory_aborts->setChecked(
+-        Settings::values.cpuopt_ignore_memory_aborts.GetValue());
+-}
+-
+-void ConfigureCpuDebug::ApplyConfiguration() {
+-    Settings::values.cpuopt_page_tables = ui->cpuopt_page_tables->isChecked();
+-    Settings::values.cpuopt_block_linking = ui->cpuopt_block_linking->isChecked();
+-    Settings::values.cpuopt_return_stack_buffer = ui->cpuopt_return_stack_buffer->isChecked();
+-    Settings::values.cpuopt_fast_dispatcher = ui->cpuopt_fast_dispatcher->isChecked();
+-    Settings::values.cpuopt_context_elimination = ui->cpuopt_context_elimination->isChecked();
+-    Settings::values.cpuopt_const_prop = ui->cpuopt_const_prop->isChecked();
+-    Settings::values.cpuopt_misc_ir = ui->cpuopt_misc_ir->isChecked();
+-    Settings::values.cpuopt_reduce_misalign_checks = ui->cpuopt_reduce_misalign_checks->isChecked();
+-    Settings::values.cpuopt_fastmem = ui->cpuopt_fastmem->isChecked();
+-    Settings::values.cpuopt_fastmem_exclusives = ui->cpuopt_fastmem_exclusives->isChecked();
+-    Settings::values.cpuopt_recompile_exclusives = ui->cpuopt_recompile_exclusives->isChecked();
+-    Settings::values.cpuopt_ignore_memory_aborts = ui->cpuopt_ignore_memory_aborts->isChecked();
+-}
+-
+-void ConfigureCpuDebug::changeEvent(QEvent* event) {
+-    if (event->type() == QEvent::LanguageChange) {
+-        RetranslateUI();
+-    }
+-
+-    QWidget::changeEvent(event);
+-}
+-
+-void ConfigureCpuDebug::RetranslateUI() {
+-    ui->retranslateUi(this);
+-}
+diff --git a/src/yuzu/configuration/configure_cpu_debug.h b/src/yuzu/configuration/configure_cpu_debug.h
+deleted file mode 100644
+index 566ae7ecce..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.h
++++ /dev/null
+@@ -1,35 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#pragma once
+-
+-#include <memory>
+-#include <QWidget>
+-
+-namespace Core {
+-class System;
+-}
+-
+-namespace Ui {
+-class ConfigureCpuDebug;
+-}
+-
+-class ConfigureCpuDebug : public QWidget {
+-    Q_OBJECT
+-
+-public:
+-    explicit ConfigureCpuDebug(const Core::System& system_, QWidget* parent = nullptr);
+-    ~ConfigureCpuDebug() override;
+-
+-    void ApplyConfiguration();
+-
+-private:
+-    void changeEvent(QEvent* event) override;
+-    void RetranslateUI();
+-
+-    void SetConfiguration();
+-
+-    std::unique_ptr<Ui::ConfigureCpuDebug> ui;
+-
+-    const Core::System& system;
+-};
+diff --git a/src/yuzu/configuration/configure_cpu_debug.ui b/src/yuzu/configuration/configure_cpu_debug.ui
+deleted file mode 100644
+index 3010f7fad3..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.ui
++++ /dev/null
+@@ -1,223 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<ui version="4.0">
+- <class>ConfigureCpuDebug</class>
+- <widget class="QWidget" name="ConfigureCpuDebug">
+-  <property name="geometry">
+-   <rect>
+-    <x>0</x>
+-    <y>0</y>
+-    <width>592</width>
+-    <height>503</height>
+-   </rect>
+-  </property>
+-  <property name="windowTitle">
+-   <string>Form</string>
+-  </property>
+-  <property name="accessibleName">
+-   <string>CPU</string>
+-  </property>
+-  <layout class="QVBoxLayout">
+-   <item>
+-    <layout class="QVBoxLayout">
+-     <item>
+-      <widget class="QGroupBox" name="groupBox">
+-       <property name="title">
+-        <string>Toggle CPU Optimizations</string>
+-       </property>
+-       <layout class="QVBoxLayout">
+-        <item>
+-         <widget class="QLabel" name="label">
+-          <property name="text">
+-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;For debugging only.&lt;/span&gt;&lt;br/&gt;If you're not sure what these do, keep all of these enabled. &lt;br/&gt;These settings, when disabled, only take effect when CPU Debugging is enabled. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+-          </property>
+-          <property name="wordWrap">
+-           <bool>false</bool>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_page_tables">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it inlines accesses to PageTable::pointers into emitted code.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all memory accesses to go through the Memory::Read/Memory::Write functions.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable inline page tables</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_block_linking">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;This optimization avoids dispatcher lookups by allowing emitted basic blocks to jump directly to other basic blocks if the destination PC is static.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable block linking</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_return_stack_buffer">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;This optimization avoids dispatcher lookups by keeping track potential return addresses of BL instructions. This approximates what happens with a return stack buffer on a real CPU.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable return stack buffer</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fast_dispatcher">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enable a two-tiered dispatch system. A faster dispatcher written in assembly has a small MRU cache of jump destinations is used first. If that fails, dispatch falls back to the slower C++ dispatcher.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable fast dispatcher</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_context_elimination">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables an IR optimization that reduces unnecessary accesses to the CPU context structure.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable context elimination</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_const_prop">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables IR optimizations that involve constant propagation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable constant propagation</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_misc_ir">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables miscellaneous IR optimizations.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable miscellaneous optimizations</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_reduce_misalign_checks">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;When enabled, a misalignment is only triggered when an access crosses a page boundary.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;When disabled, a misalignment is triggered on all misaligned accesses.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable misalignment check reduction</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fastmem">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it causes guest memory reads/writes to be done directly into memory and make use of Host's MMU.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all memory accesses to use Software MMU Emulation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable Host MMU Emulation (general memory instructions)</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fastmem_exclusives">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up exclusive memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it causes guest exclusive memory reads/writes to be done directly into memory and make use of Host's MMU.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all exclusive memory accesses to use Software MMU Emulation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable Host MMU Emulation (exclusive memory instructions)</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_recompile_exclusives">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up exclusive memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it reduces the overhead of fastmem failure of exclusive memory accesses.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable recompilation of exclusive memory instructions</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_ignore_memory_aborts">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by allowing invalid memory accesses to succeed.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it reduces the overhead of all memory accesses and has no impact on programs that don't access invalid memory.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable fallbacks for invalid memory accesses</string>
+-          </property>
+-         </widget>
+-        </item>
+-       </layout>
+-      </widget>
+-     </item>
+-    </layout>
+-   </item>
+-   <item>
+-    <spacer name="verticalSpacer">
+-     <property name="orientation">
+-      <enum>Qt::Vertical</enum>
+-     </property>
+-     <property name="sizeHint" stdset="0">
+-      <size>
+-       <width>20</width>
+-       <height>40</height>
+-      </size>
+-     </property>
+-    </spacer>
+-   </item>
+-   <item>
+-    <widget class="QLabel" name="label_disable_info">
+-     <property name="text">
+-      <string>CPU settings are available only when game is not running.</string>
+-     </property>
+-     <property name="wordWrap">
+-      <bool>true</bool>
+-     </property>
+-    </widget>
+-   </item>
+-  </layout>
+- </widget>
+- <resources/>
+- <connections/>
+-</ui>
 diff --git a/src/yuzu/configuration/configure_debug.cpp b/src/yuzu/configuration/configure_debug.cpp
 index fadaf1c01a..853acce91f 100644
 --- a/src/yuzu/configuration/configure_debug.cpp
