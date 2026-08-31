@@ -1,929 +1,444 @@
-diff --git a/src/core/file_sys/patch_manager.cpp b/src/core/file_sys/patch_manager.cpp
-index 6af926eac0..c3eb3bb035 100644
---- a/src/core/file_sys/patch_manager.cpp
-+++ b/src/core/file_sys/patch_manager.cpp
-@@ -908,8 +908,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
-                     .type = PatchType::Mod,
-                     .program_id = title_id,
-                     .title_id = title_id,
--                    .source = PatchSource::Unknown,
--                    .location = f->GetFullPath(),
-+                    .source = PatchSource::Unknown
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp b/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
+index c2511942d9..62a82dce9d 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
+@@ -14,6 +14,38 @@
+ 
+ namespace Shader::Backend::SPIRV {
+ namespace {
++class DescriptorIndex {
++public:
++    explicit DescriptorIndex(EmitContext& ctx, const IR::Value& index)
++        : id{index.IsImmediate() ? ctx.Const(index.U32()) : ctx.Def(index)},
++          is_non_uniform{ctx.profile.support_sampled_image_array_nonuniform_indexing &&
++                         !index.IsImmediate()} {
++        if (!is_non_uniform) {
++            return;
++        }
++        if (ctx.profile.supported_spirv < 0x00010400) {
++            ctx.AddExtension("SPV_EXT_descriptor_indexing");
++        }
++        ctx.AddCapability(spv::Capability::ShaderNonUniform);
++        ctx.AddCapability(spv::Capability::SampledImageArrayNonUniformIndexing);
++        Decorate(ctx, id);
++    }
++
++    Id Value() const {
++        return id;
++    }
++
++    void Decorate(EmitContext& ctx, Id object) const {
++        if (is_non_uniform) {
++            ctx.Decorate(object, spv::Decoration::NonUniform);
++        }
++    }
++
++private:
++    Id id;
++    bool is_non_uniform;
++};
++
+ class ImageOperands {
+ public:
+     [[maybe_unused]] static constexpr bool ImageSampleOffsetAllowed = false;
+@@ -189,8 +221,12 @@ private:
+ Id Texture(EmitContext& ctx, IR::TextureInstInfo info, [[maybe_unused]] const IR::Value& index) {
+     const TextureDefinition& def{ctx.textures.at(info.descriptor_index)};
+     if (def.count > 1) {
+-        const Id pointer{ctx.OpAccessChain(def.pointer_type, def.id, ctx.Def(index))};
+-        return ctx.OpLoad(def.sampled_type, pointer);
++        const DescriptorIndex idx{ctx, index};
++        const Id pointer{ctx.OpAccessChain(def.pointer_type, def.id, idx.Value())};
++        idx.Decorate(ctx, pointer);
++        const Id object{ctx.OpLoad(def.sampled_type, pointer)};
++        idx.Decorate(ctx, object);
++        return object;
+     } else {
+         return ctx.OpLoad(def.sampled_type, def.id);
+     }
+@@ -208,9 +244,14 @@ Id TextureImage(EmitContext& ctx, IR::TextureInstInfo info, const IR::Value& ind
+     } else {
+         const TextureDefinition& def{ctx.textures.at(info.descriptor_index)};
+         if (def.count > 1) {
+-            const Id idx{index.IsImmediate() ? ctx.Const(index.U32()) : ctx.Def(index)};
+-            const Id ptr{ctx.OpAccessChain(def.pointer_type, def.id, idx)};
+-            return ctx.OpImage(def.image_type, ctx.OpLoad(def.sampled_type, ptr));
++            const DescriptorIndex idx{ctx, index};
++            const Id ptr{ctx.OpAccessChain(def.pointer_type, def.id, idx.Value())};
++            idx.Decorate(ctx, ptr);
++            const Id object{ctx.OpLoad(def.sampled_type, ptr)};
++            idx.Decorate(ctx, object);
++            const Id image{ctx.OpImage(def.image_type, object)};
++            idx.Decorate(ctx, image);
++            return image;
+         }
+         return ctx.OpImage(def.image_type, ctx.OpLoad(def.sampled_type, def.id));
+     }
+diff --git a/src/shader_recompiler/host_translate_info.h b/src/shader_recompiler/host_translate_info.h
+index 1b53404fcc..4a9261d5f5 100644
+--- a/src/shader_recompiler/host_translate_info.h
++++ b/src/shader_recompiler/host_translate_info.h
+@@ -17,6 +20,9 @@ struct HostTranslateInfo {
+     bool support_snorm_render_buffer{};  ///< True when the device supports SNORM render buffers
+     bool support_viewport_index_layer{}; ///< True when the device supports gl_Layer in VS
+     u32 min_ssbo_alignment{};            ///< Minimum alignment supported by the device for SSBOs
++    u32 max_per_stage_descriptor_sampled_images{1024}; ///< maximum sampled descriptors per stage
++    u32 max_per_stage_resources{4096};                 ///< maximum resources per stage
++    u32 max_descriptor_set_sampled_images{1024};        ///< maximum sampled descriptors per set
+     bool support_geometry_shader_passthrough{}; ///< True when the device supports geometry
+                                                 ///< passthrough shaders
+     bool support_conditional_barrier{}; ///< True when the device supports barriers in conditional
+diff --git a/src/shader_recompiler/ir_opt/texture_pass.cpp b/src/shader_recompiler/ir_opt/texture_pass.cpp
+index 20b8591072..55b6f7213c 100644
+--- a/src/shader_recompiler/ir_opt/texture_pass.cpp
++++ b/src/shader_recompiler/ir_opt/texture_pass.cpp
+@@ -32,6 +32,71 @@ using TextureInstVector = boost::container::small_vector<TextureInst, 24>;
+ 
+ constexpr u32 DESCRIPTOR_SIZE = 8;
+ constexpr u32 DESCRIPTOR_SIZE_SHIFT = static_cast<u32>(std::countr_zero(DESCRIPTOR_SIZE));
++constexpr u32 DYNAMIC_DESCRIPTOR_CBUF_BYTES = 16 * 1024;
++constexpr u32 MAX_DYNAMIC_DESCRIPTOR_COUNT = 1024;
++
++u32 DynamicDescriptorSizeShift(const IR::U32& dynamic_offset) {
++    const IR::Inst* const inst{dynamic_offset.InstRecursive()};
++    if (!inst || inst->GetOpcode() != IR::Opcode::ShiftLeftLogical32) {
++        return DESCRIPTOR_SIZE_SHIFT;
++    }
++    const IR::Value shift{inst->Arg(1)};
++    if (!shift.IsImmediate()) {
++        return DESCRIPTOR_SIZE_SHIFT;
++    }
++    const u32 size_shift{shift.U32()};
++    return size_shift >= DESCRIPTOR_SIZE_SHIFT && size_shift < 31 ? size_shift
++                                                                  : DESCRIPTOR_SIZE_SHIFT;
++}
++
++u32 DynamicDescriptorCount(u32 base_offset, u32 size_shift) {
++    if (size_shift >= 31 || base_offset >= DYNAMIC_DESCRIPTOR_CBUF_BYTES) {
++        return 1;
++    }
++    const u32 stride{1U << size_shift};
++    const u32 available{DYNAMIC_DESCRIPTOR_CBUF_BYTES - base_offset};
++    if (available < DESCRIPTOR_SIZE) {
++        return 1;
++    }
++    const u32 available_count{1U + (available - DESCRIPTOR_SIZE) / stride};
++    return std::min(MAX_DYNAMIC_DESCRIPTOR_COUNT, available_count);
++}
++
++u32 SaturatingSub(u32 lhs, u32 rhs) {
++    return lhs > rhs ? lhs - rhs : 0;
++}
++
++template <typename Descriptors>
++u32 StaticDescriptorCount(const Descriptors& descriptors) {
++    u32 count{};
++    for (const auto& desc : descriptors) {
++        if (desc.count <= 1) {
++            count += desc.count;
++        }
++    }
++    return count;
++}
++
++u32 DynamicSampledTextureCap(const Info& info, const HostTranslateInfo& host_info,
++                             u32 dynamic_arrays) {
++    if (dynamic_arrays == 0) {
++        return MAX_DYNAMIC_DESCRIPTOR_COUNT;
++    }
++    const u32 sampled_static_count{StaticDescriptorCount(info.texture_buffer_descriptors) +
++                                   StaticDescriptorCount(info.texture_descriptors)};
++    const u32 resource_static_count{
++        NumDescriptors(info.constant_buffer_descriptors) +
++        NumDescriptors(info.storage_buffers_descriptors) + sampled_static_count +
++        NumDescriptors(info.image_buffer_descriptors) + NumDescriptors(info.image_descriptors)};
++    const u32 sampled_limit{std::min(host_info.max_per_stage_descriptor_sampled_images,
++                                     host_info.max_descriptor_set_sampled_images)};
++    const u32 sampled_budget{SaturatingSub(sampled_limit, sampled_static_count)};
++    const u32 resource_budget{SaturatingSub(host_info.max_per_stage_resources,
++                                            resource_static_count)};
++    const u32 sampled_cap{sampled_budget / dynamic_arrays};
++    const u32 resource_cap{resource_budget / dynamic_arrays};
++    return std::max(1U, std::min({MAX_DYNAMIC_DESCRIPTOR_COUNT, sampled_cap, resource_cap}));
++}
+ 
+ IR::Opcode IndexedInstruction(const IR::Inst& inst) {
+     switch (inst.GetOpcode()) {
+@@ -109,6 +174,39 @@ IR::Opcode IndexedInstruction(const IR::Inst& inst) {
+     }
+ }
+ 
++bool IsStorageImageOpcode(IR::Opcode opcode) {
++    switch (opcode) {
++    case IR::Opcode::ImageRead:
++    case IR::Opcode::ImageAtomicIAdd32:
++    case IR::Opcode::ImageAtomicSMin32:
++    case IR::Opcode::ImageAtomicUMin32:
++    case IR::Opcode::ImageAtomicSMax32:
++    case IR::Opcode::ImageAtomicUMax32:
++    case IR::Opcode::ImageAtomicInc32:
++    case IR::Opcode::ImageAtomicDec32:
++    case IR::Opcode::ImageAtomicAnd32:
++    case IR::Opcode::ImageAtomicOr32:
++    case IR::Opcode::ImageAtomicXor32:
++    case IR::Opcode::ImageAtomicExchange32:
++    case IR::Opcode::ImageWrite:
++        return true;
++    default:
++        return false;
++    }
++}
++
++u32 DynamicSampledTextureArrayCount(const TextureInstVector& to_replace) {
++    u32 count{};
++    for (const TextureInst& inst : to_replace) {
++        const auto flags{inst.inst->Flags<IR::TextureInstInfo>()};
++        if (inst.cbuf.count > 1 && !IsStorageImageOpcode(IndexedInstruction(*inst.inst)) &&
++            flags.type != TextureType::Buffer) {
++            ++count;
++        }
++    }
++    return count;
++}
++
+ bool IsBindless(const IR::Inst& inst) {
+     switch (inst.GetOpcode()) {
+     case IR::Opcode::BindlessImageSampleImplicitLod:
+@@ -354,6 +452,7 @@ std::optional<ConstBufferAddr> TryGetConstBuffer(const IR::Inst* inst, Environme
+     } else {
+         return std::nullopt;
+     }
++    const u32 size_shift{DynamicDescriptorSizeShift(dynamic_offset)};
+     return ConstBufferAddr{
+         .index = index.U32(),
+         .offset = base_offset,
+@@ -362,7 +461,7 @@ std::optional<ConstBufferAddr> TryGetConstBuffer(const IR::Inst* inst, Environme
+         .secondary_offset = 0,
+         .secondary_shift_left = 0,
+         .dynamic_offset = dynamic_offset,
+-        .count = 8,
++        .count = DynamicDescriptorCount(base_offset, size_shift),
+         .has_secondary = false,
+     };
+ }
+@@ -589,6 +688,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+         program.info.texture_descriptors,
+         program.info.image_descriptors,
+     };
++    const u32 sampled_dynamic_cap{
++        DynamicSampledTextureCap(program.info, host_info, DynamicSampledTextureArrayCount(to_replace))};
+     for (TextureInst& texture_inst : to_replace) {
+         // TODO: Handle arrays
+         IR::Inst* const inst{texture_inst.inst};
+@@ -632,6 +733,9 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+             break;
+         }
+         u32 index;
++        const u32 size_shift{cbuf.count > 1 ? DynamicDescriptorSizeShift(cbuf.dynamic_offset)
++                                            : DESCRIPTOR_SIZE_SHIFT};
++        u32 count{cbuf.count};
+         switch (inst->GetOpcode()) {
+         case IR::Opcode::ImageRead:
+         case IR::Opcode::ImageAtomicIAdd32:
+@@ -660,8 +764,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .is_integer = is_integer,
+                     .cbuf_index = cbuf.index,
+                     .cbuf_offset = cbuf.offset,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             } else {
+                 index = descriptors.Add(ImageDescriptor{
+@@ -672,8 +776,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .is_integer = is_integer,
+                     .cbuf_index = cbuf.index,
+                     .cbuf_offset = cbuf.offset,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
                  });
              }
+             break;
+@@ -688,10 +792,11 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .secondary_cbuf_index = cbuf.secondary_index,
+                     .secondary_cbuf_offset = cbuf.secondary_offset,
+                     .secondary_shift_left = cbuf.secondary_shift_left,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             } else {
++                count = std::min(count, sampled_dynamic_cap);
+                 index = descriptors.Add(TextureDescriptor{
+                     .type = flags.type,
+                     .is_depth = flags.is_depth != 0,
+@@ -703,8 +808,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .secondary_cbuf_index = cbuf.secondary_index,
+                     .secondary_cbuf_offset = cbuf.secondary_offset,
+                     .secondary_shift_left = cbuf.secondary_shift_left,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             }
+             break;
+@@ -712,12 +817,12 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+         flags.descriptor_index.Assign(index);
+         inst->SetFlags(flags);
  
-@@ -956,8 +955,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
-                            .type = PatchType::Mod,
-                            .program_id = title_id,
-                            .title_id = title_id,
--                           .source = PatchSource::Unknown,
--                           .location = mod->GetFullPath()});
-+                           .source = PatchSource::Unknown});
+-        if (cbuf.count > 1) {
++        if (count > 1) {
+             const auto insert_point{IR::Block::InstructionList::s_iterator_to(*inst)};
+             IR::IREmitter ir{*texture_inst.block, insert_point};
+-            const IR::U32 shift{ir.Imm32(DESCRIPTOR_SIZE_SHIFT)};
++            const IR::U32 shift{ir.Imm32(size_shift)};
+             inst->SetArg(0, ir.UMin(ir.ShiftRightLogical(cbuf.dynamic_offset, shift),
+-                        ir.Imm32(DESCRIPTOR_SIZE - 1)));
++                        ir.Imm32(count - 1)));
+         } else {
+             inst->SetArg(0, IR::Value{});
          }
-     }
+diff --git a/src/shader_recompiler/profile.h b/src/shader_recompiler/profile.h
+index 90e46bb1ba..ff19f0710f 100644
+--- a/src/shader_recompiler/profile.h
++++ b/src/shader_recompiler/profile.h
+@@ -1,3 +1,6 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
++// SPDX-License-Identifier: GPL-3.0-or-later
++
+ // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
  
-diff --git a/src/core/file_sys/patch_manager.h b/src/core/file_sys/patch_manager.h
-index 755d924fd4..c326d433cc 100644
---- a/src/core/file_sys/patch_manager.h
-+++ b/src/core/file_sys/patch_manager.h
-@@ -47,7 +47,6 @@ struct Patch {
-     u64 program_id;
-     u64 title_id;
-     PatchSource source;
--    std::string location;
-     u32 numeric_version{0};
- };
+@@ -45,6 +48,7 @@ struct Profile {
+     bool support_scaled_attributes{};
+     bool support_multi_viewport{};
+     bool support_geometry_streams{};
++    bool support_sampled_image_array_nonuniform_indexing{};
  
-diff --git a/src/frontend_common/CMakeLists.txt b/src/frontend_common/CMakeLists.txt
-index f9b3805939..237258e89b 100644
---- a/src/frontend_common/CMakeLists.txt
-+++ b/src/frontend_common/CMakeLists.txt
-@@ -13,8 +13,7 @@ add_library(frontend_common STATIC
-     data_manager.h data_manager.cpp
-     play_time_manager.cpp
-     play_time_manager.h
--    settings_generator.h settings_generator.cpp
--    mod_manager.h mod_manager.cpp)
-+    settings_generator.h settings_generator.cpp)
+     bool warp_size_potentially_larger_than_guest{};
  
- if (ENABLE_UPDATE_CHECKER)
-     target_link_libraries(frontend_common PRIVATE httplib::httplib)
-diff --git a/src/qt_common/CMakeLists.txt b/src/qt_common/CMakeLists.txt
-index 399fbe67a0..3c63312e31 100644
---- a/src/qt_common/CMakeLists.txt
-+++ b/src/qt_common/CMakeLists.txt
-@@ -24,8 +24,6 @@ add_library(qt_common STATIC
-     util/rom.h util/rom.cpp
-     util/applet.h util/applet.cpp
-     util/compress.h util/compress.cpp
--    util/fs.h util/fs.cpp
--    util/mod.h util/mod.cpp
- 
-     abstract/frontend.h abstract/frontend.cpp
-     abstract/progress.h abstract/progress.cpp
-@@ -33,7 +31,9 @@ add_library(qt_common STATIC
-     qt_string_lookup.h
-     qt_compat.h
- 
--    discord/discord.h)
-+    discord/discord.h
-+    util/fs.h util/fs.cpp
-+)
- 
- if (UNIX)
-     target_sources(qt_common PRIVATE gui_settings.cpp gui_settings.h)
-diff --git a/src/qt_common/util/mod.cpp b/src/qt_common/util/mod.cpp
-deleted file mode 100644
-index 38bc8f5be0..0000000000
---- a/src/qt_common/util/mod.cpp
-+++ /dev/null
-@@ -1,141 +0,0 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
--// SPDX-License-Identifier: GPL-3.0-or-later
--
--#include <filesystem>
--#include <JlCompress.h>
--#include "frontend_common/mod_manager.h"
--#include "mod.h"
--#include "qt_common/abstract/frontend.h"
--
--namespace QtCommon::Mod {
--QStringList GetModFolders(const QString& root, const QString& fallbackName) {
--    namespace fs = std::filesystem;
--
--    const auto std_root = root.toStdString();
--
--    auto paths = FrontendCommon::GetModFolder(std_root);
--
--    // multi mod zip
--    if (paths.size() > 1) {
--        // We just have to assume it's properly formed here.
--        // If not, you're out of luck.
--        QStringList qpaths;
--        for (const fs::path& path : paths) {
--            qpaths << QString::fromStdString(path.string());
--        }
--
--        return qpaths;
--    }
--    // either frontend didn't detect any romfs/exefs, or is a single-mod zip
--    else {
--        fs::path std_path;
--        if (!paths.empty())
--            std_path = paths[0];
--
--        QString default_name;
--        if (!fallbackName.isEmpty())
--            default_name = fallbackName;
--        else if (!paths.empty())
--            default_name = QString::fromStdString(std_path.filename().string());
--        else
--            default_name = root.split(QLatin1Char('/')).last();
--
--        QString name = QtCommon::Frontend::GetTextInput(
--            tr("Mod Name"), tr("What should this mod be called?"), default_name);
--
--        if (name.isEmpty())
--            return {};
--
--        // if std_path is empty, frontend_common could not determine mod type and/or name.
--        // so we have to prompt the user and set up the structure ourselves
--        if (paths.empty()) {
--            // TODO: Carboxyl impl.
--            const QStringList choices = {
--                tr("RomFS"),
--                tr("ExeFS/Patch"),
--                tr("Cheat"),
--            };
--
--            int choice = QtCommon::Frontend::Choice(
--                tr("Mod Type"),
--                tr("Could not detect mod type automatically. Please manually "
--                   "specify the type of mod you downloaded.\n\nMost mods are RomFS mods, but "
--                   "patches "
--                   "(.pchtxt) are typically ExeFS mods."),
--                choices);
--
--            std::string to_make;
--
--            switch (choice) {
--            case 0:
--                to_make = "romfs";
--                break;
--            case 1:
--                to_make = "exefs";
--                break;
--            case 2:
--                to_make = "cheats";
--                break;
--            default:
--                return {};
--            }
--
--            // now make a temp directory...
--            const auto mod_dir = fs::temp_directory_path() / "eden" / "mod" / name.toStdString();
--            const auto tmp = mod_dir / to_make;
--            fs::remove_all(mod_dir);
--            if (!fs::create_directories(tmp)) {
--                LOG_ERROR(Frontend, "Failed to create temporary directory {}", tmp.string());
--                return {};
--            }
--
--            std_path = mod_dir;
--
--            // ... and copy everything from the root to the temp dir
--            for (const auto& entry : fs::directory_iterator(root.toStdString())) {
--                const auto target = tmp / entry.path().filename();
--
--                fs::copy(entry.path(), target,
--                         fs::copy_options::recursive | fs::copy_options::overwrite_existing);
--            }
--        } else {
--            // Rename the existing mod folder.
--            const auto new_path = std_path.parent_path() / name.toStdString();
--            fs::remove_all(new_path);
--            fs::rename(std_path, new_path);
--            std_path = new_path;
--        }
--
--        return {QString::fromStdString(std_path.string())};
--    }
--}
--
--// TODO(crueter): Make this a common extract_to_tmp func
--const QString ExtractMod(const QString& path) {
--    namespace fs = std::filesystem;
--    fs::path tmp{fs::temp_directory_path() / "eden" / "unzip_mod"};
--
--    fs::remove_all(tmp);
--    if (!fs::create_directories(tmp)) {
--        QtCommon::Frontend::Critical(tr("Mod Extract Failed"),
--                                     tr("Failed to create temporary directory %1")
--                                         .arg(QString::fromStdString(tmp.string())));
--        return QString();
--    }
--
--    QString qCacheDir = QString::fromStdString(tmp.string());
--
--    QFile zip{path};
--
--    // TODO(crueter): use QtCompress
--    QStringList result = JlCompress::extractDir(&zip, qCacheDir);
--    if (result.isEmpty()) {
--        QtCommon::Frontend::Critical(tr("Mod Extract Failed"),
--                                     tr("Zip file %1 is empty").arg(path));
--        return QString();
--    }
--
--    return qCacheDir;
--}
--
--} // namespace QtCommon::Mod
-diff --git a/src/qt_common/util/mod.h b/src/qt_common/util/mod.h
-deleted file mode 100644
-index 2148bed65c..0000000000
---- a/src/qt_common/util/mod.h
-+++ /dev/null
-@@ -1,14 +0,0 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
--// SPDX-License-Identifier: GPL-3.0-or-later
--
--#pragma once
--
--#include <QString>
--
--namespace QtCommon::Mod {
--
--QStringList GetModFolders(const QString& root, const QString& fallbackName);
--
--const QString ExtractMod(const QString& path);
--
--} // namespace QtCommon::Mod
-diff --git a/src/yuzu/CMakeLists.txt b/src/yuzu/CMakeLists.txt
-index 1ed1fdff2a..eaa44b2a3a 100644
---- a/src/yuzu/CMakeLists.txt
-+++ b/src/yuzu/CMakeLists.txt
-@@ -241,7 +241,6 @@ add_executable(yuzu
- 
-     configuration/system/new_user_dialog.h configuration/system/new_user_dialog.cpp configuration/system/new_user_dialog.ui
-     configuration/system/profile_avatar_dialog.h configuration/system/profile_avatar_dialog.cpp
--    configuration/addon/mod_select_dialog.h configuration/addon/mod_select_dialog.cpp configuration/addon/mod_select_dialog.ui
- 
-     render/performance_overlay.h render/performance_overlay.cpp render/performance_overlay.ui
-     libqt_common.h libqt_common.cpp
-diff --git a/src/yuzu/configuration/addon/mod_select_dialog.cpp b/src/yuzu/configuration/addon/mod_select_dialog.cpp
-deleted file mode 100644
-index 467de5a764..0000000000
---- a/src/yuzu/configuration/addon/mod_select_dialog.cpp
-+++ /dev/null
-@@ -1,67 +0,0 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
--// SPDX-License-Identifier: GPL-3.0-or-later
--
--#include <QFileInfo>
--#include <qnamespace.h>
--#include "mod_select_dialog.h"
--#include "ui_mod_select_dialog.h"
--
--ModSelectDialog::ModSelectDialog(const QStringList& mods, QWidget* parent)
--    : QDialog(parent), ui(new Ui::ModSelectDialog) {
--    ui->setupUi(this);
--
--    item_model = new QStandardItemModel(ui->treeView);
--    ui->treeView->setModel(item_model);
--
--    // We must register all custom types with the Qt Automoc system so that we are able to use it
--    // with signals/slots. In this case, QList falls under the umbrella of custom types.
--    qRegisterMetaType<QList<QStandardItem*>>("QList<QStandardItem*>");
--
--    for (const auto& mod : mods) {
--        const auto basename = QFileInfo(mod).fileName();
--
--        auto* const first_item = new QStandardItem;
--        first_item->setText(basename);
--        first_item->setData(mod);
--
--        first_item->setCheckable(true);
--        first_item->setCheckState(Qt::Checked);
--
--        item_model->appendRow(first_item);
--    }
--
--    ui->treeView->expandAll();
--    ui->treeView->resizeColumnToContents(0);
--
--    int rows = item_model->rowCount();
--    int height =
--        ui->treeView->contentsMargins().top() * 4 + ui->treeView->contentsMargins().bottom() * 4;
--    int width = 0;
--
--    for (int i = 0; i < rows; ++i) {
--        height += ui->treeView->sizeHintForRow(i);
--        width = qMax(width, item_model->item(i)->sizeHint().width());
--    }
--
--    width +=
--        ui->treeView->contentsMargins().left() * 4 + ui->treeView->contentsMargins().right() * 4;
--    ui->treeView->setMinimumHeight(qMin(height, 600));
--    ui->treeView->setMinimumWidth(qMin(width, 700));
--    adjustSize();
--
--    connect(this, &QDialog::accepted, this, [this]() {
--        QStringList selected_mods;
--
--        for (qsizetype i = 0; i < item_model->rowCount(); ++i) {
--            auto* const item = item_model->item(i);
--            if (item->checkState() == Qt::Checked)
--                selected_mods << item->data().toString();
--        }
--
--        emit modsSelected(selected_mods);
--    });
--}
--
--ModSelectDialog::~ModSelectDialog() {
--    delete ui;
--}
-diff --git a/src/yuzu/configuration/addon/mod_select_dialog.h b/src/yuzu/configuration/addon/mod_select_dialog.h
-deleted file mode 100644
-index ab6d4686b0..0000000000
---- a/src/yuzu/configuration/addon/mod_select_dialog.h
-+++ /dev/null
-@@ -1,27 +0,0 @@
--// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
--// SPDX-License-Identifier: GPL-3.0-or-later
--
--#pragma once
--
--#include <QDialog>
--#include <QStandardItemModel>
--
--namespace Ui {
--class ModSelectDialog;
--}
--
--class ModSelectDialog : public QDialog {
--    Q_OBJECT
--
--public:
--    explicit ModSelectDialog(const QStringList& mods, QWidget* parent = nullptr);
--    ~ModSelectDialog();
--
--signals:
--    void modsSelected(const QStringList& mods);
--
--private:
--    Ui::ModSelectDialog* ui;
--
--    QStandardItemModel* item_model;
--};
-diff --git a/src/yuzu/configuration/addon/mod_select_dialog.ui b/src/yuzu/configuration/addon/mod_select_dialog.ui
-deleted file mode 100644
-index 6e196ecff0..0000000000
---- a/src/yuzu/configuration/addon/mod_select_dialog.ui
-+++ /dev/null
-@@ -1,99 +0,0 @@
--<?xml version="1.0" encoding="UTF-8"?>
--<ui version="4.0">
-- <class>ModSelectDialog</class>
-- <widget class="QDialog" name="ModSelectDialog">
--  <property name="geometry">
--   <rect>
--    <x>0</x>
--    <y>0</y>
--    <width>400</width>
--    <height>430</height>
--   </rect>
--  </property>
--  <property name="windowTitle">
--   <string>Dialog</string>
--  </property>
--  <layout class="QVBoxLayout" name="verticalLayout">
--   <item>
--    <widget class="QLabel" name="label">
--     <property name="text">
--      <string>The specified folder or archive contains the following mods. Select which ones to install.</string>
--     </property>
--     <property name="wordWrap">
--      <bool>true</bool>
--     </property>
--    </widget>
--   </item>
--   <item>
--    <widget class="QTreeView" name="treeView">
--     <property name="contextMenuPolicy">
--      <enum>Qt::ContextMenuPolicy::NoContextMenu</enum>
--     </property>
--     <property name="editTriggers">
--      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
--     </property>
--     <property name="alternatingRowColors">
--      <bool>true</bool>
--     </property>
--     <property name="verticalScrollMode">
--      <enum>QAbstractItemView::ScrollMode::ScrollPerPixel</enum>
--     </property>
--     <property name="uniformRowHeights">
--      <bool>true</bool>
--     </property>
--     <property name="sortingEnabled">
--      <bool>true</bool>
--     </property>
--     <property name="headerHidden">
--      <bool>true</bool>
--     </property>
--    </widget>
--   </item>
--   <item>
--    <widget class="QDialogButtonBox" name="buttonBox">
--     <property name="orientation">
--      <enum>Qt::Orientation::Horizontal</enum>
--     </property>
--     <property name="standardButtons">
--      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
--     </property>
--    </widget>
--   </item>
--  </layout>
-- </widget>
-- <resources/>
-- <connections>
--  <connection>
--   <sender>buttonBox</sender>
--   <signal>accepted()</signal>
--   <receiver>ModSelectDialog</receiver>
--   <slot>accept()</slot>
--   <hints>
--    <hint type="sourcelabel">
--     <x>248</x>
--     <y>254</y>
--    </hint>
--    <hint type="destinationlabel">
--     <x>157</x>
--     <y>274</y>
--    </hint>
--   </hints>
--  </connection>
--  <connection>
--   <sender>buttonBox</sender>
--   <signal>rejected()</signal>
--   <receiver>ModSelectDialog</receiver>
--   <slot>reject()</slot>
--   <hints>
--    <hint type="sourcelabel">
--     <x>316</x>
--     <y>260</y>
--    </hint>
--    <hint type="destinationlabel">
--     <x>286</x>
--     <y>274</y>
--    </hint>
--   </hints>
--  </connection>
-- </connections>
--</ui>
-diff --git a/src/yuzu/configuration/configure_per_game_addons.cpp b/src/yuzu/configuration/configure_per_game_addons.cpp
-index 7d0e15accc..c43e61e632 100644
---- a/src/yuzu/configuration/configure_per_game_addons.cpp
-+++ b/src/yuzu/configuration/configure_per_game_addons.cpp
-@@ -14,7 +14,6 @@
- #include <QHeaderView>
- #include <QMenu>
- #include <QStandardItemModel>
--#include <QStandardPaths>
- #include <QString>
- #include <QTimer>
- #include <QTreeView>
-@@ -22,14 +21,11 @@
- #include "common/common_types.h"
- #include "common/fs/fs.h"
- #include "common/fs/path_util.h"
--#include "configuration/addon/mod_select_dialog.h"
- #include "core/core.h"
- #include "core/file_sys/patch_manager.h"
-+#include "core/file_sys/xts_archive.h"
- #include "core/loader/loader.h"
--#include "frontend_common/mod_manager.h"
--#include "qt_common/abstract/frontend.h"
- #include "qt_common/config/uisettings.h"
--#include "qt_common/util/mod.h"
- #include "ui_configure_per_game_addons.h"
- #include "yuzu/configuration/configure_input.h"
- #include "yuzu/configuration/configure_per_game_addons.h"
-@@ -43,14 +39,14 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
-     item_model = new QStandardItemModel(tree_view);
-     tree_view->setModel(item_model);
-     tree_view->setAlternatingRowColors(true);
--    tree_view->setSelectionMode(QHeaderView::ExtendedSelection);
-+    tree_view->setSelectionMode(QHeaderView::SingleSelection);
-     tree_view->setSelectionBehavior(QHeaderView::SelectRows);
-     tree_view->setVerticalScrollMode(QHeaderView::ScrollPerPixel);
-     tree_view->setHorizontalScrollMode(QHeaderView::ScrollPerPixel);
-     tree_view->setSortingEnabled(true);
-     tree_view->setEditTriggers(QHeaderView::NoEditTriggers);
-     tree_view->setUniformRowHeights(true);
--    tree_view->setContextMenuPolicy(Qt::CustomContextMenu);
-+    tree_view->setContextMenuPolicy(Qt::NoContextMenu);
- 
-     item_model->insertColumns(0, 2);
-     item_model->setHeaderData(0, Qt::Horizontal, tr("Patch Name"));
-@@ -76,12 +72,6 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
-             &ConfigurePerGameAddons::OnItemChanged);
-     connect(item_model, &QStandardItemModel::itemChanged,
-             [] { UISettings::values.is_game_list_reload_pending.exchange(true); });
--
--    connect(ui->folder, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModFolder);
--    connect(ui->zip, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModZip);
--
--    connect(tree_view, &QTreeView::customContextMenuRequested, this,
--            &ConfigurePerGameAddons::showContextMenu);
- }
- 
- ConfigurePerGameAddons::~ConfigurePerGameAddons() = default;
-@@ -140,146 +130,6 @@ void ConfigurePerGameAddons::SetTitleId(u64 id) {
-     this->title_id = id;
- }
- 
--void ConfigurePerGameAddons::InstallMods(const QStringList& mods) {
--    QStringList failed;
--    for (const auto& mod : mods) {
--        if (FrontendCommon::InstallMod(mod.toStdString(), title_id, true) ==
--            FrontendCommon::Failed) {
--            failed << QFileInfo(mod).baseName();
--        }
--    }
--
--    if (failed.empty()) {
--        QtCommon::Frontend::Information(tr("Mod Install Succeeded"),
--                                        tr("Successfully installed all mods."));
--
--        item_model->removeRows(0, item_model->rowCount());
--        list_items.clear();
--        LoadConfiguration();
--
--        UISettings::values.is_game_list_reload_pending.exchange(true);
--    } else {
--        QtCommon::Frontend::Critical(
--            tr("Mod Install Failed"),
--            tr("Failed to install the following mods:\n\t%1\nCheck the log for details.")
--                .arg(failed.join(QStringLiteral("\n\t"))));
--    }
--}
--
--void ConfigurePerGameAddons::InstallModPath(const QString& path, const QString& fallbackName) {
--    const auto mods = QtCommon::Mod::GetModFolders(path, fallbackName);
--
--    if (mods.size() > 1) {
--        ModSelectDialog* dialog = new ModSelectDialog(mods, this);
--        connect(dialog, &ModSelectDialog::modsSelected, this, &ConfigurePerGameAddons::InstallMods);
--        dialog->show();
--    } else if (!mods.empty()) {
--        InstallMods(mods);
--    }
--}
--
--void ConfigurePerGameAddons::InstallModFolder() {
--    const auto path = QtCommon::Frontend::GetExistingDirectory(
--        tr("Mod Folder"), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
--    if (path.isEmpty()) {
--        return;
--    }
--
--    InstallModPath(path);
--}
--
--void ConfigurePerGameAddons::InstallModZip() {
--    // TODO(crueter): use GetOpenFileName to allow select multiple ZIPs
--    const auto path = QtCommon::Frontend::GetOpenFileName(
--        tr("Zipped Mod Location"),
--        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
--        tr("Zipped Archives (*.zip)"));
--    if (path.isEmpty()) {
--        return;
--    }
--
--    const QString extracted = QtCommon::Mod::ExtractMod(path);
--    if (!extracted.isEmpty())
--        InstallModPath(extracted, QFileInfo(path).baseName());
--}
--
--void ConfigurePerGameAddons::AddonDeleteRequested(QList<QModelIndex> selected) {
--    QList<QModelIndex> filtered;
--    for (const QModelIndex& index : selected) {
--        if (!index.data(PATCH_LOCATION).toString().isEmpty())
--            filtered << index;
--    }
--
--    if (filtered.empty()) {
--        QtCommon::Frontend::Critical(tr("Invalid Selection"),
--                                     tr("Only mods, cheats, and patches can be deleted.\nTo delete "
--                                        "NAND-installed updates, right-click the game in the game "
--                                        "list and click Remove -> Remove Installed Update."));
--        return;
--    }
--
--    const auto header = tr("You are about to delete the following installed mods:\n");
--    QString selected_str;
--    for (const QModelIndex& index : filtered) {
--        selected_str = selected_str % index.data().toString() % QStringLiteral("\n");
--    }
--
--    const auto footer = tr("\nOnce deleted, these can NOT be recovered. Are you 100% sure "
--                           "you want to delete them?");
--
--    QString caption = header % selected_str % footer;
--
--    auto choice = QtCommon::Frontend::Warning(tr("Delete add-on(s)?"), caption,
--                                              QtCommon::Frontend::StandardButton::Yes |
--                                                  QtCommon::Frontend::StandardButton::No);
--
--    if (choice == QtCommon::Frontend::StandardButton::No)
--        return;
--
--    for (const QModelIndex& index : filtered) {
--        std::filesystem::remove_all(index.data(PATCH_LOCATION).toString().toStdString());
--    }
--
--    QtCommon::Frontend::Information(tr("Successfully deleted"),
--                                    tr("Successfully deleted all selected mods."));
--
--    item_model->removeRows(0, item_model->rowCount());
--    list_items.clear();
--    LoadConfiguration();
--
--    UISettings::values.is_game_list_reload_pending.exchange(true);
--}
--
--void ConfigurePerGameAddons::showContextMenu(const QPoint& pos) {
--    const QModelIndex index = tree_view->indexAt(pos);
--    auto selected = tree_view->selectionModel()->selectedRows();
--    if (index.isValid() && selected.empty()) {
--        QModelIndex idx = item_model->index(index.row(), 0);
--        if (idx.isValid())
--            selected << idx;
--    }
--
--    if (selected.empty())
--        return;
--
--    QMenu menu(this);
--
--    QAction* remove = menu.addAction(tr("&Delete"));
--    connect(remove, &QAction::triggered, this,
--            [this, selected]() { AddonDeleteRequested(selected); });
--
--    if (selected.length() == 1) {
--        auto loc = selected.at(0).data(PATCH_LOCATION).toString();
--        if (QFileInfo::exists(loc)) {
--            QAction* open = menu.addAction(tr("&Open in File Manager"));
--            connect(open, &QAction::triggered, this,
--                    [selected, loc]() { QDesktopServices::openUrl(QUrl::fromLocalFile(loc)); });
--        }
--    }
--
--    menu.exec(tree_view->viewport()->mapToGlobal(pos));
--}
--
- void ConfigurePerGameAddons::changeEvent(QEvent* event) {
-     if (event->type() == QEvent::LanguageChange) {
-         RetranslateUI();
-@@ -325,13 +175,8 @@ void ConfigurePerGameAddons::LoadConfiguration() {
-                                         patch.source == FileSys::PatchSource::External &&
-                                         patch.numeric_version != 0;
- 
--        const bool is_mod = patch.type == FileSys::PatchType::Mod;
--
-         if (is_external_update) {
--            first_item->setData(static_cast<quint32>(patch.numeric_version), NUMERIC_VERSION);
--        } else if (is_mod) {
--            // qDebug() << patch.location;
--            first_item->setData(QString::fromStdString(patch.location), PATCH_LOCATION);
-+            first_item->setData(static_cast<quint32>(patch.numeric_version), Qt::UserRole);
+diff --git a/src/video_core/renderer_vulkan/pipeline_helper.h b/src/video_core/renderer_vulkan/pipeline_helper.h
+index e88b27b273..451a02c7e6 100644
+--- a/src/video_core/renderer_vulkan/pipeline_helper.h
++++ b/src/video_core/renderer_vulkan/pipeline_helper.h
+@@ -189,6 +189,7 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+     views += num_texture_buffers;
+     views += num_image_buffers;
+     for (const auto& desc : info.texture_descriptors) {
++        bool is_rescaled{};
+         for (u32 index = 0; index < desc.count; ++index) {
+             const VideoCommon::ImageViewId image_view_id{(views++)->id};
+             const VideoCommon::SamplerId sampler_id{*(samplers++)};
+@@ -200,10 +201,13 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+             const VkSampler vk_sampler{use_fallback_sampler ? sampler.HandleWithDefaultAnisotropy()
+                                                             : sampler.Handle()};
+             guest_descriptor_queue.AddSampledImage(vk_image_view, vk_sampler);
+-            rescaling.PushTexture(texture_cache.IsRescaling(image_view));
++            const bool element_rescaled{texture_cache.IsRescaling(image_view)};
++            is_rescaled |= element_rescaled;
          }
- 
-         bool patch_disabled = false;
-diff --git a/src/yuzu/configuration/configure_per_game_addons.h b/src/yuzu/configuration/configure_per_game_addons.h
-index 9dd3b06928..af2e16422c 100644
---- a/src/yuzu/configuration/configure_per_game_addons.h
-+++ b/src/yuzu/configuration/configure_per_game_addons.h
-@@ -10,7 +10,6 @@
- #include <vector>
- 
- #include <QList>
--#include <QWidget>
- 
- #include "core/file_sys/vfs/vfs_types.h"
- 
-@@ -32,8 +31,6 @@ class ConfigurePerGameAddons : public QWidget {
-     Q_OBJECT
- 
- public:
--    enum PatchData { NUMERIC_VERSION = Qt::UserRole, PATCH_LOCATION };
--
-     explicit ConfigurePerGameAddons(Core::System& system_, QWidget* parent = nullptr);
-     ~ConfigurePerGameAddons() override;
- 
-@@ -44,18 +41,6 @@ public:
- 
-     void SetTitleId(u64 id);
- 
--public slots:
--    void InstallMods(const QStringList& mods);
--    void InstallModPath(const QString& path, const QString& fallbackName = {});
--
--    void InstallModFolder();
--    void InstallModZip();
--
--    void AddonDeleteRequested(QList<QModelIndex> selected);
--
--protected:
--    void showContextMenu(const QPoint& pos);
--
- private:
-     void changeEvent(QEvent* event) override;
-     void RetranslateUI();
-diff --git a/src/yuzu/configuration/configure_per_game_addons.ui b/src/yuzu/configuration/configure_per_game_addons.ui
-index 632f9d422b..f9cf6f2c31 100644
---- a/src/yuzu/configuration/configure_per_game_addons.ui
-+++ b/src/yuzu/configuration/configure_per_game_addons.ui
-@@ -17,21 +17,7 @@
-    <string>Add-Ons</string>
-   </property>
-   <layout class="QGridLayout" name="gridLayout">
--   <item row="1" column="0">
--    <widget class="QPushButton" name="zip">
--     <property name="text">
--      <string>Import Mod from ZIP</string>
--     </property>
--    </widget>
--   </item>
--   <item row="1" column="1">
--    <widget class="QPushButton" name="folder">
--     <property name="text">
--      <string>Import Mod from Folder</string>
--     </property>
--    </widget>
--   </item>
--   <item row="0" column="0" colspan="2">
-+   <item row="0" column="0">
-     <widget class="QScrollArea" name="scrollArea">
-      <property name="widgetResizable">
-       <bool>true</bool>
-@@ -42,7 +28,7 @@
-         <x>0</x>
-         <y>0</y>
-         <width>380</width>
--        <height>249</height>
-+        <height>280</height>
-        </rect>
-       </property>
-      </widget>
-diff --git a/src/yuzu/data_dialog.cpp b/src/yuzu/data_dialog.cpp
-index bbe5d43e05..a73bfebaeb 100644
---- a/src/yuzu/data_dialog.cpp
-+++ b/src/yuzu/data_dialog.cpp
-@@ -23,27 +23,18 @@ DataDialog::DataDialog(QWidget* parent) : QDialog(parent), ui(std::make_unique<U
- 
-     // TODO: Should we make this a single widget that pulls data from a model?
- #define WIDGET(label, name)                                                                        \
--    ui->page->addWidget(new DataWidget(FrontendCommon::DataManager::DataDir::name,                 \
--                                       QtCommon::StringLookup::DataManager##name##Tooltip,         \
--                                       QStringLiteral(#name), this));                              \
--    ui->labels->addItem(label);
-+    ui->pages->addTab(new DataWidget(FrontendCommon::DataManager::DataDir::name,                   \
-+                                     QtCommon::StringLookup::DataManager##name##Tooltip,           \
-+                                     QStringLiteral(#name), this),                                 \
-+                      label);
- 
-+    WIDGET(tr("System NAND"), SysNand)
-+    WIDGET(tr("User NAND"), UserNand)
-     WIDGET(tr("Shaders"), Shaders)
--    WIDGET(tr("UserNAND"), UserNand)
--    WIDGET(tr("SysNAND"), SysNand)
-     WIDGET(tr("Mods"), Mods)
-     WIDGET(tr("Saves"), Saves)
- 
- #undef WIDGET
--
--    connect(ui->labels, &QListWidget::itemSelectionChanged, this, [this]() {
--        const auto items = ui->labels->selectedItems();
--        if (items.isEmpty()) {
--            return;
--        }
--
--        ui->page->setCurrentIndex(ui->labels->row(items[0]));
--    });
++        rescaling.PushTexture(is_rescaled);
+     }
+     for (const auto& desc : info.image_descriptors) {
++        bool is_rescaled{};
+         for (u32 index = 0; index < desc.count; ++index) {
+             ImageView& image_view{texture_cache.GetImageView((views++)->id)};
+             if (desc.is_written) {
+@@ -211,8 +215,10 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+             }
+             const VkImageView vk_image_view{image_view.StorageView(desc.type, desc.format)};
+             guest_descriptor_queue.AddImage(vk_image_view);
+-            rescaling.PushImage(texture_cache.IsRescaling(image_view));
++            const bool element_rescaled{texture_cache.IsRescaling(image_view)};
++            is_rescaled |= element_rescaled;
+         }
++        rescaling.PushImage(is_rescaled);
+     }
  }
  
- DataDialog::~DataDialog() = default;
-@@ -71,25 +62,29 @@ DataWidget::DataWidget(FrontendCommon::DataManager::DataDir data_dir,
- }
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+index 1a62324c95..490dd7acfe 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+@@ -127,9 +127,8 @@ void ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
  
- void DataWidget::clear() {
--    std::string user_id = selectProfile();
--    QtCommon::Content::ClearDataDir(m_dir, user_id);
-+    std::optional<std::string> user_id = selectProfile();
-+    if (!user_id) return;
-+    QtCommon::Content::ClearDataDir(m_dir, user_id.value());
-     scan();
- }
+     texture_cache.SynchronizeComputeDescriptors();
  
- void DataWidget::open() {
--    std::string user_id = selectProfile();
-+    std::optional<std::string> user_id = selectProfile();
-+    if (!user_id) return;
-     QDesktopServices::openUrl(QUrl::fromLocalFile(
--        QString::fromStdString(FrontendCommon::DataManager::GetDataDirString(m_dir, user_id))));
-+        QString::fromStdString(FrontendCommon::DataManager::GetDataDirString(m_dir, user_id.value()))));
- }
+-    static constexpr size_t max_elements = 64;
+-    boost::container::static_vector<VideoCommon::ImageViewInOut, max_elements> views;
+-    boost::container::static_vector<VideoCommon::SamplerId, max_elements> samplers;
++    boost::container::small_vector<VideoCommon::ImageViewInOut, 64> views;
++    boost::container::small_vector<VideoCommon::SamplerId, 64> samplers;
  
- void DataWidget::upload() {
--    std::string user_id = selectProfile();
--    QtCommon::Content::ExportDataDir(m_dir, user_id, m_exportName);
-+    std::optional<std::string> user_id = selectProfile();
-+    if (!user_id) return;
-+    QtCommon::Content::ExportDataDir(m_dir, user_id.value(), m_exportName);
- }
+     const auto& qmd{kepler_compute.launch_description};
+     const auto& cbufs{qmd.const_buffer_config};
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 5f86506961..91ebfa24fa 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -413,6 +413,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+         .support_scaled_attributes = !device.MustEmulateScaledFormats(),
+         .support_multi_viewport = device.SupportsMultiViewport(),
+         .support_geometry_streams = device.AreTransformFeedbackGeometryStreamsSupported(),
++        .support_sampled_image_array_nonuniform_indexing =
++            device.IsSampledImageArrayNonUniformIndexingSupported(),
  
- void DataWidget::download() {
--    std::string user_id = selectProfile();
--    QtCommon::Content::ImportDataDir(m_dir, user_id, std::bind(&DataWidget::scan, this));
-+    std::optional<std::string> user_id = selectProfile();
-+    if (!user_id) return;
-+    QtCommon::Content::ImportDataDir(m_dir, user_id.value(), std::bind(&DataWidget::scan, this));
- }
+         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
  
- void DataWidget::scan() {
-@@ -108,10 +103,11 @@ void DataWidget::scan() {
-         QtConcurrent::run([this]() { return FrontendCommon::DataManager::DataDirSize(m_dir); }));
- }
+@@ -448,6 +450,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+         .support_snorm_render_buffer = true,
+         .support_viewport_index_layer = device.IsExtShaderViewportIndexLayerSupported(),
+         .min_ssbo_alignment = static_cast<u32>(device.GetStorageBufferAlignment()),
++        .max_per_stage_descriptor_sampled_images = device.GetMaxPerStageDescriptorSampledImages(),
++        .max_per_stage_resources = device.GetMaxPerStageResources(),
++        .max_descriptor_set_sampled_images = device.GetMaxDescriptorSetSampledImages(),
+         .support_geometry_shader_passthrough = device.IsNvGeometryShaderPassthroughSupported(),
+         .support_conditional_barrier = device.SupportsConditionalBarriers(),
+     };
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index ad9d53ce16..59e7572b8a 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -33,6 +33,7 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE(KHR, VariablePointer, VARIABLE_POINTERS, variable_pointer)
  
--std::string DataWidget::selectProfile() {
-+std::optional<std::string> DataWidget::selectProfile() {
-     std::string user_id{};
-     if (m_dir == FrontendCommon::DataManager::DataDir::Saves) {
-         user_id = GetProfileIDString();
-+        if (user_id.empty()) return std::nullopt;
+ #define FOR_EACH_VK_FEATURE_1_2(FEATURE)                                                           \
++    FEATURE(EXT, DescriptorIndexing, DESCRIPTOR_INDEXING, descriptor_indexing)                     \
+     FEATURE(EXT, HostQueryReset, HOST_QUERY_RESET, host_query_reset)                               \
+     FEATURE(KHR, 8BitStorage, 8BIT_STORAGE, bit8_storage)                                          \
+     FEATURE(KHR, TimelineSemaphore, TIMELINE_SEMAPHORE, timeline_semaphore)
+@@ -339,6 +340,18 @@ public:
+         return properties.properties.limits.maxDescriptorSetUniformBuffersDynamic;
      }
  
-     return user_id;
-diff --git a/src/yuzu/data_dialog.h b/src/yuzu/data_dialog.h
-index 7f988f6047..2915f00848 100644
---- a/src/yuzu/data_dialog.h
-+++ b/src/yuzu/data_dialog.h
-@@ -45,7 +45,7 @@ private:
-     FrontendCommon::DataManager::DataDir m_dir;
-     const QString m_exportName;
- 
--    std::string selectProfile();
-+    std::optional<std::string> selectProfile();
- };
- 
- #endif // DATA_DIALOG_H
-diff --git a/src/yuzu/data_dialog.ui b/src/yuzu/data_dialog.ui
-index 02e674d856..1e33530774 100644
---- a/src/yuzu/data_dialog.ui
-+++ b/src/yuzu/data_dialog.ui
-@@ -27,31 +27,9 @@
-   </property>
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <item>
--    <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1">
-+    <layout class="QHBoxLayout" name="horizontalLayout" stretch="0">
-      <item>
--      <widget class="QListWidget" name="labels">
--       <property name="sizePolicy">
--        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
--         <horstretch>0</horstretch>
--         <verstretch>0</verstretch>
--        </sizepolicy>
--       </property>
--      </widget>
--     </item>
--     <item>
--      <widget class="QStackedWidget" name="page">
--       <property name="sizePolicy">
--        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
--         <horstretch>0</horstretch>
--         <verstretch>0</verstretch>
--        </sizepolicy>
--       </property>
--       <property name="minimumSize">
--        <size>
--         <width>275</width>
--         <height>200</height>
--        </size>
--       </property>
-+      <widget class="QTabWidget" name="pages">
-        <property name="currentIndex">
-         <number>-1</number>
-        </property>
-diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 2e7cef0953..5edd241189 100644
---- a/src/yuzu/main_window.cpp
-+++ b/src/yuzu/main_window.cpp
-@@ -88,7 +88,6 @@
- #include "qt_common/util/content.h"
- #include "qt_common/util/fs.h"
- #include "qt_common/util/meta.h"
--#include "qt_common/util/mod.h"
- #include "qt_common/util/path.h"
- 
- // These are wrappers to avoid the calls to CreateDirectory and CreateFile because of the Windows
-@@ -3828,7 +3827,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
-     Settings::SetConfiguringGlobal(false);
-     ConfigurePerGame dialog(this, title_id, file_name, vk_device_records, *QtCommon::system);
-     dialog.LoadFromFile(v_file);
--
-     const auto result = dialog.exec();
- 
-     if (result != QDialog::Accepted && !UISettings::values.configuration_applied) {
-@@ -3840,7 +3838,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
- 
-     const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
-     if (reload) {
--        OnGameListRefresh();
-+        game_list->PopulateAsync(UISettings::values.game_dirs);
++    u32 GetMaxPerStageDescriptorSampledImages() const {
++        return properties.properties.limits.maxPerStageDescriptorSampledImages;
++    }
++
++    u32 GetMaxPerStageResources() const {
++        return properties.properties.limits.maxPerStageResources;
++    }
++
++    u32 GetMaxDescriptorSetSampledImages() const {
++        return properties.properties.limits.maxDescriptorSetSampledImages;
++    }
++
+     /// Returns float control properties of the device.
+     const VkPhysicalDeviceFloatControlsPropertiesKHR& FloatControlProperties() const {
+         return properties.float_controls;
+@@ -359,6 +372,10 @@ public:
+         return GetDriverID() != VK_DRIVER_ID_QUALCOMM_PROPRIETARY;
      }
  
-     // Do not cause the global config to write local settings into the config file
++    bool IsSampledImageArrayNonUniformIndexingSupported() const {
++        return features.descriptor_indexing.shaderSampledImageArrayNonUniformIndexing;
++    }
++
+     /// Returns true if the device supports float64 natively.
+     bool IsFloat64Supported() const {
+         return features.features.shaderFloat64;
