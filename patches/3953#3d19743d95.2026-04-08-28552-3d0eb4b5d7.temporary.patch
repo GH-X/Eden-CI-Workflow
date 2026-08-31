@@ -1,0 +1,368 @@
+diff --git a/src/video_core/renderer_vulkan/blit_image.cpp b/src/video_core/renderer_vulkan/blit_image.cpp
+index 789f4da2ed..2bca1ba28f 100644
+--- a/src/video_core/renderer_vulkan/blit_image.cpp
++++ b/src/video_core/renderer_vulkan/blit_image.cpp
+@@ -436,7 +436,7 @@ void TransitionImageLayout(vk::CommandBuffer& cmdbuf, VkImage image, VkImageLayo
+             .layerCount = 1,
+         },
+     };
+-    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                            0, barrier);
+ }
+ 
+diff --git a/src/video_core/renderer_vulkan/present/util.cpp b/src/video_core/renderer_vulkan/present/util.cpp
+index a2c4727703..2b83902bc0 100644
+--- a/src/video_core/renderer_vulkan/present/util.cpp
++++ b/src/video_core/renderer_vulkan/present/util.cpp
+@@ -69,7 +69,7 @@ void TransitionImageLayout(vk::CommandBuffer& cmdbuf, VkImage image, VkImageLayo
+             .layerCount = 1,
+         },
+     };
+-    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                            0, barrier);
+ }
+ 
+@@ -171,10 +171,10 @@ void DownloadColorImage(vk::CommandBuffer& cmdbuf, VkImage image, VkBuffer buffe
+         .imageOffset{.x = 0, .y = 0, .z = 0},
+         .imageExtent{extent},
+     };
+-    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
++    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                            read_barrier);
+     cmdbuf.CopyImageToBuffer(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, copy);
+-    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
++    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0,
+                            memory_write_barrier, nullptr, image_write_barrier);
+ }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+index 74f06427dd..d3de77adb5 100644
+--- a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+@@ -437,13 +437,13 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([src_buffer, dst_buffer, vk_copies, barrier](vk::CommandBuffer cmdbuf) {
+         if (barrier) {
+-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
+         }
+         cmdbuf.CopyBuffer(src_buffer, dst_buffer, VideoCommon::FixSmallVectorADL(vk_copies));
+         if (barrier) {
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
++                                   vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, WRITE_BARRIER);
+         }
+     });
+ }
+@@ -457,7 +457,7 @@ void BufferCacheRuntime::PreCopyBarrier() {
+     };
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0, READ_BARRIER);
+     });
+ }
+@@ -471,7 +471,7 @@ void BufferCacheRuntime::PostCopyBarrier() {
+     };
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                                0, WRITE_BARRIER);
+     });
+ }
+@@ -495,10 +495,10 @@ void BufferCacheRuntime::ClearBuffer(VkBuffer dest_buffer, u32 offset, size_t si
+ 
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([dest_buffer, offset, size, value](vk::CommandBuffer cmdbuf) {
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0, READ_BARRIER);
+         cmdbuf.FillBuffer(dest_buffer, offset, size, value);
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                                0, WRITE_BARRIER);
+     });
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+index d45a57f7bb..477a3d5346 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+@@ -446,8 +446,8 @@ void ConditionalRenderingResolvePass::Resolve(VkBuffer dst_buffer, VkBuffer src_
+         const VkDescriptorSet set = descriptor_allocator.Commit();
+         device.GetLogical().UpdateDescriptorSet(set, *descriptor_template, descriptor_data);
+ 
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, read_barrier);
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
++                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, read_barrier);
+         cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, *pipeline);
+         cmdbuf.BindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *layout, 0, set, {});
+         cmdbuf.Dispatch(1, 1, 1);
+@@ -527,7 +527,7 @@ void QueriesPrefixScanPass::Run(VkBuffer accumulation_buffer, VkBuffer dst_buffe
+             cmdbuf.PushConstants(*layout, VK_SHADER_STAGE_COMPUTE_BIT, uniforms);
+             cmdbuf.Dispatch(1, 1, 1);
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, write_barrier);
++                                   vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, write_barrier);
+         });
+     }
+ }
+@@ -579,9 +579,9 @@ void ASTCDecoderPass::Assemble(Image& image, const StagingBufferRef& map,
+                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
+             },
+         };
+-        cmdbuf.PipelineBarrier(is_initialized ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+-                                              : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+-                               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, image_barrier);
++        cmdbuf.PipelineBarrier(is_initialized ? vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER
++                              : VkPipelineStageFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
++                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, image_barrier);
+         cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, vk_pipeline);
+     });
+     for (const VideoCommon::SwizzleParameters& swizzle : swizzles) {
+@@ -638,7 +638,7 @@ void ASTCDecoderPass::Assemble(Image& image, const StagingBufferRef& map,
+             },
+         };
+         cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, image_barrier);
++                       vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, image_barrier);
+     });
+     scheduler.Finish();
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_present_manager.cpp b/src/video_core/renderer_vulkan/vk_present_manager.cpp
+index 80853362ad..2c5f45c781 100644
+--- a/src/video_core/renderer_vulkan/vk_present_manager.cpp
++++ b/src/video_core/renderer_vulkan/vk_present_manager.cpp
+@@ -429,7 +429,7 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
+         },
+     };
+ 
+-    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
++    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
+                            {}, {}, pre_barriers);
+ 
+     if (blit_supported) {
+diff --git a/src/video_core/renderer_vulkan/vk_query_cache.cpp b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+index 8518d89eee..0921d59d74 100644
+--- a/src/video_core/renderer_vulkan/vk_query_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_query_cache.cpp
+@@ -814,7 +814,7 @@ public:
+         scheduler.RequestOutsideRenderPassOperationContext();
+         scheduler.Record([](vk::CommandBuffer cmdbuf) {
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
++                                   vk::PIPELINE_STAGE_HOST, 0, WRITE_BARRIER);
+         });
+ 
+         std::scoped_lock lk(flush_guard);
+@@ -1484,13 +1484,13 @@ void QueryCacheRuntime::Barriers(bool is_prebarrier) {
+     impl->scheduler.RequestOutsideRenderPassOperationContext();
+     if (is_prebarrier) {
+         impl->scheduler.Record([](vk::CommandBuffer cmdbuf) {
+-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
+         });
+     } else {
+         impl->scheduler.Record([](vk::CommandBuffer cmdbuf) {
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
++                                   vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER_HOST, 0, WRITE_BARRIER);
+         });
+     }
+ }
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+index ba7b5d8c1b..f4831a26b8 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+@@ -560,7 +560,7 @@ void RasterizerVulkan::DispatchCompute() {
+         .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+     };
+-    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
++    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                0, READ_BARRIER); });
+     scheduler.Record([dim](vk::CommandBuffer cmdbuf) { cmdbuf.Dispatch(dim[0], dim[1], dim[2]); });
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+index 226619d8d6..e1239aca83 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
++++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+@@ -373,7 +373,7 @@ void Scheduler::EndRenderPass()
+             }
+             cmdbuf.EndRenderPass();
+             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+-                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                                    0, nullptr, nullptr, vk::Span(barriers.data(), num_images));
+         });
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_texture_cache.cpp b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+index 48aa5ec476..647d66327f 100644
+--- a/src/video_core/renderer_vulkan/vk_texture_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_texture_cache.cpp
+@@ -844,12 +844,12 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
+                 .subresourceRange = subresource_range,
+             },
+         };
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                               0, nullptr, nullptr, read_barriers);
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                       0, nullptr, nullptr, read_barriers);
+         cmdbuf.BlitImage(src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst_image,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions, vk_filter);
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                               0, nullptr, nullptr, write_barriers);
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
++                       0, nullptr, nullptr, write_barriers);
+     });
+ }
+ } // Anonymous namespace
+@@ -1107,19 +1107,19 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
+                 .subresourceRange = dst_range.SubresourceRange(dst_aspect_mask),
+             },
+         };
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                               0, {}, {}, pre_barriers);
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                       0, {}, {}, pre_barriers);
+ 
+         cmdbuf.CopyImageToBuffer(src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, copy_buffer,
+                                  vk_in_copies);
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                               0, WRITE_BARRIER, nullptr, middle_in_barrier);
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
++                       0, WRITE_BARRIER, nullptr, middle_in_barrier);
+ 
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                               0, READ_BARRIER, {}, middle_out_barrier);
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                       0, READ_BARRIER, {}, middle_out_barrier);
+         cmdbuf.CopyBufferToImage(copy_buffer, dst_image, VK_IMAGE_LAYOUT_GENERAL, vk_out_copies);
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                               0, {}, {}, post_barriers);
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
++                       0, {}, {}, post_barriers);
+     });
+ }
+ 
+@@ -1245,8 +1245,8 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
+             },
+         };
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+-                               0, nullptr, nullptr, read_barriers);
++        cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                       0, nullptr, nullptr, read_barriers);
+         if (is_resolve) {
+             cmdbuf.ResolveImage(src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+@@ -1258,8 +1258,8 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
+                 src_image, VK_IMAGE_LAYOUT_GENERAL, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 MakeImageBlit(dst_region, src_region, dst_layers, src_layers), vk_filter);
+         }
+-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                               0, write_barrier);
++        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
++                       0, write_barrier);
+     });
+ }
+ 
+@@ -1836,7 +1836,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+                         .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                     },
+                 };
+-                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                        0, read_barrier);
+ 
+                 for (size_t index = 0; index < buffers.size(); index++) {
+@@ -1868,7 +1868,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+                         .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                     },
+                 };
+-                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++                cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                                        0, memory_write_barrier, nullptr, image_write_barrier);
+             });
+             return;
+@@ -1903,7 +1903,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                 },
+             };
+-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    0, read_barrier);
+ 
+             for (size_t index = 0; index < buffers.size(); index++) {
+@@ -1935,7 +1935,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
+                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                 },
+             };
+-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+                                    0, memory_write_barrier, nullptr, image_write_barrier);
+         });
+     }
+@@ -2514,8 +2514,8 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
+         };
+         scheduler.RequestOutsideRenderPassOperationContext();
+         scheduler.Record([barrier](vk::CommandBuffer cmdbuf) {
+-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, barrier);
++            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
++                                   vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, barrier);
+         });
+     }
+ }
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 5075a79bcd..447a232eef 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -486,11 +486,15 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+     CollectToolingInfo();
+ 
+     if (is_qualcomm) {
+-        // Qualcomm Adreno GPUs doesn't handle scaled vertex attributes; keep emulation enabled
++        LOG_WARNING(Render_Vulkan,
++                    "Qualcomm drivers require scaled vertex format emulation");
+         must_emulate_scaled_formats = true;
+         LOG_WARNING(Render_Vulkan,
+-                    "Qualcomm drivers require scaled vertex format emulation; forcing fallback");
+-
++                    "Qualcomm drivers have broken provoking vertex");
++        RemoveExtension(extensions.provoking_vertex, VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
++        LOG_WARNING(Render_Vulkan,
++                    "Qualcomm drivers have slow push descriptor implementation");
++        RemoveExtension(extensions.push_descriptor, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+         LOG_WARNING(Render_Vulkan,
+                     "Disabling shader float controls and 64-bit integer features on Qualcomm proprietary drivers");
+         RemoveExtension(extensions.shader_float_controls, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+diff --git a/src/video_core/vulkan_common/vulkan_wrapper.h b/src/video_core/vulkan_common/vulkan_wrapper.h
+index aaff66359e..860cdff20e 100644
+--- a/src/video_core/vulkan_common/vulkan_wrapper.h
++++ b/src/video_core/vulkan_common/vulkan_wrapper.h
+@@ -146,6 +146,18 @@ inline VkResult Filter(VkResult result) {
+     return result;
+ }
+ 
++inline constexpr VkPipelineStageFlags PIPELINE_STAGE_GRAPHICS_COMPUTE =
++    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
++
++inline constexpr VkPipelineStageFlags PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER =
++    PIPELINE_STAGE_GRAPHICS_COMPUTE | VK_PIPELINE_STAGE_TRANSFER_BIT;
++
++inline constexpr VkPipelineStageFlags PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER_HOST =
++    PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER | VK_PIPELINE_STAGE_HOST_BIT;
++
++inline constexpr VkPipelineStageFlags PIPELINE_STAGE_HOST = VK_PIPELINE_STAGE_HOST_BIT;
++
++
+ /// Table holding Vulkan instance function pointers.
+ struct InstanceDispatch {
+     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr{};
