@@ -1,0 +1,386 @@
+diff --git a/src/video_core/renderer_vulkan/blit_image.cpp b/src/video_core/renderer_vulkan/blit_image.cpp
+index 789f4da2ed..49fb76c4d4 100644
+--- a/src/video_core/renderer_vulkan/blit_image.cpp
++++ b/src/video_core/renderer_vulkan/blit_image.cpp
+@@ -880,7 +880,7 @@ VkPipeline BlitImageHelper::FindOrEmplaceColorPipeline(const BlitImagePipelineKe
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    }));
++    }, device.StaticPipelineCache()));
+     return *blit_color_pipelines.back();
+ }
+ 
+@@ -912,7 +912,7 @@ VkPipeline BlitImageHelper::FindOrEmplaceDepthStencilPipeline(const BlitImagePip
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    }));
++    }, device.StaticPipelineCache()));
+     return *blit_depth_stencil_pipelines.back();
+ }
+ 
+@@ -965,7 +965,7 @@ VkPipeline BlitImageHelper::FindOrEmplaceClearColorPipeline(const BlitImagePipel
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    }));
++    }, device.StaticPipelineCache()));
+     return *clear_color_pipelines.back();
+ }
+ 
+@@ -1021,7 +1021,7 @@ VkPipeline BlitImageHelper::FindOrEmplaceClearStencilPipeline(
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    }));
++    }, device.StaticPipelineCache()));
+     return *clear_stencil_pipelines.back();
+ }
+ 
+@@ -1113,7 +1113,7 @@ void BlitImageHelper::ConvertPipelineEx(vk::Pipeline& pipeline, VkRenderPass ren
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    });
++    }, device.StaticPipelineCache());
+ }
+ 
+ void BlitImageHelper::ConvertPipelineColorTargetEx(vk::Pipeline& pipeline, VkRenderPass renderpass,
+@@ -1156,7 +1156,7 @@ void BlitImageHelper::ConvertPipeline(vk::Pipeline& pipeline, VkRenderPass rende
+         .subpass = 0,
+         .basePipelineHandle = VK_NULL_HANDLE,
+         .basePipelineIndex = 0,
+-    });
++    }, device.StaticPipelineCache());
+ }
+ 
+ } // namespace Vulkan
+diff --git a/src/video_core/renderer_vulkan/present/util.cpp b/src/video_core/renderer_vulkan/present/util.cpp
+index a2c4727703..85973f813b 100644
+--- a/src/video_core/renderer_vulkan/present/util.cpp
++++ b/src/video_core/renderer_vulkan/present/util.cpp
+@@ -491,7 +491,7 @@ static vk::Pipeline CreateWrappedPipelineImpl(
+         .subpass = 0,
+         .basePipelineHandle = 0,
+         .basePipelineIndex = 0,
+-    });
++    }, device.StaticPipelineCache());
+ }
+ 
+ vk::Pipeline CreateWrappedPipeline(const Device& device, vk::RenderPass& renderpass,
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pass.cpp b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+index 5d625c0add..a98fce3e02 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pass.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pass.cpp
+@@ -301,7 +301,7 @@ ComputePass::ComputePass(const Device& device_, DescriptorPool& descriptor_pool,
+         .layout = *layout,
+         .basePipelineHandle = {},
+         .basePipelineIndex = 0,
+-    });
++    }, device.StaticPipelineCache());
+ }
+ 
+ ComputePass::~ComputePass() = default;
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index cd884ad6bd..b5318f1c99 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -58,6 +58,8 @@ using VideoCommon::GenericEnvironment;
+ using VideoCommon::GraphicsEnvironment;
+ 
+ constexpr u32 CACHE_VERSION = 16;
++constexpr size_t VULKAN_CACHE_FLUSH_PIPELINES = 128;
++constexpr size_t VULKAN_CACHE_FLUSH_MIN_SECONDS = 30;
+ constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
+ 
+ template <typename Container>
+@@ -609,6 +611,10 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+     if (use_vulkan_pipeline_cache) {
+         SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                      CACHE_VERSION);
++        size_t size = 0;
++        vulkan_pipeline_cache.Read(&size, nullptr);
++        last_cache_size.store(size, std::memory_order_relaxed);
++        last_flush = std::chrono::steady_clock::now();
+     }
+ 
+     if (state.statistics) {
+@@ -620,6 +626,35 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+     }
+ }
+ 
++void PipelineCache::QueueVulkanPipelineCacheFlush() {
++    if (!use_vulkan_pipeline_cache || vulkan_pipeline_cache_filename.empty()) {
++        return;
++    }
++    if (++pipelines_since_flush < VULKAN_CACHE_FLUSH_PIPELINES) {
++        return;
++    }
++    const auto now = std::chrono::steady_clock::now();
++    const auto megabytes = last_cache_size.load(std::memory_order_relaxed) / (1024 * 1024);
++    const std::chrono::seconds interval{
++        std::max<size_t>(VULKAN_CACHE_FLUSH_MIN_SECONDS, megabytes)};
++    if (last_flush.time_since_epoch().count() != 0 && now - last_flush < interval) {
++        return;
++    }
++    if (flush_in_flight.exchange(true, std::memory_order_acq_rel)) {
++        return;
++    }
++    pipelines_since_flush = 0;
++    last_flush = now;
++    serialization_thread.QueueWork([this] {
++        SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
++                                     CACHE_VERSION);
++        size_t size = 0;
++        vulkan_pipeline_cache.Read(&size, nullptr);
++        last_cache_size.store(size, std::memory_order_relaxed);
++        flush_in_flight.store(false, std::memory_order_release);
++    });
++}
++
+ GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
+     const auto [pair, is_new]{graphics_cache.try_emplace(graphics_key)};
+     auto& pipeline{pair->second};
+@@ -658,7 +693,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
+     std::span<Shader::Environment* const> envs, PipelineStatistics* statistics,
+     bool build_in_parallel) try {
+     auto hash = key.Hash();
+-//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
++    LOG_DEBUG(Render_Vulkan, "{:#016x}", hash);
+     size_t env_index{0};
+     std::array<Shader::IR::Program, Maxwell::MaxShaderProgram> programs;
+     const bool uses_vertex_a{key.unique_hashes[0] != 0};
+@@ -786,6 +821,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
+         }
+         SerializePipeline(key, env_ptrs, pipeline_cache_filename, CACHE_VERSION);
+     });
++    QueueVulkanPipelineCacheFlush();
+     return pipeline;
+ }
+ 
+@@ -805,6 +841,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
+         SerializePipeline(key, std::array<const GenericEnvironment*, 1>{&env_},
+                           pipeline_cache_filename, CACHE_VERSION);
+     });
++    QueueVulkanPipelineCacheFlush();
+     return pipeline;
+ }
+ 
+@@ -817,7 +854,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
+         return nullptr;
+     }
+ 
+-//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
++    LOG_DEBUG(Render_Vulkan, "{:#016x}", hash);
+ 
+     Shader::Maxwell::Flow::CFG cfg{env, pools.flow_block, env.StartAddress()};
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+index 1f7dab935c..14e5022994 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.h
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+@@ -7,6 +7,8 @@
+ #pragma once
+ 
+ #include <array>
++#include <atomic>
++#include <chrono>
+ #include <cstddef>
+ #include <filesystem>
+ #include <memory>
+@@ -143,6 +145,8 @@ private:
+     vk::PipelineCache LoadVulkanPipelineCache(const std::filesystem::path& filename,
+                                               u32 expected_cache_version);
+ 
++    void QueueVulkanPipelineCacheFlush();
++
+     const Device& device;
+     Scheduler& scheduler;
+     DescriptorPool& descriptor_pool;
+@@ -170,6 +174,10 @@ private:
+ 
+     std::filesystem::path vulkan_pipeline_cache_filename;
+     vk::PipelineCache vulkan_pipeline_cache;
++    size_t pipelines_since_flush{};
++    std::chrono::steady_clock::time_point last_flush{};
++    std::atomic<size_t> last_cache_size{};
++    std::atomic_bool flush_in_flight{};
+ 
+     Common::ThreadWorker workers;
+     Common::ThreadWorker serialization_thread;
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 5d8a6c1ad8..66949ecb6c 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -7,6 +7,8 @@
+ #include <algorithm>
+ #include <bitset>
+ #include <chrono>
++#include <filesystem>
++#include <fstream>
+ #include <optional>
+ #include <thread>
+ #include <ankerl/unordered_dense.h>
+@@ -16,6 +18,8 @@
+ #include <fmt/format.h>
+ 
+ #include "common/assert.h"
++#include "common/fs/fs.h"
++#include "common/fs/path_util.h"
+ #include "common/literals.h"
+ #include <ranges>
+ #include "common/settings.h"
+@@ -375,6 +379,17 @@ std::vector<const char*> ExtensionListForVulkan(
+     return output;
+ }
+ 
++constexpr std::array<char, 8> STATIC_CACHE_MAGIC_NUMBER{'e', 'd', 'e', 'n', 's', 't', 'p', 'c'};
++constexpr u32 STATIC_CACHE_VERSION = 1;
++
++std::filesystem::path StaticPipelineCacheFilename() {
++    const auto shader_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ShaderDir);
++    if (!Common::FS::CreateDir(shader_dir)) {
++        return {};
++    }
++    return shader_dir / "vulkan_static_pipelines.bin";
++}
++
+ } // Anonymous namespace
+ 
+ void Device::RemoveExtension(bool& extension, const std::string& extension_name) {
+@@ -726,15 +741,100 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+ 
+     vk::Check(vmaCreateAllocator(&allocator_info, &allocator));
+ 
++    owns_static_pipeline_cache = surface != VkSurfaceKHR{};
++    LoadStaticPipelineCache();
++
+     // Initialize GPU logging if enabled
+     InitializeGPULogging();
+ }
+ 
+ Device::~Device() {
++    SaveStaticPipelineCache();
+     ShutdownGPULogging();
+     vmaDestroyAllocator(allocator);
+ }
+ 
++void Device::LoadStaticPipelineCache() {
++    const auto create = [this](size_t size, const void* data) {
++        static_pipeline_cache = logical.CreatePipelineCache({
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
++            .pNext = nullptr,
++            .flags = 0,
++            .initialDataSize = size,
++            .pInitialData = data,
++        });
++    };
++    if (!owns_static_pipeline_cache) {
++        create(0, nullptr);
++        return;
++    }
++    const auto filename = StaticPipelineCacheFilename();
++    if (filename.empty()) {
++        create(0, nullptr);
++        return;
++    }
++    std::vector<char> data;
++    try {
++        std::ifstream file(filename, std::ios::binary | std::ios::ate);
++        if (!file.is_open()) {
++            create(0, nullptr);
++            return;
++        }
++        file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
++        const size_t total = static_cast<size_t>(file.tellg());
++        file.seekg(0, std::ios::beg);
++        std::array<char, 8> magic{};
++        u32 version{};
++        if (total < magic.size() + sizeof(version)) {
++            create(0, nullptr);
++            return;
++        }
++        file.read(magic.data(), magic.size())
++            .read(reinterpret_cast<char*>(&version), sizeof(version));
++        if (magic != STATIC_CACHE_MAGIC_NUMBER || version != STATIC_CACHE_VERSION) {
++            create(0, nullptr);
++            return;
++        }
++        data.resize(total - magic.size() - sizeof(version));
++        file.read(data.data(), static_cast<std::streamsize>(data.size()));
++    } catch (const std::ios_base::failure& e) {
++        create(0, nullptr);
++        return;
++    }
++    create(data.size(), data.empty() ? nullptr : data.data());
++}
++
++void Device::SaveStaticPipelineCache() const {
++    if (!owns_static_pipeline_cache || !static_pipeline_cache) {
++        return;
++    }
++    const auto filename = StaticPipelineCacheFilename();
++    if (filename.empty()) {
++        return;
++    }
++    size_t size = 0;
++    std::vector<char> data;
++    static_pipeline_cache.Read(&size, nullptr);
++    if (size == 0) {
++        return;
++    }
++    data.resize(size);
++    static_pipeline_cache.Read(&size, data.data());
++    try {
++        std::ofstream file(filename, std::ios::binary | std::ios::trunc);
++        file.exceptions(std::ofstream::failbit);
++        if (!file.is_open()) {
++            return;
++        }
++        file.write(STATIC_CACHE_MAGIC_NUMBER.data(), STATIC_CACHE_MAGIC_NUMBER.size())
++            .write(reinterpret_cast<const char*>(&STATIC_CACHE_VERSION),
++                   sizeof(STATIC_CACHE_VERSION))
++            .write(data.data(), static_cast<std::streamsize>(size));
++    } catch (const std::ios_base::failure& e) {
++        Common::FS::RemoveFile(filename);
++    }
++}
++
+ VkFormat Device::GetSupportedFormat(VkFormat wanted_format, VkFormatFeatureFlags wanted_usage,
+                                     FormatType format_type) const {
+     if (IsFormatSupported(wanted_format, wanted_usage, format_type)) {
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index e8bb07f80e..fb516d981d 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -256,6 +256,10 @@ public:
+         return physical;
+     }
+ 
++    VkPipelineCache StaticPipelineCache() const noexcept {
++        return *static_pipeline_cache;
++    }
++
+     /// Returns the main graphics queue.
+     vk::Queue GetGraphicsQueue() const {
+         return graphics_queue;
+@@ -928,6 +932,9 @@ private:
+     /// Returns true if the device natively supports blitting depth stencil images.
+     bool TestDepthStencilBlits(VkFormat format) const;
+ 
++    void LoadStaticPipelineCache();
++    void SaveStaticPipelineCache() const;
++
+ private:
+     VkInstance instance;         ///< Vulkan instance.
+     VmaAllocator allocator;      ///< VMA allocator.
+@@ -936,6 +943,8 @@ private:
+     vk::Device logical;          ///< Logical device.
+     vk::Queue graphics_queue;    ///< Main graphics queue.
+     vk::Queue present_queue;     ///< Main present queue.
++    vk::PipelineCache static_pipeline_cache;
++    bool owns_static_pipeline_cache{};
+     u32 instance_version{};      ///< Vulkan instance version.
+     u32 graphics_family{};       ///< Main graphics queue family index.
+     u32 present_family{};        ///< Main present queue family index.
