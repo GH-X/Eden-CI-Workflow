@@ -1,0 +1,208 @@
+diff --git a/src/core/core.cpp b/src/core/core.cpp
+index 2c8cbe21bb..4acdb46cc2 100644
+--- a/src/core/core.cpp
++++ b/src/core/core.cpp
+@@ -4,6 +4,7 @@
+ #include <array>
+ #include <atomic>
+ #include <memory>
++#include <unordered_map>
+ #include <utility>
+ 
+ #include "game_settings.h"
+@@ -247,12 +248,30 @@ struct System::Impl {
+         }
+     }
+ 
+-    void SetNVDECActive(bool is_nvdec_active) {
+-        nvdec_active = is_nvdec_active;
++    void NotifyNVDECChannelOpen(u64 process_id) {
++        std::scoped_lock lock{nvdec_active_mutex};
++        ++nvdec_active_channels[process_id];
++    }
++
++    void NotifyNVDECChannelClose(u64 process_id) {
++        std::scoped_lock lock{nvdec_active_mutex};
++        const auto it = nvdec_active_channels.find(process_id);
++        if (it == nvdec_active_channels.end()) {
++            return;
++        }
++        if (--it->second == 0) {
++            nvdec_active_channels.erase(it);
++        }
+     }
+ 
+     bool GetNVDECActive() {
+-        return nvdec_active;
++        std::scoped_lock lock{nvdec_active_mutex};
++        return !nvdec_active_channels.empty();
++    }
++
++    bool IsNVDECActiveForProcess(u64 process_id) {
++        std::scoped_lock lock{nvdec_active_mutex};
++        return nvdec_active_channels.contains(process_id);
+     }
+ 
+     void InitializeDebugger(System& system, u16 port) {
+@@ -498,6 +517,8 @@ struct System::Impl {
+ 
+     mutable std::mutex suspend_guard;
+     std::mutex general_channel_mutex;
++    std::mutex nvdec_active_mutex;
++    std::unordered_map<u64, u32> nvdec_active_channels;
+     std::atomic_bool is_paused{};
+     std::atomic_bool is_shutting_down{};
+     std::atomic_bool is_powered_on{};
+@@ -505,7 +526,6 @@ struct System::Impl {
+     bool extended_memory_layout : 1 = false;
+     bool exit_locked : 1 = false;
+     bool exit_requested : 1 = false;
+-    bool nvdec_active : 1 = false;
+ 
+     void EnsureGeneralChannelInitialized(System& system) {
+         if (!general_channel_event) {
+@@ -569,14 +589,22 @@ void System::UnstallApplication() {
+     impl->UnstallApplication();
+ }
+ 
+-void System::SetNVDECActive(bool is_nvdec_active) {
+-    impl->SetNVDECActive(is_nvdec_active);
++void System::NotifyNVDECChannelOpen(u64 process_id) {
++    impl->NotifyNVDECChannelOpen(process_id);
++}
++
++void System::NotifyNVDECChannelClose(u64 process_id) {
++    impl->NotifyNVDECChannelClose(process_id);
+ }
+ 
+ bool System::GetNVDECActive() {
+     return impl->GetNVDECActive();
+ }
+ 
++bool System::IsNVDECActiveForProcess(u64 process_id) {
++    return impl->IsNVDECActiveForProcess(process_id);
++}
++
+ void System::InitializeDebugger() {
+     impl->InitializeDebugger(*this, Settings::values.gdbstub_port.GetValue());
+ }
+diff --git a/src/core/core.h b/src/core/core.h
+index 012533c1fa..b8ebbfd7db 100644
+--- a/src/core/core.h
++++ b/src/core/core.h
+@@ -191,8 +191,10 @@ public:
+     std::unique_lock<std::mutex> StallApplication();
+     void UnstallApplication();
+ 
+-    void SetNVDECActive(bool is_nvdec_active);
++    void NotifyNVDECChannelOpen(u64 process_id);
++    void NotifyNVDECChannelClose(u64 process_id);
+     [[nodiscard]] bool GetNVDECActive();
++    [[nodiscard]] bool IsNVDECActiveForProcess(u64 process_id);
+ 
+     /**
+      * Initialize the debugger.
+diff --git a/src/core/hle/service/nvdrv/devices/nvhost_nvdec.cpp b/src/core/hle/service/nvdrv/devices/nvhost_nvdec.cpp
+index d64658bddc..d163e3eb7d 100644
+--- a/src/core/hle/service/nvdrv/devices/nvhost_nvdec.cpp
++++ b/src/core/hle/service/nvdrv/devices/nvhost_nvdec.cpp
+@@ -8,6 +8,7 @@
+ #include "common/assert.h"
+ #include "common/logging.h"
+ #include "core/core.h"
++#include "core/hle/kernel/k_process.h"
+ #include "core/hle/service/nvdrv/core/container.h"
+ #include "core/hle/service/nvdrv/devices/ioctl_serialization.h"
+ #include "core/hle/service/nvdrv/devices/nvhost_nvdec.h"
+@@ -69,17 +70,23 @@ NvResult nvhost_nvdec::Ioctl3(DeviceFD fd, Ioctl command, std::span<const u8> in
+ 
+ void nvhost_nvdec::OnOpen(NvCore::SessionId session_id, DeviceFD fd) {
+     LOG_INFO(Service_NVDRV, "NVDEC video stream started");
+-    system.SetNVDECActive(true);
+     sessions[fd] = session_id;
++    if (const auto* session = core.GetSession(session_id);
++        session != nullptr && session->process != nullptr) {
++        system.NotifyNVDECChannelOpen(session->process->GetId());
++    }
+     host1x.StartDevice(fd, Tegra::Host1x::ChannelType::NvDec, channel_syncpoint);
+ }
+ 
+ void nvhost_nvdec::OnClose(DeviceFD fd) {
+     LOG_INFO(Service_NVDRV, "NVDEC video stream ended");
+     host1x.StopDevice(fd, Tegra::Host1x::ChannelType::NvDec);
+-    system.SetNVDECActive(false);
+     auto it = sessions.find(fd);
+     if (it != sessions.end()) {
++        if (const auto* session = core.GetSession(it->second);
++            session != nullptr && session->process != nullptr) {
++            system.NotifyNVDECChannelClose(session->process->GetId());
++        }
+         sessions.erase(it);
+     }
+ }
+diff --git a/src/core/hle/service/service.cpp b/src/core/hle/service/service.cpp
+index e054ad441b..682241c4e6 100644
+--- a/src/core/hle/service/service.cpp
++++ b/src/core/hle/service/service.cpp
+@@ -4,12 +4,16 @@
+ // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include <chrono>
+ #include <fmt/ranges.h>
++#include <string_view>
++#include <thread>
+ #include "common/assert.h"
+ #include "common/logging.h"
+ #include "common/settings.h"
+ #include "core/core.h"
+ #include "core/hle/ipc.h"
++#include "core/hle/kernel/k_process.h"
+ #include "core/hle/kernel/kernel.h"
+ #include "core/hle/service/ipc_helpers.h"
+ #include "core/hle/service/service.h"
+@@ -33,6 +37,7 @@ ServiceFrameworkBase::ServiceFrameworkBase(Core::System& system_, const char* se
+     : SessionRequestHandler(system_.Kernel(), service_name_)
+     , system{system_}
+     , service_name{service_name_}
++    , is_i_storage{std::string_view{service_name_} == "IStorage"}
+     , handler_invoker{handler_invoker_}
+     , max_sessions{max_sessions_}
+ {}
+@@ -77,13 +82,22 @@ void ServiceFrameworkBase::ReportUnimplementedFunction(HLERequestContext& ctx,
+ }
+ 
+ void ServiceFrameworkBase::InvokeRequest(HLERequestContext& ctx) {
+-    auto it = handlers.find(ctx.GetCommand());
++    const auto command = ctx.GetCommand();
++    auto it = handlers.find(command);
++    const bool is_cmd_read = command == 0;
+     FunctionInfoBase const* info = it == handlers.end() ? nullptr : &it->second;
+     if (info == nullptr || info->handler_callback == nullptr)
+         return ReportUnimplementedFunction(ctx, info);
+ 
+     LOG_TRACE(Service, "{}", MakeFunctionString(info->name, GetServiceName(), ctx.CommandBuffer()));
+     handler_invoker(this, info->handler_callback, ctx);
++
++    if (is_i_storage && is_cmd_read) {
++        const auto* const process = ctx.GetThread().GetOwnerProcess();
++        if (process != nullptr && system.IsNVDECActiveForProcess(process->GetId())) {
++            std::this_thread::sleep_for(std::chrono::microseconds{600});
++        }
++    }
+ }
+ 
+ void ServiceFrameworkBase::InvokeRequestTipc(HLERequestContext& ctx) {
+diff --git a/src/core/hle/service/service.h b/src/core/hle/service/service.h
+index 41429958ad..e52a832a1e 100644
+--- a/src/core/hle/service/service.h
++++ b/src/core/hle/service/service.h
+@@ -107,6 +107,8 @@ protected:
+     Core::System& system;
+     /// Identifier string used to connect to the service.
+     const char* service_name;
++    /// Whether this is the IStorage service.
++    const bool is_i_storage;
+     /// Function used to safely up-cast pointers to the derived class before invoking a handler.
+     InvokerFn* handler_invoker;
+     /// Maximum number of concurrent sessions that this service can handle.
