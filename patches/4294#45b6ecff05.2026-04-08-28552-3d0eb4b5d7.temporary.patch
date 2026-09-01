@@ -142,15 +142,6 @@ index cd884ad6bd..b5318f1c99 100644
  GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
      const auto [pair, is_new]{graphics_cache.try_emplace(graphics_key)};
      auto& pipeline{pair->second};
-@@ -658,7 +693,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
-     std::span<Shader::Environment* const> envs, PipelineStatistics* statistics,
-     bool build_in_parallel) try {
-     auto hash = key.Hash();
--//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
-+    LOG_DEBUG(Render_Vulkan, "{:#016x}", hash);
-     size_t env_index{0};
-     std::array<Shader::IR::Program, Maxwell::MaxShaderProgram> programs;
-     const bool uses_vertex_a{key.unique_hashes[0] != 0};
 @@ -786,6 +821,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
          }
          SerializePipeline(key, env_ptrs, pipeline_cache_filename, CACHE_VERSION);
@@ -166,15 +157,6 @@ index cd884ad6bd..b5318f1c99 100644
 +    QueueVulkanPipelineCacheFlush();
      return pipeline;
  }
- 
-@@ -817,7 +854,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
-         return nullptr;
-     }
- 
--//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
-+    LOG_DEBUG(Render_Vulkan, "{:#016x}", hash);
- 
-     Shader::Maxwell::Flow::CFG cfg{env, pools.flow_block, env.StartAddress()};
  
 diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
 index 1f7dab935c..14e5022994 100644

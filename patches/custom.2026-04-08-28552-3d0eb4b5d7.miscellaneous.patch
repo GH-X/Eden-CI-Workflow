@@ -1,412 +1,3 @@
-diff --git a/.patch/spirv-tools/0001-netbsd-fix.patch b/.patch/spirv-tools/0001-netbsd-fix.patch
-deleted file mode 100644
-index e4b71f2938..0000000000
---- a/.patch/spirv-tools/0001-netbsd-fix.patch
-+++ /dev/null
-@@ -1,14 +0,0 @@
--diff --git a/external/CMakeLists.txt b/external/CMakeLists.txt
--index eb4e69e..3155805 100644
----- a/external/CMakeLists.txt
--+++ b/external/CMakeLists.txt
--@@ -72,7 +72,8 @@ if (SPIRV_TOOLS_USE_MIMALLOC)
--   pop_variable(MI_BUILD_TESTS)
-- endif()
-- 
---if (DEFINED SPIRV-Headers_SOURCE_DIR)
--+# NetBSD doesn't have SPIRV-Headers readily available on system
--+if (DEFINED SPIRV-Headers_SOURCE_DIR AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "NetBSD")
--   # This allows flexible position of the SPIRV-Headers repo.
--   set(SPIRV_HEADER_DIR ${SPIRV-Headers_SOURCE_DIR})
-- else()
-diff --git a/.patch/spirv-tools/0002-allow-static-only.patch b/.patch/spirv-tools/0002-allow-static-only.patch
-deleted file mode 100644
-index 873589a5ac..0000000000
---- a/.patch/spirv-tools/0002-allow-static-only.patch
-+++ /dev/null
-@@ -1,287 +0,0 @@
--From 67bf3d1381b1faf59e87001d6156ba4e21cada14 Mon Sep 17 00:00:00 2001
--From: crueter <crueter@eden-emu.dev>
--Date: Mon, 29 Dec 2025 21:22:36 -0500
--Subject: [PATCH] [cmake] refactor: shared/static handling
--
--This significantly redoes the way shared and static libraries are
--handled. Now, it's controlled by two options: `SPIRV_TOOLS_BUILD_STATIC`
--and `SPIRV_TOOLS_BUILD_SHARED`.
--
--The default configuration (no `BUILD_SHARED_LIBS` set, options left at
--default) is to build shared ONLY if this is the master project, or
--static ONLY if this is a subproject (e.g. FetchContent, CPM.cmake). Also
--I should note that static-only (i.e. no shared) is now a supported
--target, this is done because projects including it as a submodule e.g.
--on Android or Windows may prefer this.
--
--Now the shared/static handling:
--- static ON, shared OFF: Only generates `.a` libraries.
--- static ON, shared ON: Generates `.a` libraries, but also
--  `libSPIRV-Tools.so`
--- static OFF, shared ON: Only generates `.so` libraries.
--
--Notable TODOs:
--- SPIRV-Tools-shared.pc seems redundant--how should we handle which one
--  to use in the case of distributions that distribute both types (MSYS2
--  for instance)?
--  * *Note: pkgconfig sucks at this and usually just leaves it up to the
--    user, so the optimal solution may indeed be doing absolutely
--    nothing.* CMake is unaffected :)
--- use namespaces in the CMake config files pleaaaaase
--
--This is going to change things a good bit for package maintainers, but
--cest la vie. It's for the greater good, I promise.
--
--Signed-off-by: crueter <crueter@eden-emu.dev>
-----
-- CMakeLists.txt        | 108 +++++++++++++++++++++++++-----------------
-- source/CMakeLists.txt |  62 ++++++++++++------------
-- 2 files changed, 94 insertions(+), 76 deletions(-)
--
--diff --git a/CMakeLists.txt b/CMakeLists.txt
--index 4d843b4d2f..07201f690f 100644
----- a/CMakeLists.txt
--+++ b/CMakeLists.txt
--@@ -14,6 +14,15 @@
-- 
-- cmake_minimum_required(VERSION 3.22.1)
-- 
--+# master project detection--useful for FetchContent/submodule inclusion
--+set(master_project OFF)
--+set(subproject ON)
--+
--+if (NOT DEFINED PROJECT_NAME)
--+  set(master_project ON)
--+  set(subproject OFF)
--+endif()
--+
-- project(spirv-tools)
-- 
-- # Avoid a bug in CMake 3.22.1. By default it will set -std=c++11 for
--@@ -135,46 +144,49 @@ if (DEFINED SPIRV_TOOLS_EXTRA_DEFINITIONS)
--   add_definitions(${SPIRV_TOOLS_EXTRA_DEFINITIONS})
-- endif()
-- 
---# Library build setting definitions:
---#
---# * SPIRV_TOOLS_BUILD_STATIC - ON or OFF - Defaults to ON.
---#   If enabled the following targets will be created:
---#     ${SPIRV_TOOLS}-static - STATIC library.
---#                             Has full public symbol visibility.
---#     ${SPIRV_TOOLS}-shared - SHARED library.
---#                             Has default-hidden symbol visibility.
---#     ${SPIRV_TOOLS}        - will alias to one of above, based on BUILD_SHARED_LIBS.
---#   If disabled the following targets will be created:
---#     ${SPIRV_TOOLS}        - either STATIC or SHARED based on SPIRV_TOOLS_LIBRARY_TYPE.
---#                             Has full public symbol visibility.
---#     ${SPIRV_TOOLS}-shared - SHARED library.
---#                             Has default-hidden symbol visibility.
---#
---# * SPIRV_TOOLS_LIBRARY_TYPE - SHARED or STATIC.
---#   Specifies the library type used for building SPIRV-Tools libraries.
---#   Defaults to SHARED when BUILD_SHARED_LIBS=1, otherwise STATIC.
---#
---# * SPIRV_TOOLS_FULL_VISIBILITY - "${SPIRV_TOOLS}-static" or "${SPIRV_TOOLS}"
---#   Evaluates to the SPIRV_TOOLS target library name that has no hidden symbols.
---#   This is used by internal targets for accessing symbols that are non-public.
---#   Note this target provides no API stability guarantees.
---#
---# Ideally, all of these will go away - see https://github.com/KhronosGroup/SPIRV-Tools/issues/3909.
---option(ENABLE_EXCEPTIONS_ON_MSVC "Build SPIRV-TOOLS with c++ exceptions enabled in MSVC" ON)
---option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS}-static target. ${SPIRV_TOOLS} will alias to ${SPIRV_TOOLS}-static or ${SPIRV_TOOLS}-shared based on BUILD_SHARED_LIBS" ON)
---if(SPIRV_TOOLS_BUILD_STATIC)
---  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
--+# If BUILD_SHARED_LIBS is undefined, set it based on whether we are
--+# the master project or a subproject
--+if (NOT DEFINED BUILD_SHARED_LIBS)
--+  set(BUILD_SHARED_LIBS ${master_project})
--+endif()
--+
--+if (BUILD_SHARED_LIBS)
--+  set(static_default OFF)
--+else()
--+  set(static_default ON)
--+endif()
--+
--+option(SPIRV_TOOLS_BUILD_SHARED "Build ${SPIRV_TOOLS} as a shared library"
--+       ${BUILD_SHARED_LIBS})
--+option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS} as a static library"
--+       ${static_default})
--+
--+# Avoid conflict between the dll import library and
--+# the static library (thanks microsoft)
--+if(CMAKE_STATIC_LIBRARY_PREFIX STREQUAL "" AND
--+   CMAKE_STATIC_LIBRARY_SUFFIX STREQUAL ".lib")
--+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}-static")
--+else()
--+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}")
--+endif()
--+
--+if (SPIRV_TOOLS_BUILD_STATIC)
--+  # If building a static library at all, always build other libraries as static,
--+  # and link to the static SPIRV-Tools library.
--   set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
---else(SPIRV_TOOLS_BUILD_STATIC)
---  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS})
---  if (NOT DEFINED SPIRV_TOOLS_LIBRARY_TYPE)
---      if(BUILD_SHARED_LIBS)
---        set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
---      else()
---        set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
---      endif()
---  endif()
---endif(SPIRV_TOOLS_BUILD_STATIC)
--+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
--+elseif (SPIRV_TOOLS_BUILD_SHARED)
--+  # If only building a shared library, link other libraries to the
--+  # shared library. Also, other libraries should be shared
--+  set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
--+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-shared)
--+else()
--+  message(FATAL_ERROR "You must set one of "
--+    "SPIRV_TOOLS_BUILD_STATIC or SPIRV_TOOLS_BUILD_SHARED!")
--+endif()
--+
--+option(ENABLE_EXCEPTIONS_ON_MSVC
--+    "Build SPIRV-TOOLS with C++ exceptions enabled in MSVC" ON)
-- 
-- function(spvtools_default_compile_options TARGET)
--   target_compile_options(${TARGET} PRIVATE ${SPIRV_WARNINGS})
--@@ -372,7 +384,7 @@ if (NOT "${SPIRV_SKIP_TESTS}")
-- endif()
-- 
-- set(SPIRV_LIBRARIES "-lSPIRV-Tools-opt -lSPIRV-Tools -lSPIRV-Tools-link")
---set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools-shared")
--+set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools")
-- 
-- # Build pkg-config file
-- # Use a first-class target so it's regenerated when relevant files are updated.
--@@ -388,7 +400,12 @@ add_custom_command(
--                       -DSPIRV_LIBRARIES=${SPIRV_LIBRARIES}
--                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
--         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
---add_custom_command(
--+
--+set(pc_files ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
--+
--+# TODO(crueter): remove?
--+if (SPIRV_TOOLS_BUILD_SHARED)
--+  add_custom_command(
--         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc
--         COMMAND ${CMAKE_COMMAND}
--                       -DCHANGES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/CHANGES
--@@ -400,9 +417,12 @@ add_custom_command(
--                       -DSPIRV_SHARED_LIBRARIES=${SPIRV_SHARED_LIBRARIES}
--                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
--         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools-shared.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
---add_custom_target(spirv-tools-pkg-config 
---        ALL 
---        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
--+  set(pc_files ${pc_files} ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc)
--+endif()
--+
--+add_custom_target(spirv-tools-pkg-config
--+        ALL
--+        DEPENDS ${pc_files})
-- 
-- # Install pkg-config file
-- if (ENABLE_SPIRV_TOOLS_INSTALL)
--diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
--index bfa1e661bc..fd3712c70c 100644
----- a/source/CMakeLists.txt
--+++ b/source/CMakeLists.txt
--@@ -337,49 +337,44 @@ function(spirv_tools_default_target_options target)
--   )
--   set_property(TARGET ${target} PROPERTY FOLDER "SPIRV-Tools libraries")
--   spvtools_check_symbol_exports(${target})
---  add_dependencies(${target} spirv-tools-build-version core_tables extinst_tables)
--+  add_dependencies(${target}
--+    spirv-tools-build-version core_tables extinst_tables)
-- endfunction()
-- 
---# Always build ${SPIRV_TOOLS}-shared. This is expected distro packages, and
---# unlike the other SPIRV_TOOLS target, defaults to hidden symbol visibility.
---add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
---if (SPIRV_TOOLS_USE_MIMALLOC)
---  target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--+if (SPIRV_TOOLS_BUILD_SHARED)
--+  add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
--+  if (SPIRV_TOOLS_USE_MIMALLOC)
--+    target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--+  endif()
--+
--+  set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES
--+    OUTPUT_NAME "${SPIRV_TOOLS}")
--+  spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
--+
--+  target_compile_definitions(${SPIRV_TOOLS}-shared
--+    PRIVATE SPIRV_TOOLS_IMPLEMENTATION
--+    PUBLIC SPIRV_TOOLS_SHAREDLIB)
--+
--+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-shared)
-- endif()
---spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
---set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES CXX_VISIBILITY_PRESET hidden)
---target_compile_definitions(${SPIRV_TOOLS}-shared
---  PRIVATE SPIRV_TOOLS_IMPLEMENTATION
---  PUBLIC SPIRV_TOOLS_SHAREDLIB
---)
-- 
-- if(SPIRV_TOOLS_BUILD_STATIC)
--   add_library(${SPIRV_TOOLS}-static STATIC ${SPIRV_SOURCES})
--   if (SPIRV_TOOLS_USE_MIMALLOC AND SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD)
--     target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--   endif()
--+
--   spirv_tools_default_target_options(${SPIRV_TOOLS}-static)
---  # The static target does not have the '-static' suffix.
---  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES OUTPUT_NAME "${SPIRV_TOOLS}")
---
---  # Create the "${SPIRV_TOOLS}" target as an alias to either "${SPIRV_TOOLS}-static"
---  # or "${SPIRV_TOOLS}-shared" depending on the value of BUILD_SHARED_LIBS.
---  if(BUILD_SHARED_LIBS)
---    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-shared)
---  else()
---    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-static)
---  endif()
--+  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES
--+    OUTPUT_NAME "${SPIRV_TOOLS_STATIC_LIBNAME}")
-- 
---  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static ${SPIRV_TOOLS}-shared)
---else()
---  add_library(${SPIRV_TOOLS} ${SPIRV_TOOLS_LIBRARY_TYPE} ${SPIRV_SOURCES})
---  if (SPIRV_TOOLS_USE_MIMALLOC)
---    target_link_libraries(${SPIRV_TOOLS} PRIVATE mimalloc-static)
---  endif()
---  spirv_tools_default_target_options(${SPIRV_TOOLS})
---  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS} ${SPIRV_TOOLS}-shared)
--+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static)
-- endif()
-- 
--+# Create the "SPIRV-Tools" target as an alias to either "SPIRV-Tools-static"
--+# or "SPIRV-Tools-shared" depending on the value of SPIRV_TOOLS_BUILD_SHARED.
--+add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS_FULL_VISIBILITY})
--+
-- if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
--   find_library(LIBRT rt)
--   if(LIBRT)
--@@ -390,14 +385,17 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
-- endif()
-- 
-- if(ENABLE_SPIRV_TOOLS_INSTALL)
---  if (SPIRV_TOOLS_USE_MIMALLOC AND (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
--+  if (SPIRV_TOOLS_USE_MIMALLOC AND
--+    (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
--     list(APPEND SPIRV_TOOLS_TARGETS mimalloc-static)
--   endif()
--   install(TARGETS ${SPIRV_TOOLS_TARGETS} EXPORT ${SPIRV_TOOLS}Targets)
--   export(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake)
-- 
--   spvtools_config_package_dir(${SPIRV_TOOLS} PACKAGE_DIR)
---  install(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake DESTINATION ${PACKAGE_DIR})
--+  install(EXPORT ${SPIRV_TOOLS}Targets
--+    FILE ${SPIRV_TOOLS}Target.cmake
--+    DESTINATION ${PACKAGE_DIR})
-- 
--   # Special config file for root library compared to other libs.
--   file(WRITE ${CMAKE_BINARY_DIR}/${SPIRV_TOOLS}Config.cmake
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 42717c496d..1f000141f0 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -130,7 +130,6 @@ if (YUZU_STATIC_BUILD)
- 
-         # these libs do not properly provide static libs/let you do it with cmake
-         set(fmt_FORCE_BUNDLED ON)
--        set(SPIRV-Tools_FORCE_BUNDLED ON)
-         set(SPIRV-Headers_FORCE_BUNDLED ON)
-         set(zstd_FORCE_BUNDLED ON)
-     endif()
-@@ -523,7 +522,6 @@ if (NOT YUZU_STATIC_ROOM)
-     find_package(VulkanMemoryAllocator)
-     find_package(VulkanUtilityLibraries)
-     find_package(SimpleIni)
--    find_package(SPIRV-Tools)
-     find_package(sirit)
-     find_package(gamemode)
-     find_package(frozen)
-diff --git a/CMakeModules/FindSPIRV-Tools.cmake b/CMakeModules/FindSPIRV-Tools.cmake
-deleted file mode 100644
-index e0f9a88d54..0000000000
---- a/CMakeModules/FindSPIRV-Tools.cmake
-+++ /dev/null
-@@ -1,26 +0,0 @@
--# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
--# SPDX-License-Identifier: GPL-3.0-or-later
--
--# SPDX-FileCopyrightText: 2022 yuzu Emulator Project
--# SPDX-License-Identifier: GPL-2.0-or-later
--
--include(FindPackageHandleStandardArgs)
--
--find_package(PkgConfig QUIET)
--pkg_search_module(SPIRV-Tools QUIET IMPORTED_TARGET SPIRV-Tools)
--find_package_handle_standard_args(SPIRV-Tools
--    REQUIRED_VARS SPIRV-Tools_LINK_LIBRARIES
--    VERSION_VAR SPIRV-Tools_VERSION
--)
--
--if (PLATFORM_MSYS)
--    FixMsysPath(PkgConfig::SPIRV-Tools)
--endif()
--
--if (SPIRV-Tools_FOUND AND NOT TARGET SPIRV-Tools::SPIRV-Tools)
--    if (TARGET SPIRV-Tools)
--        add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools)
--    else()
--        add_library(SPIRV-Tools::SPIRV-Tools ALIAS PkgConfig::SPIRV-Tools)
--    endif()
--endif()
-diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
-index ba0545b7a7..e230f709fa 100644
---- a/externals/CMakeLists.txt
-+++ b/externals/CMakeLists.txt
-@@ -192,14 +192,6 @@ else()
-     endif()
- endif()
- 
--# SPIRV Tools
--AddJsonPackage(spirv-tools)
--
--if (SPIRV-Tools_ADDED)
--    add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools-static)
--    target_link_libraries(SPIRV-Tools-static PRIVATE SPIRV-Tools-opt SPIRV-Tools-link)
--endif()
--
- # Catch2
- if (YUZU_TESTS OR DYNARMIC_TESTS)
-     AddJsonPackage(catch2)
-diff --git a/externals/cpmfile.json b/externals/cpmfile.json
-index b8472774ae..0f8d34230c 100644
---- a/externals/cpmfile.json
-+++ b/externals/cpmfile.json
-@@ -102,20 +102,6 @@
-         "git_version": "1.3.18",
-         "find_args": "MODULE"
-     },
--    "spirv-tools": {
--        "package": "SPIRV-Tools",
--        "repo": "KhronosGroup/SPIRV-Tools",
--        "sha": "0a7e28689a",
--        "hash": "eadfcceb82f4b414528d99962335e4f806101168474028f3cf7691ac40c37f323decf2a42c525e2d5bfa6f14ff132d6c5cf9b87c151490efad01f5e13ade1520",
--        "git_version": "2025.4",
--        "options": [
--            "SPIRV_SKIP_EXECUTABLES ON"
--        ],
--        "patches": [
--            "0001-netbsd-fix.patch",
--            "0002-allow-static-only.patch"
--        ]
--    },
-     "spirv-headers": {
-         "package": "SPIRV-Headers",
-         "repo": "KhronosGroup/SPIRV-Headers",
 diff --git a/externals/ffmpeg/CMakeLists.txt b/externals/ffmpeg/CMakeLists.txt
 index 3140f8e545..87a3cacc70 100644
 --- a/externals/ffmpeg/CMakeLists.txt
@@ -421,18 +12,10 @@ index 3140f8e545..87a3cacc70 100644
              ${FFmpeg_BUILD_DIR}
      )
 diff --git a/src/common/settings.cpp b/src/common/settings.cpp
-index 54848c4dd1..3db8e28255 100644
+index 54848c4dd1..6ece64f4f3 100644
 --- a/src/common/settings.cpp
 +++ b/src/common/settings.cpp
-@@ -61,7 +61,6 @@ SWITCHABLE(NvdecEmulation, false);
- SWITCHABLE(Region, true);
- SWITCHABLE(RendererBackend, true);
- SWITCHABLE(ScalingFilter, false);
--SWITCHABLE(SpirvOptimizeMode, true);
- SWITCHABLE(TimeZone, true);
- SETTING(VSyncMode, true);
- SWITCHABLE(bool, false);
-@@ -157,39 +156,34 @@ void UpdateGPUAccuracy() {
+@@ -157,39 +157,34 @@ void UpdateGPUAccuracy() {
      values.current_gpu_accuracy = values.gpu_accuracy.GetValue();
  }
  
@@ -485,7 +68,7 @@ index 54848c4dd1..3db8e28255 100644
  #endif
  }
  
-@@ -214,7 +208,15 @@ bool IsNceEnabled() {
+@@ -214,7 +209,15 @@ bool IsNceEnabled() {
  }
  
  bool IsDockedMode() {
@@ -502,7 +85,7 @@ index 54848c4dd1..3db8e28255 100644
  }
  
  float Volume() {
-@@ -233,8 +235,9 @@ const char* TranslateCategory(Category category) {
+@@ -233,8 +236,9 @@ const char* TranslateCategory(Category category) {
      case Category::Core:
          return "Core";
      case Category::Cpu:
@@ -513,7 +96,7 @@ index 54848c4dd1..3db8e28255 100644
          return "Cpu";
      case Category::Overlay:
          return "Overlay";
-@@ -387,52 +390,86 @@ void SetConfiguringGlobal(bool is_global) {
+@@ -387,52 +391,86 @@ void SetConfiguringGlobal(bool is_global) {
      configuring_global = is_global;
  }
  
@@ -637,18 +220,10 @@ index 54848c4dd1..3db8e28255 100644
  
  } // namespace Settings
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..c62e99095e 100644
+index bec1e93e79..7e96aaa2ed 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
-@@ -77,7 +77,6 @@ SWITCHABLE(NvdecEmulation, false);
- SWITCHABLE(Region, true);
- SWITCHABLE(RendererBackend, true);
- SWITCHABLE(ScalingFilter, false);
--SWITCHABLE(SpirvOptimizeMode, true);
- SWITCHABLE(TimeZone, true);
- SETTING(VSyncMode, true);
- SWITCHABLE(bool, false);
-@@ -171,6 +170,7 @@ struct Values {
+@@ -171,6 +171,7 @@ struct Values {
      SwitchableSetting<bool> enable_overlay{linkage, false, "enable_overlay", Category::LibraryApplet};
  
      // Audio
@@ -656,7 +231,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<AudioEngine> sink_id{linkage, AudioEngine::Auto, "output_engine",
                                             Category::Audio, Specialization::RuntimeList};
      SwitchableSetting<std::string> audio_output_device_id{
-@@ -192,24 +192,57 @@ struct Values {
+@@ -192,24 +193,57 @@ struct Values {
                                         true};
      Setting<bool, false> audio_muted{
                                       linkage, false, "audio_muted", Category::Audio, Specialization::Default, true, true};
@@ -726,7 +301,7 @@ index bec1e93e79..c62e99095e 100644
                                               "speed_limit",
                                               Category::Core,
                                               Specialization::Countable | Specialization::Percentage,
-@@ -217,31 +250,40 @@ struct Values {
+@@ -217,31 +251,40 @@ struct Values {
                                               true,
                                               &use_speed_limit};
  
@@ -789,7 +364,7 @@ index bec1e93e79..c62e99095e 100644
  
      // Cpu
      SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
-@@ -258,75 +300,36 @@ struct Values {
+@@ -258,75 +301,36 @@ struct Values {
  #endif
                                                      "cpu_backend",
                                                      Category::Cpu};
@@ -891,7 +466,7 @@ index bec1e93e79..c62e99095e 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -337,41 +340,10 @@ struct Values {
+@@ -337,41 +341,10 @@ struct Values {
  #endif
          "backend", Category::Renderer};
      SwitchableSetting<int> vulkan_device{linkage, 0, "vulkan_device", Category::Renderer, Specialization::RuntimeList};
@@ -934,7 +509,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<AspectRatio, true> aspect_ratio{linkage,
                                                        AspectRatio::R16_9,
                                                        "aspect_ratio",
-@@ -387,13 +359,6 @@ struct Values {
+@@ -387,13 +360,6 @@ struct Values {
                                                    Specialization::Default,
                                                    true,
                                                    true};
@@ -948,7 +523,7 @@ index bec1e93e79..c62e99095e 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -408,18 +373,42 @@ struct Values {
+@@ -408,18 +374,42 @@ struct Values {
                                                              true,
                                                              true};
  
@@ -998,7 +573,7 @@ index bec1e93e79..c62e99095e 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -427,10 +416,10 @@ struct Values {
+@@ -427,10 +417,10 @@ struct Values {
                                                        true,
                                                        true};
  
@@ -1011,7 +586,7 @@ index bec1e93e79..c62e99095e 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -442,24 +431,34 @@ struct Values {
+@@ -442,24 +432,34 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
@@ -1051,7 +626,7 @@ index bec1e93e79..c62e99095e 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -468,36 +467,30 @@ struct Values {
+@@ -468,36 +468,30 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -1103,7 +678,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> use_reactive_flushing{linkage,
  #ifdef ANDROID
                                                    false,
-@@ -507,8 +500,8 @@ struct Values {
+@@ -507,8 +501,8 @@ struct Values {
                                                    "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
@@ -1114,7 +689,7 @@ index bec1e93e79..c62e99095e 100644
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
                                                    false,
-@@ -518,6 +511,16 @@ struct Values {
+@@ -518,6 +512,16 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -1122,7 +697,7 @@ index bec1e93e79..c62e99095e 100644
 +                                                  Category::RendererAdvanced};
 +
 +    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
-+        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
++        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
 +        Specialization::Default};
 +
 +    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
@@ -1131,7 +706,7 @@ index bec1e93e79..c62e99095e 100644
  #ifdef ANDROID
      SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
                                                   false,
-@@ -528,15 +531,7 @@ struct Values {
+@@ -528,15 +532,7 @@ struct Values {
                                                   true};
  #endif
  
@@ -1148,7 +723,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -544,6 +539,15 @@ struct Values {
+@@ -544,6 +540,15 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -1164,7 +739,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -552,47 +556,31 @@ struct Values {
+@@ -552,47 +557,31 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
@@ -1219,7 +794,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<u32, true> sample_shading{linkage,
                                                  0,
                                                  0,
-@@ -601,13 +589,23 @@ struct Values {
+@@ -601,13 +590,23 @@ struct Values {
                                                  Category::RendererExtensions,
                                                  Specialization::Scalar};
  
@@ -1244,7 +819,7 @@ index bec1e93e79..c62e99095e 100644
  
      Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
      Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
-@@ -629,51 +627,6 @@ struct Values {
+@@ -629,51 +628,6 @@ struct Values {
                                                           true,
                                                           true};
  
@@ -1296,7 +871,7 @@ index bec1e93e79..c62e99095e 100644
      // Controls
      InputSetting<std::array<PlayerInput, 10>> players;
  
-@@ -789,6 +742,17 @@ struct Values {
+@@ -789,6 +743,17 @@ struct Values {
                                           Category::Debugging};
      Setting<bool> perform_vulkan_check{linkage, true, "perform_vulkan_check", Category::Debugging};
      Setting<bool> disable_web_applet{linkage, true, "disable_web_applet", Category::Debugging};
@@ -1314,7 +889,7 @@ index bec1e93e79..c62e99095e 100644
  
      // GPU Logging
      Setting<bool> gpu_logging_enabled{linkage, false, "gpu_logging_enabled", Category::Debugging};
-@@ -802,16 +766,6 @@ struct Values {
+@@ -802,16 +767,6 @@ struct Values {
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
  
@@ -1331,7 +906,7 @@ index bec1e93e79..c62e99095e 100644
      // Miscellaneous
      Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
      Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
-@@ -843,27 +797,31 @@ extern Values values;
+@@ -843,27 +798,31 @@ extern Values values;
  bool getDebugKnobAt(u8 i);
  
  void UpdateGPUAccuracy();
@@ -1890,7 +1465,7 @@ index f4f5688781..3f3c2ace52 100644
  // clang-format on
  
 diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
-index 4549a36345..6c9af3a444 100644
+index 4549a36345..dd2c0dd47a 100644
 --- a/src/qt_common/config/uisettings.h
 +++ b/src/qt_common/config/uisettings.h
 @@ -98,18 +98,18 @@ struct Values {
@@ -1953,11 +1528,6 @@ index 4549a36345..6c9af3a444 100644
  
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
-@@ -268,4 +268,3 @@ Q_DECLARE_METATYPE(Settings::AntiAliasing);
- Q_DECLARE_METATYPE(Settings::RendererBackend);
- Q_DECLARE_METATYPE(Settings::AstcRecompression);
- Q_DECLARE_METATYPE(Settings::AstcDecodeMode);
--Q_DECLARE_METATYPE(Settings::SpirvOptimizeMode);
 diff --git a/src/qt_common/util/mod.cpp b/src/qt_common/util/mod.cpp
 deleted file mode 100644
 index 38bc8f5be0..0000000000
@@ -2125,109 +1695,6 @@ index 2148bed65c..0000000000
 -const QString ExtractMod(const QString& path);
 -
 -} // namespace QtCommon::Mod
-diff --git a/src/shader_recompiler/CMakeLists.txt b/src/shader_recompiler/CMakeLists.txt
-index e91803c8c6..d02ee268f0 100644
---- a/src/shader_recompiler/CMakeLists.txt
-+++ b/src/shader_recompiler/CMakeLists.txt
-@@ -243,7 +243,7 @@ add_library(shader_recompiler STATIC
- 
- )
- 
--target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit SPIRV-Tools::SPIRV-Tools)
-+target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit)
- 
- if (MSVC)
-     target_compile_options(shader_recompiler PRIVATE
-diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.cpp b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-index 313a1deb30..bdb15fa728 100644
---- a/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-+++ b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-@@ -9,7 +9,6 @@
- #include <type_traits>
- #include <utility>
- #include <vector>
--#include <spirv-tools/optimizer.hpp>
- 
- #include "common/settings.h"
- #include "shader_recompiler/backend/spirv/emit_spirv.h"
-@@ -22,15 +21,7 @@ namespace Shader::Backend::SPIRV {
- namespace {
- template <class Func>
- struct FuncTraits {};
--    thread_local std::unique_ptr<spvtools::Optimizer> thread_optimizer;
- 
--    spvtools::Optimizer& GetThreadOptimizer() {
--        if (!thread_optimizer) {
--            thread_optimizer = std::make_unique<spvtools::Optimizer>(SPV_ENV_VULKAN_1_3);
--            thread_optimizer->RegisterPerformancePasses();
--        }
--        return *thread_optimizer;
--    }
- template <class ReturnType_, class... Args>
- struct FuncTraits<ReturnType_ (*)(Args...)> {
-     using ReturnType = ReturnType_;
-@@ -501,8 +492,7 @@ void PatchPhiNodes(IR::Program& program, EmitContext& ctx) {
-         }
- } // Anonymous namespace
- 
--std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
--                           IR::Program& program, Bindings& bindings, bool optimize) {
-+std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
-     EmitContext ctx{profile, runtime_info, program, bindings};
-     const Id main{DefineMain(ctx, program)};
-     DefineEntryPoint(program, ctx, main);
-@@ -514,29 +504,7 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
-     SetupCapabilities(profile, program.info, ctx);
-     SetupTransformFeedbackCapabilities(ctx, main);
-     PatchPhiNodes(program, ctx);
--
--    if (!optimize) {
--        return ctx.Assemble();
--    } else {
--        std::vector<u32> spirv = ctx.Assemble();
--
--        // Use thread-local optimizer instead of creating a new one
--        auto& spv_opt = GetThreadOptimizer();
--        spv_opt.SetMessageConsumer([](spv_message_level_t, const char*, const spv_position_t&, const char* m) {
--            LOG_ERROR(HW_GPU, "spirv-opt: {}", m);
--        });
--
--        spvtools::OptimizerOptions opt_options;
--        opt_options.set_run_validator(false);
--
--        std::vector<u32> result;
--        if (!spv_opt.Run(spirv.data(), spirv.size(), &result, opt_options)) {
--            LOG_ERROR(HW_GPU,
--                      "Failed to optimize SPIRV shader output, continuing without optimization");
--            result = std::move(spirv);
--        }
--        return result;
--    }
-+    return ctx.Assemble();
- }
- 
- Id EmitPhi(EmitContext& ctx, IR::Inst* inst) {
-diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.h b/src/shader_recompiler/backend/spirv/emit_spirv.h
-index 6bb8596925..89a1aaa7b2 100644
---- a/src/shader_recompiler/backend/spirv/emit_spirv.h
-+++ b/src/shader_recompiler/backend/spirv/emit_spirv.h
-@@ -33,13 +33,10 @@ constexpr u32 RESCALING_LAYOUT_WORDS_OFFSET = offsetof(RescalingLayout, rescalin
- constexpr u32 RESCALING_LAYOUT_DOWN_FACTOR_OFFSET = offsetof(RescalingLayout, down_factor);
- constexpr u32 RENDERAREA_LAYOUT_OFFSET = offsetof(RenderAreaLayout, render_area);
- 
--[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
--                                         IR::Program& program, Bindings& bindings, bool optimize);
--
--[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program,
--                                                bool optimize) {
-+[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings);
-+[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program) {
-     Bindings binding;
--    return EmitSPIRV(profile, {}, program, binding, optimize);
-+    return EmitSPIRV(profile, {}, program, binding);
- }
- 
- } // namespace Shader::Backend::SPIRV
 diff --git a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
 index 2d4feca02c..809879c981 100644
 --- a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
@@ -2552,59 +2019,6 @@ index 4ed42487aa..1f5ff99153 100644
      std::function<void()> operation([this, is_synced, streamer, query_base = query, query_location,
                                       pointer, pointer_timestamp] {
          if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
-diff --git a/src/video_core/renderer_opengl/gl_shader_cache.cpp b/src/video_core/renderer_opengl/gl_shader_cache.cpp
-index aac7732005..cf62b02c97 100644
---- a/src/video_core/renderer_opengl/gl_shader_cache.cpp
-+++ b/src/video_core/renderer_opengl/gl_shader_cache.cpp
-@@ -181,7 +181,6 @@ ShaderCache::ShaderCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
-       state_tracker{state_tracker_}, shader_notify{shader_notify_},
-       use_asynchronous_shaders{device.UseAsynchronousShaders()},
-       strict_context_required{device.StrictContextRequired()},
--      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
-       profile{
-           .supported_spirv = 0x00010000,
- 
-@@ -348,10 +347,6 @@ void ShaderCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading,
-     if (!use_asynchronous_shaders) {
-         workers.reset();
-     }
--
--    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
--        this->optimize_spirv_output = false;
--    }
- }
- 
- GraphicsPipeline* ShaderCache::CurrentGraphicsPipeline() {
-@@ -537,7 +532,7 @@ std::unique_ptr<GraphicsPipeline> ShaderCache::CreateGraphicsPipeline(
-             break;
-         case Settings::RendererBackend::OpenGL_SPIRV:
-             ConvertLegacyToGeneric(program, runtime_info);
--            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output);
-+            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
-             break;
-         default:
-             UNREACHABLE();
-@@ -598,7 +593,7 @@ std::unique_ptr<ComputePipeline> ShaderCache::CreateComputePipeline(
-         code = EmitGLASM(profile, info, program);
-         break;
-     case Settings::RendererBackend::OpenGL_SPIRV:
--        code_spirv = EmitSPIRV(profile, program, this->optimize_spirv_output);
-+        code_spirv = EmitSPIRV(profile, program);
-         break;
-     default:
-         UNREACHABLE();
-diff --git a/src/video_core/renderer_opengl/gl_shader_cache.h b/src/video_core/renderer_opengl/gl_shader_cache.h
-index 3398ba6f51..02e54539fc 100644
---- a/src/video_core/renderer_opengl/gl_shader_cache.h
-+++ b/src/video_core/renderer_opengl/gl_shader_cache.h
-@@ -76,7 +76,6 @@ private:
-     VideoCore::ShaderNotify& shader_notify;
-     const bool use_asynchronous_shaders;
-     const bool strict_context_required;
--    bool optimize_spirv_output{};
- 
-     GraphicsPipelineKey graphics_key{};
-     GraphicsPipeline* current_pipeline{};
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 958988f27e..88cc165215 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
@@ -2673,59 +2087,6 @@ index b73fcd162b..dad9038c6d 100644
      void Finish();
  
      u64 GetDeviceLocalMemory() const;
-diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 5f86506961..f8864d216a 100644
---- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-+++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-@@ -369,7 +369,6 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
-       texture_cache{texture_cache_}, shader_notify{shader_notify_},
-       use_asynchronous_shaders{Settings::values.use_asynchronous_shaders.GetValue()},
-       use_vulkan_pipeline_cache{Settings::values.use_vulkan_driver_pipeline_cache.GetValue()},
--      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
-       workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers(),
-               "VkPipelineBuilder"),
-       serialization_thread(1, "VkPipelineSerialization") {
-@@ -663,10 +662,6 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
-     if (state.statistics) {
-         state.statistics->Report();
-     }
--
--    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
--        this->optimize_spirv_output = false;
--    }
- }
- 
- GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
-@@ -771,7 +766,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
- 
-         const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
-         ConvertLegacyToGeneric(program, runtime_info);
--        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
-+        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding)};
-         device.SaveShader(code);
-         modules[stage_index] = BuildShader(device, code);
- 
-@@ -889,7 +884,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
-                     max_shared_memory / 1024);
-         program.shared_memory_size = max_shared_memory;
-     }
--    const std::vector<u32> code{EmitSPIRV(profile, program, this->optimize_spirv_output)};
-+    const std::vector<u32> code{EmitSPIRV(profile, program)};
-     device.SaveShader(code);
-     vk::ShaderModule spv_module{BuildShader(device, code)};
- 
-diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-index 1f7dab935c..490f9da81a 100644
---- a/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-+++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-@@ -153,7 +153,6 @@ private:
-     VideoCore::ShaderNotify& shader_notify;
-     bool use_asynchronous_shaders{};
-     bool use_vulkan_pipeline_cache{};
--    bool optimize_spirv_output{};
- 
-     GraphicsPipelineCacheKey graphics_key{};
-     GraphicsPipeline* current_pipeline{};
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 index 226619d8d6..fc4bda3022 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp

@@ -38,6 +38,8 @@ for currentpatchs in $(ls -A ../patches/*$temppatchs | sort -n -r | awk -F\/ '{p
 	apply_patch $temppatchs $currentpatchs
 	previouspatchs="$currentpatchs"
 done
+# miscellaneous custom
+apply_patch 'miscellaneous.patch' 'custom'
 # translations zh_CN
 apply_patch 'translations.patch' 'zh_CN'
 # Summary

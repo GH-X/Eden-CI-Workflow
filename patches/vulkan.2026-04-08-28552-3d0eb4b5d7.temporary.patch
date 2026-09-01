@@ -332,7 +332,7 @@ index 1a41e50a36..332b58674c 100644
      vk::DescriptorSetLayout descriptor_set_layout;
      DescriptorAllocator descriptor_allocator;
 diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 5f86506961..cd884ad6bd 100644
+index 5f86506961..df768ccb3c 100644
 --- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -40,7 +40,6 @@
@@ -488,7 +488,7 @@ index 5f86506961..cd884ad6bd 100644
      bool build_in_parallel) try {
      auto hash = key.Hash();
 -    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
-+//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
++    LOG_DEBUG(Render_Vulkan, "0x{:016x}", hash);
      size_t env_index{0};
      std::array<Shader::IR::Program, Maxwell::MaxShaderProgram> programs;
      const bool uses_vertex_a{key.unique_hashes[0] != 0};
@@ -506,7 +506,7 @@ index 5f86506961..cd884ad6bd 100644
      }
  
 -    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
-+//    LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
++    LOG_DEBUG(Render_Vulkan, "0x{:016x}", hash);
  
      Shader::Maxwell::Flow::CFG cfg{env, pools.flow_block, env.StartAddress()};
  
