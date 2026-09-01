@@ -1,8 +1,40 @@
 diff --git a/src/core/hle/service/am/button_poller.cpp b/src/core/hle/service/am/button_poller.cpp
-index 069a1934d4..ff4a9dce49 100644
+index 069a1934d4..f7d3611761 100644
 --- a/src/core/hle/service/am/button_poller.cpp
 +++ b/src/core/hle/service/am/button_poller.cpp
-@@ -51,18 +51,12 @@ ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system)
+@@ -4,6 +4,8 @@
+ // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include <thread>
++#include "common/thread.h"
+ #include "core/core.h"
+ #include "core/hle/service/am/am_types.h"
+ #include "core/hle/service/am/button_poller.h"
+@@ -34,16 +36,14 @@ ButtonPressDuration ClassifyPressDuration(std::chrono::steady_clock::time_point
+ 
+ } // namespace
+ 
+-ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system)
+-    : m_window_system(window_system) {
++ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system) {
+     // TODO: am reads this from the home button state in hid, which is controller-agnostic.
+     Core::HID::ControllerUpdateCallback engine_callback{
+-        .on_change =
+-            [this](Core::HID::ControllerTriggerType type) {
+-                if (type == Core::HID::ControllerTriggerType::Button) {
+-                    this->OnButtonStateChanged();
+-                }
+-            },
++        .on_change = [this, &window_system](Core::HID::ControllerTriggerType type) {
++            if (type == Core::HID::ControllerTriggerType::Button) {
++                OnButtonStateChanged(window_system);
++            }
++        },
+         .is_npad_service = true,
+     };
+ 
+@@ -51,26 +51,18 @@ ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system)
      m_handheld_key = m_handheld->SetCallback(engine_callback);
      m_player1 = system.HIDCore().GetEmulatedController(Core::HID::NpadIdType::Player1);
      m_player1_key = m_player1->SetCallback(engine_callback);
@@ -13,38 +45,132 @@ index 069a1934d4..ff4a9dce49 100644
  ButtonPoller::~ButtonPoller() {
      m_handheld->DeleteCallback(m_handheld_key);
      m_player1->DeleteCallback(m_player1_key);
-     m_stop = true;
+-    m_stop = true;
 -    m_cv.notify_all();
 -    if (m_thread.joinable()) {
 -        m_thread.join();
 -    }
  }
  
- void ButtonPoller::OnButtonStateChanged() {
-@@ -134,7 +128,6 @@ void ButtonPoller::ThreadLoop() {
-     using namespace std::chrono_literals;
-     std::unique_lock lk{m_mutex};
-     while (!m_stop) {
+-void ButtonPoller::OnButtonStateChanged() {
+-    std::lock_guard lk{m_mutex};
+-    const bool home_button =
+-        m_handheld->GetHomeButtons().home.Value() || m_player1->GetHomeButtons().home.Value();
+-    const bool capture_button = m_handheld->GetCaptureButtons().capture.Value() ||
+-                                m_player1->GetCaptureButtons().capture.Value();
++void ButtonPoller::OnButtonStateChanged(WindowSystem& window_system) {
++    auto const home_button = m_handheld->GetHomeButtons().home.Value()
++        || m_player1->GetHomeButtons().home.Value();
++    auto const capture_button = m_handheld->GetCaptureButtons().capture.Value()
++        || m_player1->GetCaptureButtons().capture.Value();
+ 
+     // Buttons pressed which were not previously pressed
+     if (home_button && !m_home_button_press_start) {
+@@ -90,7 +82,7 @@ void ButtonPoller::OnButtonStateChanged() {
+     if (home_button && m_home_button_press_start && !m_home_button_long_sent) {
+         const auto duration = ClassifyPressDuration(*m_home_button_press_start);
+         if (duration != ButtonPressDuration::ShortPressing) {
+-            m_window_system.OnSystemButtonPress(SystemButtonType::HomeButtonLongPressing);
++            window_system.OnSystemButtonPress(SystemButtonType::HomeButtonLongPressing);
+             m_home_button_long_sent = true;
+         }
+      }
+@@ -98,7 +90,7 @@ void ButtonPoller::OnButtonStateChanged() {
+     if (capture_button && m_capture_button_press_start && !m_capture_button_long_sent) {
+          const auto duration = ClassifyPressDuration(*m_capture_button_press_start);
+          if (duration != ButtonPressDuration::ShortPressing) {
+-             m_window_system.OnSystemButtonPress(SystemButtonType::CaptureButtonLongPressing);
++             window_system.OnSystemButtonPress(SystemButtonType::CaptureButtonLongPressing);
+              m_capture_button_long_sent = true;
+          }
+      }
+@@ -107,9 +99,8 @@ void ButtonPoller::OnButtonStateChanged() {
+     if (!home_button && m_home_button_press_start) {
+         if(!m_home_button_long_sent) {
+             const auto duration = ClassifyPressDuration(*m_home_button_press_start);
+-            m_window_system.OnSystemButtonPress(
+-                duration == ButtonPressDuration::ShortPressing ? SystemButtonType::HomeButtonShortPressing
+-                                                               : SystemButtonType::HomeButtonLongPressing);
++            window_system.OnSystemButtonPress(duration == ButtonPressDuration::ShortPressing
++                ? SystemButtonType::HomeButtonShortPressing : SystemButtonType::HomeButtonLongPressing);
+         }
+         m_home_button_press_start = std::nullopt;
+         m_home_button_long_sent = false;
+@@ -117,9 +108,8 @@ void ButtonPoller::OnButtonStateChanged() {
+     if (!capture_button && m_capture_button_press_start) {
+         if (!m_capture_button_long_sent) {
+             const auto duration = ClassifyPressDuration(*m_capture_button_press_start);
+-            m_window_system.OnSystemButtonPress(
+-                duration == ButtonPressDuration::ShortPressing ? SystemButtonType::CaptureButtonShortPressing
+-                                                               : SystemButtonType::CaptureButtonLongPressing);
++            window_system.OnSystemButtonPress(duration == ButtonPressDuration::ShortPressing
++                ? SystemButtonType::CaptureButtonShortPressing : SystemButtonType::CaptureButtonLongPressing);
+         }
+         m_capture_button_press_start = std::nullopt;
+         m_capture_button_long_sent = false;
+@@ -130,16 +120,4 @@ void ButtonPoller::OnButtonStateChanged() {
+     // }
+ }
+ 
+-void ButtonPoller::ThreadLoop() {
+-    using namespace std::chrono_literals;
+-    std::unique_lock lk{m_mutex};
+-    while (!m_stop) {
 -        m_cv.wait_for(lk, 50ms);
-         if (m_stop) break;
-         lk.unlock();
-         OnButtonStateChanged();
+-        if (m_stop) break;
+-        lk.unlock();
+-        OnButtonStateChanged();
+-        lk.lock();
+-    }
+-}
+-
+ } // namespace Service::AM
 diff --git a/src/core/hle/service/am/button_poller.h b/src/core/hle/service/am/button_poller.h
-index 12e7035aa1..2ad2937c96 100644
+index 12e7035aa1..ce80242d03 100644
 --- a/src/core/hle/service/am/button_poller.h
 +++ b/src/core/hle/service/am/button_poller.h
-@@ -51,9 +51,7 @@ private:
-     bool m_capture_button_long_sent{};
-     bool m_power_button_long_sent{};
+@@ -30,31 +30,20 @@ class ButtonPoller {
+ public:
+     explicit ButtonPoller(Core::System& system, WindowSystem& window_system);
+     ~ButtonPoller();
++    void OnButtonStateChanged(WindowSystem& window_system);
  
+ private:
+-    void OnButtonStateChanged();
+-    void ThreadLoop();
+-
+-private:
+-    WindowSystem& m_window_system;
+-
+-    Core::HID::EmulatedController* m_handheld{};
+-    int m_handheld_key{};
+-    Core::HID::EmulatedController* m_player1{};
+-    int m_player1_key{};
+-
+     std::optional<std::chrono::steady_clock::time_point> m_home_button_press_start{};
+     std::optional<std::chrono::steady_clock::time_point> m_capture_button_press_start{};
+     std::optional<std::chrono::steady_clock::time_point> m_power_button_press_start{};
+ 
+-    bool m_home_button_long_sent{};
+-    bool m_capture_button_long_sent{};
+-    bool m_power_button_long_sent{};
+-
 -    std::thread m_thread;
-     std::atomic<bool> m_stop{false};
+-    std::atomic<bool> m_stop{false};
 -    std::condition_variable m_cv;
-     std::mutex m_mutex;
+-    std::mutex m_mutex;
++    Core::HID::EmulatedController* m_handheld{};
++    Core::HID::EmulatedController* m_player1{};
++    int32_t m_handheld_key{};
++    int32_t m_player1_key{};
++    bool m_home_button_long_sent : 1 = false;
++    bool m_capture_button_long_sent : 1 = false;
++    bool m_power_button_long_sent : 1 = false;
  };
  
+ } // namespace Service::AM
 diff --git a/src/input_common/drivers/mouse.cpp b/src/input_common/drivers/mouse.cpp
-index 7e029d2cdf..00b7220c1e 100644
+index 7e029d2cdf..307a415040 100644
 --- a/src/input_common/drivers/mouse.cpp
 +++ b/src/input_common/drivers/mouse.cpp
 @@ -72,15 +72,6 @@ Mouse::Mouse(std::string input_engine_) : InputEngine(std::move(input_engine_))
@@ -76,7 +202,7 @@ index 7e029d2cdf..00b7220c1e 100644
      SetAxis(real_mouse_identifier, mouse_axis_x, touch_x);
      SetAxis(real_mouse_identifier, mouse_axis_y, touch_y);
 diff --git a/src/input_common/drivers/mouse.h b/src/input_common/drivers/mouse.h
-index 2e5e989067..166168c824 100644
+index 2e5e989067..c214a284f8 100644
 --- a/src/input_common/drivers/mouse.h
 +++ b/src/input_common/drivers/mouse.h
 @@ -93,6 +93,9 @@ public:
