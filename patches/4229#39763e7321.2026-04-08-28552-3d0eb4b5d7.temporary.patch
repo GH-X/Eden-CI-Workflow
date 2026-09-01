@@ -1,0 +1,177 @@
+diff --git a/src/core/hle/service/am/button_poller.cpp b/src/core/hle/service/am/button_poller.cpp
+index 069a1934d4..ff4a9dce49 100644
+--- a/src/core/hle/service/am/button_poller.cpp
++++ b/src/core/hle/service/am/button_poller.cpp
+@@ -51,18 +51,12 @@ ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system)
+     m_handheld_key = m_handheld->SetCallback(engine_callback);
+     m_player1 = system.HIDCore().GetEmulatedController(Core::HID::NpadIdType::Player1);
+     m_player1_key = m_player1->SetCallback(engine_callback);
+-
+-    m_thread = std::thread([this] { this->ThreadLoop(); });
+ }
+ 
+ ButtonPoller::~ButtonPoller() {
+     m_handheld->DeleteCallback(m_handheld_key);
+     m_player1->DeleteCallback(m_player1_key);
+     m_stop = true;
+-    m_cv.notify_all();
+-    if (m_thread.joinable()) {
+-        m_thread.join();
+-    }
+ }
+ 
+ void ButtonPoller::OnButtonStateChanged() {
+@@ -134,7 +128,6 @@ void ButtonPoller::ThreadLoop() {
+     using namespace std::chrono_literals;
+     std::unique_lock lk{m_mutex};
+     while (!m_stop) {
+-        m_cv.wait_for(lk, 50ms);
+         if (m_stop) break;
+         lk.unlock();
+         OnButtonStateChanged();
+diff --git a/src/core/hle/service/am/button_poller.h b/src/core/hle/service/am/button_poller.h
+index 12e7035aa1..2ad2937c96 100644
+--- a/src/core/hle/service/am/button_poller.h
++++ b/src/core/hle/service/am/button_poller.h
+@@ -51,9 +51,7 @@ private:
+     bool m_capture_button_long_sent{};
+     bool m_power_button_long_sent{};
+ 
+-    std::thread m_thread;
+     std::atomic<bool> m_stop{false};
+-    std::condition_variable m_cv;
+     std::mutex m_mutex;
+ };
+ 
+diff --git a/src/input_common/drivers/mouse.cpp b/src/input_common/drivers/mouse.cpp
+index 7e029d2cdf..00b7220c1e 100644
+--- a/src/input_common/drivers/mouse.cpp
++++ b/src/input_common/drivers/mouse.cpp
+@@ -72,15 +72,6 @@ Mouse::Mouse(std::string input_engine_) : InputEngine(std::move(input_engine_))
+     wheel_position = {};
+     last_mouse_change = {};
+     last_motion_change = {};
+-
+-    update_thread = std::jthread([this](std::stop_token stop_token) {
+-        Common::SetCurrentThreadName("Mouse");
+-        while (!stop_token.stop_requested()) {
+-            UpdateStickInput();
+-            UpdateMotionInput();
+-            std::this_thread::sleep_for(std::chrono::milliseconds(update_time));
+-        }
+-    });
+ }
+ 
+ void Mouse::UpdateStickInput() {
+@@ -185,6 +176,11 @@ void Mouse::Move(int x, int y, int center_x, int center_y) {
+     }
+ }
+ 
++void Mouse::NotifyChanged() {
++    UpdateStickInput();
++    UpdateMotionInput();
++}
++
+ void Mouse::MouseMove(f32 touch_x, f32 touch_y) {
+     SetAxis(real_mouse_identifier, mouse_axis_x, touch_x);
+     SetAxis(real_mouse_identifier, mouse_axis_y, touch_y);
+diff --git a/src/input_common/drivers/mouse.h b/src/input_common/drivers/mouse.h
+index 2e5e989067..166168c824 100644
+--- a/src/input_common/drivers/mouse.h
++++ b/src/input_common/drivers/mouse.h
+@@ -93,6 +93,9 @@ public:
+ 
+     void ReleaseAllButtons();
+ 
++    /// @brief Notifies we changed something about the mouse state and we must update
++    void NotifyChanged();
++
+     std::vector<Common::ParamPackage> GetInputDevices() const override;
+     AnalogMapping GetAnalogMappingForDevice(const Common::ParamPackage& params) override;
+     Common::Input::ButtonNames GetUIName(const Common::ParamPackage& params) const override;
+@@ -110,7 +113,6 @@ private:
+     Common::Vec3<float> last_motion_change;
+     Common::Vec2<int> wheel_position;
+     bool button_pressed = false;
+-    std::jthread update_thread;
+ };
+ 
+ } // namespace InputCommon
+diff --git a/src/yuzu/bootmanager.cpp b/src/yuzu/bootmanager.cpp
+index 0c0ce6e90c..c60b5fceff 100644
+--- a/src/yuzu/bootmanager.cpp
++++ b/src/yuzu/bootmanager.cpp
+@@ -654,6 +654,7 @@ void GRenderWindow::mousePressEvent(QMouseEvent* event) {
+     input_subsystem->GetMouse()->PressMouseButton(button);
+     input_subsystem->GetMouse()->PressButton(pos.x(), pos.y(), button);
+     input_subsystem->GetMouse()->PressTouchButton(touch_x, touch_y, button);
++    input_subsystem->GetMouse()->NotifyChanged();
+ 
+     emit MouseActivity();
+ }
+@@ -674,6 +675,7 @@ void GRenderWindow::mouseMoveEvent(QMouseEvent* event) {
+     input_subsystem->GetMouse()->MouseMove(touch_x, touch_y);
+     input_subsystem->GetMouse()->TouchMove(touch_x, touch_y);
+     input_subsystem->GetMouse()->Move(pos.x(), pos.y(), center_x, center_y);
++    input_subsystem->GetMouse()->NotifyChanged();
+ 
+     // Center mouse for mouse panning
+     if (Settings::values.mouse_panning && !Settings::values.mouse_enabled) {
+@@ -699,6 +701,7 @@ void GRenderWindow::mouseReleaseEvent(QMouseEvent* event) {
+ 
+     const auto button = QtButtonToMouseButton(event->button());
+     input_subsystem->GetMouse()->ReleaseButton(button);
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void GRenderWindow::ConstrainMouse() {
+@@ -730,6 +733,7 @@ void GRenderWindow::wheelEvent(QWheelEvent* event) {
+     const int x = event->angleDelta().x();
+     const int y = event->angleDelta().y();
+     input_subsystem->GetMouse()->MouseWheelChange(x, y);
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void GRenderWindow::TouchBeginEvent(const QTouchEvent* event) {
+@@ -876,8 +880,9 @@ bool GRenderWindow::event(QEvent* event) {
+ void GRenderWindow::focusOutEvent(QFocusEvent* event) {
+     QWidget::focusOutEvent(event);
+     input_subsystem->GetKeyboard()->ReleaseAllKeys();
+-    input_subsystem->GetMouse()->ReleaseAllButtons();
+     input_subsystem->GetTouchScreen()->ReleaseAllTouch();
++    input_subsystem->GetMouse()->ReleaseAllButtons();
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void GRenderWindow::resizeEvent(QResizeEvent* event) {
+diff --git a/src/yuzu/configuration/configure_input_player.cpp b/src/yuzu/configuration/configure_input_player.cpp
+index 821825f6e1..2750cd4a13 100644
+--- a/src/yuzu/configuration/configure_input_player.cpp
++++ b/src/yuzu/configuration/configure_input_player.cpp
+@@ -1546,12 +1546,14 @@ void ConfigureInputPlayer::mousePressEvent(QMouseEvent* event) {
+ 
+     const auto button = GRenderWindow::QtButtonToMouseButton(event->button());
+     input_subsystem->GetMouse()->PressButton(0, 0, button);
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void ConfigureInputPlayer::wheelEvent(QWheelEvent* event) {
+     const int x = event->angleDelta().x();
+     const int y = event->angleDelta().y();
+     input_subsystem->GetMouse()->MouseWheelChange(x, y);
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void ConfigureInputPlayer::keyPressEvent(QKeyEvent* event) {
+diff --git a/src/yuzu/configuration/configure_ringcon.cpp b/src/yuzu/configuration/configure_ringcon.cpp
+index 4c842bd069..d722eba07b 100644
+--- a/src/yuzu/configuration/configure_ringcon.cpp
++++ b/src/yuzu/configuration/configure_ringcon.cpp
+@@ -378,6 +378,7 @@ void ConfigureRingController::mousePressEvent(QMouseEvent* event) {
+ 
+     const auto button = GRenderWindow::QtButtonToMouseButton(event->button());
+     input_subsystem->GetMouse()->PressButton(0, 0, button);
++    input_subsystem->GetMouse()->NotifyChanged();
+ }
+ 
+ void ConfigureRingController::keyPressEvent(QKeyEvent* event) {
