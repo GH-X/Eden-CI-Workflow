@@ -2189,7 +2189,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..fda73cf645 100644
+index efae825885..48bfcf8046 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -56,28 +56,17 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -2231,7 +2231,7 @@ index efae825885..fda73cf645 100644
      }
  
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -118,110 +107,61 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -118,61 +107,49 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -2284,9 +2284,9 @@ index efae825885..fda73cf645 100644
          if (True(image.flags & ImageFlagBits::IsDecoding)) {
 -            // This image is still being decoded, deleting it will invalidate the slot
 -            // used by the async decoder thread.
-             return false;
-         }
- 
+-            return false;
+-        }
+-
 -        // Prioritize large sparse textures for cleanup
 -        const bool is_large_sparse = lowmemorydevice &&
 -                                     image.info.is_sparse &&
@@ -2294,16 +2294,16 @@ index efae825885..fda73cf645 100644
 -
 -        if (!aggressive_mode && !is_large_sparse &&
 -            True(image.flags & ImageFlagBits::CostlyLoad)) {
-+        if (True(image.flags & ImageFlagBits::CostlyLoad) && total_used_memory < expected_memory) {
              return false;
          }
  
 -        const bool must_download =
 -            image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
 -        if (!high_priority_mode && !is_large_sparse && must_download) {
--            return false;
--        }
--
++        if (True(image.flags & ImageFlagBits::CostlyLoad) && total_used_memory < expected_memory) {
+             return false;
+         }
+ 
 -        if (must_download && !is_large_sparse) {
 +        if (must_download) {
              auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
@@ -2313,11 +2313,16 @@ index efae825885..fda73cf645 100644
 -            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span,
 -                         swizzle_data_buffer);
 +            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
++        } else if (num_iterations == 0) {
++            if (total_used_memory < critical_memory) {
++                return false;
++            }
++        } else {
++            --num_iterations;
          }
--
+ 
          if (True(image.flags & ImageFlagBits::Tracked)) {
-             UntrackImage(image, image_id);
-         }
+@@ -181,47 +158,10 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -2326,17 +2331,13 @@ index efae825885..fda73cf645 100644
 -                // Sink the aggresiveness.
 -                num_iterations >>= 2;
 -                aggressive_mode = false;
-+        if (num_iterations == 0) {
-+            if (total_used_memory >= critical_memory) {
-                 return false;
-             }
+-                return false;
+-            }
 -            if (high_priority_mode && total_used_memory < expected_memory) {
 -                num_iterations >>= 1;
 -                high_priority_mode = false;
 -            }
-+            return true;
-         }
-+        --num_iterations;
+-        }
          return false;
      };
  
