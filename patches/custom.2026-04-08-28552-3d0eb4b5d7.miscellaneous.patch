@@ -958,12 +958,15 @@ index bbc16f52ec..ad77c87193 100644
      Renderer,
      RendererAdvanced,
 diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
-index 638be4127f..0f4384e06f 100644
+index 638be4127f..ab3be2bb27 100644
 --- a/src/common/settings_enums.h
 +++ b/src/common/settings_enums.h
-@@ -128,16 +128,17 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+@@ -126,18 +126,19 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+     GmtPlusZero, GmtMinusZero, GmtZero, Greenwich, Hongkong, Hst, Iceland, Iran, Israel, Jamaica,
+     Japan, Kwajalein, Libya, Met, Mst, Mst7Mdt, Navajo, Nz, NzChat, Poland, Portugal, Prc, Pst8Pdt,
      Roc, Rok, Singapore, Turkey, Uct, Universal, Utc, WSu, Wet, Zulu);
- ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
+-ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
++ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16);
  ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
 -ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
 -ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
@@ -2740,6 +2743,35 @@ index d5d2a16c91..ca2c129069 100644
 +void CompressBC7(std::span<const u8> data, u32 width, u32 height, u32 depth, std::span<u8> output);
 +
  } // namespace Tegra::Texture::BCN
+diff --git a/src/video_core/textures/texture.cpp b/src/video_core/textures/texture.cpp
+index d32872e35d..78eb577e10 100644
+--- a/src/video_core/textures/texture.cpp
++++ b/src/video_core/textures/texture.cpp
+@@ -80,16 +80,16 @@ float TSCEntry::MaxAnisotropy() const noexcept {
+     case Settings::AnisotropyMode::X4:
+     case Settings::AnisotropyMode::X8:
+     case Settings::AnisotropyMode::X16:
+-    case Settings::AnisotropyMode::X32:
+-    case Settings::AnisotropyMode::X64:
+-        added_anisotropic = u32(anisotropic_settings) - 1U;
++        added_anisotropic = s32(anisotropic_settings) - 1;
+         break;
+-    case Settings::AnisotropyMode::Automatic:
+-        added_anisotropic = Settings::values.resolution_info.up_scale >> Settings::values.resolution_info.down_shift;
+-        added_anisotropic = (std::max)(added_anisotropic - 1U, 0U);
++    case Settings::AnisotropyMode::Automatic: {
++        const u32 resolution_scale = Settings::values.resolution_info.up_scale >>
++                                     Settings::values.resolution_info.down_shift;
++        if (resolution_scale > 1U) {
++            added_anisotropic = static_cast<s32>(resolution_scale - 1U);
++        }
+         break;
+-    case Settings::AnisotropyMode::None:
+-        return 1.0f; //No use of anisotropy
++    }
+     }
+     return float(1U << (max_anisotropy + added_anisotropic));
+ }
 diff --git a/src/yuzu/CMakeLists.txt b/src/yuzu/CMakeLists.txt
 index 1ed1fdff2a..36f3e288e0 100644
 --- a/src/yuzu/CMakeLists.txt
