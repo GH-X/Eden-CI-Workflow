@@ -1,0 +1,420 @@
+diff --git a/src/core/hle/kernel/k_page_table_base.cpp b/src/core/hle/kernel/k_page_table_base.cpp
+index 6b3f60f52e..a142833e37 100644
+--- a/src/core/hle/kernel/k_page_table_base.cpp
++++ b/src/core/hle/kernel/k_page_table_base.cpp
+@@ -275,6 +275,7 @@ Result KPageTableBase::InitializeForProcess(Svc::CreateProcessFlag as_type, bool
+     // Set other basic fields.
+     m_enable_aslr = enable_aslr;
+     m_enable_device_address_space_merge = enable_das_merge;
++    m_allowed_exec_device_mapping = false;
+     m_address_space_start = start;
+     m_address_space_end = end;
+     m_is_kernel = false;
+diff --git a/src/core/hle/kernel/k_page_table_base.h b/src/core/hle/kernel/k_page_table_base.h
+index fc5d3876c7..89a6286096 100644
+--- a/src/core/hle/kernel/k_page_table_base.h
++++ b/src/core/hle/kernel/k_page_table_base.h
+@@ -223,6 +223,7 @@ private:
+     bool m_is_kernel{};
+     bool m_enable_aslr{};
+     bool m_enable_device_address_space_merge{};
++    bool m_allowed_exec_device_mapping{};
+     KMemoryBlockSlabManager* m_memory_block_slab_manager{};
+     KBlockInfoManager* m_block_info_manager{};
+     KResourceLimit* m_resource_limit{};
+@@ -255,6 +256,10 @@ public:
+         return m_enable_aslr;
+     }
+ 
++    void AllowDeviceMappingOfExecPages() {
++        m_allowed_exec_device_mapping = true;
++    }
++
+     bool Contains(KProcessAddress addr) const {
+         return m_address_space_start <= addr && addr <= m_address_space_end - 1;
+     }
+diff --git a/src/core/hle/kernel/k_process.cpp b/src/core/hle/kernel/k_process.cpp
+index bd50f74c27..70e578f22a 100644
+--- a/src/core/hle/kernel/k_process.cpp
++++ b/src/core/hle/kernel/k_process.cpp
+@@ -341,6 +341,11 @@ Result KProcess::Initialize(const Svc::CreateProcessParameter& params, const KPa
+     // Initialize capabilities.
+     R_TRY(m_capabilities.InitializeForKip(caps, std::addressof(m_page_table)));
+ 
++    // Enable mapping device pages as executable on legacy processes.
++    if (m_capabilities.GetIntendedKernelMajorVersion() < 26) {
++        m_page_table.AllowDeviceMappingOfExecPages();
++    }
++
+     // Initialize the process id.
+     m_process_id = m_kernel.CreateNewUserProcessID();
+     ASSERT(InitialProcessIdMin <= m_process_id);
+@@ -437,6 +442,11 @@ Result KProcess::Initialize(const Svc::CreateProcessParameter& params,
+     // Initialize capabilities.
+     R_TRY(m_capabilities.InitializeForUser(user_caps, std::addressof(m_page_table)));
+ 
++    // Enable mapping device pages as executable on legacy processes.
++    if (m_capabilities.GetIntendedKernelMajorVersion() < 26) {
++        m_page_table.AllowDeviceMappingOfExecPages();
++    }
++
+     // Initialize the process id.
+     m_process_id = m_kernel.CreateNewUserProcessID();
+     ASSERT(ProcessIdMin <= m_process_id);
+@@ -989,6 +999,9 @@ Result KProcess::Run(s32 priority, size_t stack_size) {
+     main_thread->GetContext().r[0] = 0;
+     main_thread->GetContext().r[1] = thread_handle;
+ 
++    // Pass the thread handle to the thread local region.
++    this->GetMemory().Write32(GetInteger(main_thread->GetTlsAddress()) + 0x110, thread_handle);
++
+     // Update our state.
+     this->ChangeState((state == State::Created) ? State::Running : State::RunningAttached);
+     ON_RESULT_FAILURE_2 {
+diff --git a/src/core/hle/kernel/k_process_page_table.h b/src/core/hle/kernel/k_process_page_table.h
+index 0601f9f6d8..873dcdac57 100644
+--- a/src/core/hle/kernel/k_process_page_table.h
++++ b/src/core/hle/kernel/k_process_page_table.h
+@@ -33,6 +33,10 @@ public:
+         m_page_table.Finalize();
+     }
+ 
++    void AllowDeviceMappingOfExecPages() {
++        m_page_table.AllowDeviceMappingOfExecPages();
++    }
++
+     Core::Memory::Memory& GetMemory() {
+         return m_page_table.GetMemory();
+     }
+diff --git a/src/core/hle/kernel/k_thread.cpp b/src/core/hle/kernel/k_thread.cpp
+index ea9b7eb114..0af315d726 100644
+--- a/src/core/hle/kernel/k_thread.cpp
++++ b/src/core/hle/kernel/k_thread.cpp
+@@ -76,11 +76,13 @@ namespace Kernel {
+             std::atomic_uint16_t interrupt_flag;
+             std::atomic_uint8_t cache_maintenance_flag;
+             std::atomic_int64_t thread_cpu_time;
++            std::atomic_uint32_t current_thread_handle;
+         };
+         static_assert(offsetof(ThreadLocalRegion, disable_count) == 0x100);
+         static_assert(offsetof(ThreadLocalRegion, interrupt_flag) == 0x102);
+         static_assert(offsetof(ThreadLocalRegion, cache_maintenance_flag) == 0x104);
+         static_assert(offsetof(ThreadLocalRegion, thread_cpu_time) == 0x108);
++        static_assert(offsetof(ThreadLocalRegion, current_thread_handle) == 0x110);
+ 
+         class ThreadQueueImplForKThreadSleep final : public KThreadQueueWithoutEndWait {
+         public:
+@@ -128,24 +130,24 @@ namespace Kernel {
+ 
+         // Next, assert things based on the type.
+         switch (type) {
+-            case ThreadType::Main:
+-                ASSERT(arg == 0);
+-                [[fallthrough]];
+-            case ThreadType::User:
+-                ASSERT(((owner == nullptr) ||
+-                        (owner->GetCoreMask() | (1ULL << virt_core)) == owner->GetCoreMask()));
+-                ASSERT(((owner == nullptr) || (prio > Svc::LowestThreadPriority) ||
+-                        (owner->GetPriorityMask() | (1ULL << prio)) == owner->GetPriorityMask()));
+-                break;
+-            case ThreadType::HighPriority:
+-            case ThreadType::Dummy:
+-                break;
+-            case ThreadType::Kernel:
+-                UNIMPLEMENTED();
+-                break;
+-            default:
+-                ASSERT_MSG(false, "KThread::Initialize: Unknown ThreadType {}", static_cast<u32>(type));
+-                break;
++        case ThreadType::Main:
++            ASSERT(arg == 0);
++            [[fallthrough]];
++        case ThreadType::User:
++            ASSERT(((owner == nullptr) ||
++                    (owner->GetCoreMask() | (1ULL << virt_core)) == owner->GetCoreMask()));
++            ASSERT(((owner == nullptr) || (prio > Svc::LowestThreadPriority) ||
++                    (owner->GetPriorityMask() | (1ULL << prio)) == owner->GetPriorityMask()));
++            break;
++        case ThreadType::HighPriority:
++        case ThreadType::Dummy:
++            break;
++        case ThreadType::Kernel:
++            UNIMPLEMENTED();
++            break;
++        default:
++            ASSERT_MSG(false, "KThread::Initialize: Unknown ThreadType {}", static_cast<u32>(type));
++            break;
+         }
+         m_thread_type = type;
+ 
+diff --git a/src/core/hle/kernel/svc/svc_thread.cpp b/src/core/hle/kernel/svc/svc_thread.cpp
+index ca5ce6fe07..f44e228cce 100644
+--- a/src/core/hle/kernel/svc/svc_thread.cpp
++++ b/src/core/hle/kernel/svc/svc_thread.cpp
+@@ -75,7 +75,12 @@ Result CreateThread(Core::System& system, Handle* out_handle, u64 entry_point, u
+     KThread::Register(kernel, thread);
+ 
+     // Add the thread to the handle table.
+-    R_RETURN(process.GetHandleTable().Add(out_handle, thread));
++    R_TRY(process.GetHandleTable().Add(out_handle, thread));
++
++    // Pass the thread handle to the thread local region.
++    process.GetMemory().Write32(GetInteger(thread->GetTlsAddress()) + 0x110, *out_handle);
++
++    R_SUCCEED();
+ }
+ 
+ /// Starts the thread for the provided handle
+diff --git a/src/core/hle/kernel/svc_version.h b/src/core/hle/kernel/svc_version.h
+index b47874dcde..4c8203da51 100644
+--- a/src/core/hle/kernel/svc_version.h
++++ b/src/core/hle/kernel/svc_version.h
+@@ -53,8 +53,8 @@ constexpr inline u32 RequiredKernelVersion =
+ 
+ // This is the highest SVC version supported, to be updated on new kernel releases.
+ // NOTE: Official kernel versions have SVC major = SDK major + 4, SVC minor = SDK minor.
+-constexpr inline u32 SupportedKernelMajorVersion = ConvertToSvcMajorVersion(20);
+-constexpr inline u32 SupportedKernelMinorVersion = ConvertToSvcMinorVersion(5);
++constexpr inline u32 SupportedKernelMajorVersion = ConvertToSvcMajorVersion(22);
++constexpr inline u32 SupportedKernelMinorVersion = ConvertToSvcMinorVersion(2);
+ constexpr inline u32 SupportedKernelVersion =
+     EncodeKernelVersion(SupportedKernelMajorVersion, SupportedKernelMinorVersion);
+ 
+diff --git a/src/core/hle/service/acc/acc.cpp b/src/core/hle/service/acc/acc.cpp
+index 43c569851d..c33b765000 100644
+--- a/src/core/hle/service/acc/acc.cpp
++++ b/src/core/hle/service/acc/acc.cpp
+@@ -1155,6 +1155,14 @@ void Module::Interface::StoreSaveDataThumbnailSystem(HLERequestContext& ctx) {
+     StoreSaveDataThumbnail(ctx, uuid, tid);
+ }
+ 
++void Module::Interface::GetPinCodeLength(HLERequestContext& ctx) {
++    LOG_WARNING(Service_ACC, "(STUBBED) called");
++
++    IPC::ResponseBuilder rb{ctx, 3};
++    rb.Push(ResultSuccess);
++    rb.Push<u32>(0);
++}
++
+ void Module::Interface::StoreSaveDataThumbnail(HLERequestContext& ctx, const Common::UUID& uuid,
+                                                const u64 tid) {
+     IPC::ResponseBuilder rb{ctx, 2};
+diff --git a/src/core/hle/service/acc/acc.h b/src/core/hle/service/acc/acc.h
+index b01998e9c9..49c4c049e3 100644
+--- a/src/core/hle/service/acc/acc.h
++++ b/src/core/hle/service/acc/acc.h
+@@ -48,6 +48,7 @@ public:
+         void StoreSaveDataThumbnailApplication(HLERequestContext& ctx);
+         void GetBaasAccountManagerForSystemService(HLERequestContext& ctx);
+         void StoreSaveDataThumbnailSystem(HLERequestContext& ctx);
++        void GetPinCodeLength(HLERequestContext& ctx);
+ 
+     private:
+         Result InitializeApplicationInfoBase();
+diff --git a/src/core/hle/service/acc/acc_su.cpp b/src/core/hle/service/acc/acc_su.cpp
+index 9eea0ea2ed..cb8eafe928 100644
+--- a/src/core/hle/service/acc/acc_su.cpp
++++ b/src/core/hle/service/acc/acc_su.cpp
+@@ -60,7 +60,7 @@ ACC_SU::ACC_SU(std::shared_ptr<Module> module_, std::shared_ptr<ProfileManager>
+         {291, nullptr, "ProxyProcedureForFloatingRegistrationWithNintendoAccount"},
+         {299, nullptr, "SuspendBackgroundDaemon"},
+         {400, nullptr, "SetPinCode"}, // 18.0.0+
+-        {401, nullptr, "GetPinCodeLength"}, // 18.0.0+
++        {401, &ACC_SU::GetPinCodeLength, "GetPinCodeLength"}, // 18.0.0+
+         {402, nullptr, "GetPinCode"}, // 18.0.0+
+         {410, nullptr, "GetPinCodeErrorCount"}, // 18.0.0+
+         {411, nullptr, "ResetPinCodeErrorCount"}, // 18.0.0+
+diff --git a/src/core/hle/service/acc/acc_u1.cpp b/src/core/hle/service/acc/acc_u1.cpp
+index 3832f5216d..a9323ba1c2 100644
+--- a/src/core/hle/service/acc/acc_u1.cpp
++++ b/src/core/hle/service/acc/acc_u1.cpp
+@@ -40,7 +40,7 @@ ACC_U1::ACC_U1(std::shared_ptr<Module> module_, std::shared_ptr<ProfileManager>
+         {152, nullptr, "LoadSignedDeviceIdentifierCacheForNintendoAccount"},
+         {190, nullptr, "GetUserLastOpenedApplication"},
+         {191, nullptr, "ActivateOpenContextHolder"},
+-        {401, nullptr, "GetPinCodeLength"}, // 18.0.0+
++        {401, &ACC_U1::GetPinCodeLength, "GetPinCodeLength"}, // 18.0.0+
+         {402, nullptr, "GetPinCode"}, // 18.0.0+
+         {997, nullptr, "DebugInvalidateTokenCacheForUser"},
+         {998, nullptr, "DebugSetUserStateClose"},
+diff --git a/src/core/hle/service/am/service/application_creator.cpp b/src/core/hle/service/am/service/application_creator.cpp
+index d16fd7dd84..8cdd1e1df6 100644
+--- a/src/core/hle/service/am/service/application_creator.cpp
++++ b/src/core/hle/service/am/service/application_creator.cpp
+@@ -92,7 +92,7 @@ Result IApplicationCreator::CreateSystemApplication(
+     std::unique_ptr<Loader::AppLoader> loader;
+ 
+     auto process =
+-        CreateProcess(system, application_id, 1, 21);
++        CreateProcess(system, application_id, 1, 22);
+     R_UNLESS(process != nullptr, ResultUnknown);
+ 
+     const auto applet = std::make_shared<Applet>(system, std::move(process), true);
+diff --git a/src/core/hle/service/am/service/common_state_getter.cpp b/src/core/hle/service/am/service/common_state_getter.cpp
+index 0af5b31714..5bdcd9eb6e 100644
+--- a/src/core/hle/service/am/service/common_state_getter.cpp
++++ b/src/core/hle/service/am/service/common_state_getter.cpp
+@@ -75,7 +75,8 @@ ICommonStateGetter::ICommonStateGetter(Core::System& system_, std::shared_ptr<Ap
+         {502, nullptr, "IsSleepEnabled"},
+         {503, nullptr, "IsDisablingSleepSuppressed"},
+         {600, nullptr, "Unknown600"}, //20.0.0+
+-        {610, nullptr, "Unknown610"}, //21.0.0+
++        {610, D<&ICommonStateGetter::Unknown610>, "Unknown610"}, //21.0.0+
++        {611, D<&ICommonStateGetter::Unknown611>, "Unknown611"}, //22.0.0+
+         {900, D<&ICommonStateGetter::SetRequestExitToLibraryAppletAtExecuteNextProgramEnabled>, "SetRequestExitToLibraryAppletAtExecuteNextProgramEnabled"}, //11.0.0+
+         {910, nullptr, "GetLaunchRequiredTick"}, //17.0.0+
+         {1000, nullptr, "BeginVrMode3d"}, //19.0.0+
+@@ -362,4 +363,14 @@ Result ICommonStateGetter::SetHandlingHomeButtonShortPressedEnabled(bool enabled
+     R_SUCCEED();
+ }
+ 
++Result ICommonStateGetter::Unknown610() {
++    LOG_WARNING(Service_AM, "(STUBBED) called");
++    R_SUCCEED();
++}
++
++Result ICommonStateGetter::Unknown611() {
++    LOG_WARNING(Service_AM, "(STUBBED) called");
++    R_SUCCEED();
++}
++
+ } // namespace Service::AM
+diff --git a/src/core/hle/service/am/service/common_state_getter.h b/src/core/hle/service/am/service/common_state_getter.h
+index a98024182f..e54aa0041f 100644
+--- a/src/core/hle/service/am/service/common_state_getter.h
++++ b/src/core/hle/service/am/service/common_state_getter.h
+@@ -63,6 +63,8 @@ private:
+     Result SetRequestExitToLibraryAppletAtExecuteNextProgramEnabled();
+     Result PushToGeneralChannel(SharedPointer<IStorage> storage); // cmd 20
+     Result SetHandlingHomeButtonShortPressedEnabled(bool enabled);
++    Result Unknown610();
++    Result Unknown611();
+ 
+     void SetCpuBoostMode(HLERequestContext& ctx);
+ 
+diff --git a/src/core/hle/service/am/service/library_applet_accessor.cpp b/src/core/hle/service/am/service/library_applet_accessor.cpp
+index c5b6929ab3..ef91f69c23 100644
+--- a/src/core/hle/service/am/service/library_applet_accessor.cpp
++++ b/src/core/hle/service/am/service/library_applet_accessor.cpp
+@@ -78,6 +78,7 @@ ILibraryAppletAccessor::ILibraryAppletAccessor(Core::System& system_,
+         {120, nullptr, "GetLibraryAppletInfo"},
+         {150, nullptr, "RequestForAppletToGetForeground"},
+         {160, D<&ILibraryAppletAccessor::GetIndirectLayerConsumerHandle>, "GetIndirectLayerConsumerHandle"}, //2.0.0+
++        {170, D<&ILibraryAppletAccessor::Unknown170>, "Unknown170"}, //22.0.0+
+     };
+     // clang-format on
+ 
+@@ -217,6 +218,12 @@ Result ILibraryAppletAccessor::GetIndirectLayerConsumerHandle(Out<u64> out_handl
+     R_SUCCEED();
+ }
+ 
++Result ILibraryAppletAccessor::Unknown170(OutCopyHandle<Kernel::KReadableEvent> out_event) {
++    LOG_WARNING(Service_AM, "(STUBBED) called");
++    *out_event = m_applet->unknown_event.GetHandle();
++    R_SUCCEED();
++}
++
+ void ILibraryAppletAccessor::FrontendExecute() {
+     if (m_applet->frontend) {
+         m_applet->frontend->Initialize();
+diff --git a/src/core/hle/service/am/service/library_applet_accessor.h b/src/core/hle/service/am/service/library_applet_accessor.h
+index 841d0d5146..7dc6b2809a 100644
+--- a/src/core/hle/service/am/service/library_applet_accessor.h
++++ b/src/core/hle/service/am/service/library_applet_accessor.h
+@@ -37,6 +37,7 @@ private:
+     Result GetPopOutDataEvent(OutCopyHandle<Kernel::KReadableEvent> out_event);
+     Result GetPopInteractiveOutDataEvent(OutCopyHandle<Kernel::KReadableEvent> out_event);
+     Result GetIndirectLayerConsumerHandle(Out<u64> out_handle);
++    Result Unknown170(OutCopyHandle<Kernel::KReadableEvent> out_event);
+ 
+     void FrontendExecute();
+     void FrontendExecuteInteractive();
+diff --git a/src/core/hle/service/am/service/library_applet_creator.cpp b/src/core/hle/service/am/service/library_applet_creator.cpp
+index e38729e70a..293a3d2e00 100644
+--- a/src/core/hle/service/am/service/library_applet_creator.cpp
++++ b/src/core/hle/service/am/service/library_applet_creator.cpp
+@@ -118,9 +118,10 @@ std::shared_ptr<ILibraryAppletAccessor> CreateGuestApplet(Core::System& system,
+         Firmware1900 = 19,
+         Firmware2000 = 20,
+         Firmware2100 = 21,
++        Firmware2200 = 22,
+     };
+ 
+-    auto process = CreateProcess(system, program_id, Firmware1400, Firmware2100);
++    auto process = CreateProcess(system, program_id, Firmware1400, Firmware2200);
+     if (!process) {
+         // Couldn't initialize the guest process
+         return {};
+diff --git a/src/core/hle/service/set/settings_types.h b/src/core/hle/service/set/settings_types.h
+index 469b8d745c..696938c4c7 100644
+--- a/src/core/hle/service/set/settings_types.h
++++ b/src/core/hle/service/set/settings_types.h
+@@ -409,6 +409,13 @@ struct AccountNotificationSettings {
+ static_assert(sizeof(AccountNotificationSettings) == 0x18,
+               "AccountNotificationSettings is an invalid size");
+ 
++/// This is nn::settings::system::AccountUserSettings (stubbed)
++struct AccountUserSettings {
++    std::array<u8, 0x40> data;
++};
++static_assert(sizeof(AccountUserSettings) == 0x40,
++              "AccountUserSettings is an invalid size");
++
+ /// This is nn::settings::factory::BatteryLot
+ struct BatteryLot {
+     std::array<char, 0x18> lot_number;
+diff --git a/src/core/hle/service/set/system_settings_server.cpp b/src/core/hle/service/set/system_settings_server.cpp
+index c7a83e69f4..0ed6d28dd4 100644
+--- a/src/core/hle/service/set/system_settings_server.cpp
++++ b/src/core/hle/service/set/system_settings_server.cpp
+@@ -340,9 +340,9 @@ ISystemSettingsServer::ISystemSettingsServer(Core::System& system_)
+         {306, nullptr, "GetPinCodeReregistrationGuideAccounts"}, //20.0.0+
+         {307, nullptr, "SetPinCodeReregistrationGuideAccounts"}, //20.0.0+
+         {315, C<&ISystemSettingsServer::GetHttpAuthConfigs>, "GetHttpAuthConfigs"}, //21.0.0+
+-        {319, nullptr, "GetAccountUserSettings"}, //21.0.0+
++        {319, C<&ISystemSettingsServer::GetAccountUserSettings>, "GetAccountUserSettings"}, //21.0.0+
+         {320, nullptr, "SetAccountUserSettings"}, //21.0.0+
+-        {321, nullptr, "GetDefaultAccountUserSettings"}, //21.0.0+
++        {321, C<&ISystemSettingsServer::GetDefaultAccountUserSettings>, "GetDefaultAccountUserSettings"}, //21.0.0+
+     };
+     // clang-format on
+ 
+@@ -1428,6 +1428,23 @@ Result ISystemSettingsServer::GetHttpAuthConfigs(Out<s32> out_count, OutBuffer<B
+     R_SUCCEED();
+ }
+ 
++Result ISystemSettingsServer::GetAccountUserSettings(
++    Out<u32> out_count,
++    OutLargeData<AccountUserSettings, BufferAttr_HipcMapAlias> out_settings) {
++    LOG_WARNING(Service_SET, "(STUBBED) called");
++
++    *out_count = 0;
++    *out_settings = {};
++    R_SUCCEED();
++}
++
++Result ISystemSettingsServer::GetDefaultAccountUserSettings(Out<AccountUserSettings> out_settings) {
++    LOG_WARNING(Service_SET, "(STUBBED) called");
++
++    *out_settings = {};
++    R_SUCCEED();
++}
++
+ void ISystemSettingsServer::SetupSettings() {
+     auto system_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::NANDDir) / "system/save/8000000000000050";
+     if (!LoadSettingsFile(system_dir, []() { return DefaultSystemSettings(); })) {
+diff --git a/src/core/hle/service/set/system_settings_server.h b/src/core/hle/service/set/system_settings_server.h
+index 27a16747f3..9deae3f9eb 100644
+--- a/src/core/hle/service/set/system_settings_server.h
++++ b/src/core/hle/service/set/system_settings_server.h
+@@ -161,6 +161,10 @@ public:
+     Result GetPanelCrcMode(Out<s32> out_panel_crc_mode);
+     Result SetPanelCrcMode(s32 panel_crc_mode);
+     Result GetHttpAuthConfigs(Out<s32> out_count, OutBuffer<BufferAttr_HipcMapAlias> out_configs);
++    Result GetAccountUserSettings(
++        Out<u32> out_count,
++        OutLargeData<AccountUserSettings, BufferAttr_HipcMapAlias> out_settings);
++    Result GetDefaultAccountUserSettings(Out<AccountUserSettings> out_settings);
+ 
+ private:
+     bool LoadSettingsFile(std::filesystem::path& path, auto&& default_func);
