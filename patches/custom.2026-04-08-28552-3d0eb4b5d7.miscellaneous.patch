@@ -2202,7 +2202,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..48bfcf8046 100644
+index efae825885..6d5a84219f 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -56,28 +56,17 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -2328,7 +2328,7 @@ index efae825885..48bfcf8046 100644
 +            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
 +        } else if (num_iterations == 0) {
 +            if (total_used_memory < critical_memory) {
-+                return false;
++                return true;
 +            }
 +        } else {
 +            --num_iterations;
