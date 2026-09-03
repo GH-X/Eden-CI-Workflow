@@ -11,6 +11,19 @@ index 3140f8e545..87a3cacc70 100644
          WORKING_DIRECTORY
              ${FFmpeg_BUILD_DIR}
      )
+diff --git a/src/common/lru_cache.h b/src/common/lru_cache.h
+index 36cea5d27e..be18efc6b6 100644
+--- a/src/common/lru_cache.h
++++ b/src/common/lru_cache.h
+@@ -60,7 +60,7 @@ public:
+     template <typename Func>
+     void ForEachItemBelow(TickType tick, Func&& func) {
+         static constexpr bool RETURNS_BOOL =
+-            std::is_same_v<std::invoke_result<Func, ObjectType>, bool>;
++            std::is_same_v<std::invoke_result_t<Func, ObjectType>, bool>;
+         Item* iterator = first_item;
+         while (iterator) {
+             if (static_cast<s64>(tick) - static_cast<s64>(iterator->tick) < 0) {
 diff --git a/src/common/settings.cpp b/src/common/settings.cpp
 index 54848c4dd1..6ece64f4f3 100644
 --- a/src/common/settings.cpp
