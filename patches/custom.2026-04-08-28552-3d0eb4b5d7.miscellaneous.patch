@@ -233,7 +233,7 @@ index 54848c4dd1..6ece64f4f3 100644
  
  } // namespace Settings
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..7e96aaa2ed 100644
+index bec1e93e79..29edf47043 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -171,6 +171,7 @@ struct Values {
@@ -752,22 +752,22 @@ index bec1e93e79..7e96aaa2ed 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -552,47 +557,31 @@ struct Values {
+@@ -552,47 +557,30 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
 -    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
 -                                                     Category::RendererHacks};
--
++    SwitchableSetting<bool> use_asynchronous_shaders{linkage, true, "use_asynchronous_shaders", Category::RendererHacks};
+ 
 -    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
 -                                                     Category::RendererHacks};
 -
-     SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
-                                                      Category::RendererHacks};
- 
+-    SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
+-                                                     Category::RendererHacks};
 +    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 +                                                  Category::RendererHacks};
-+
+ 
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
 -                                                  GpuUnswizzleSize::Large,
 +                                                  GpuUnswizzleSize::Normal,
@@ -807,7 +807,7 @@ index bec1e93e79..7e96aaa2ed 100644
      SwitchableSetting<u32, true> sample_shading{linkage,
                                                  0,
                                                  0,
-@@ -601,13 +590,23 @@ struct Values {
+@@ -601,13 +589,23 @@ struct Values {
                                                  Category::RendererExtensions,
                                                  Specialization::Scalar};
  
@@ -832,7 +832,7 @@ index bec1e93e79..7e96aaa2ed 100644
  
      Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
      Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
-@@ -629,51 +628,6 @@ struct Values {
+@@ -629,51 +627,6 @@ struct Values {
                                                           true,
                                                           true};
  
@@ -884,7 +884,7 @@ index bec1e93e79..7e96aaa2ed 100644
      // Controls
      InputSetting<std::array<PlayerInput, 10>> players;
  
-@@ -789,6 +743,17 @@ struct Values {
+@@ -789,6 +742,17 @@ struct Values {
                                           Category::Debugging};
      Setting<bool> perform_vulkan_check{linkage, true, "perform_vulkan_check", Category::Debugging};
      Setting<bool> disable_web_applet{linkage, true, "disable_web_applet", Category::Debugging};
@@ -902,7 +902,7 @@ index bec1e93e79..7e96aaa2ed 100644
  
      // GPU Logging
      Setting<bool> gpu_logging_enabled{linkage, false, "gpu_logging_enabled", Category::Debugging};
-@@ -802,16 +767,6 @@ struct Values {
+@@ -802,16 +766,6 @@ struct Values {
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
  
@@ -919,7 +919,7 @@ index bec1e93e79..7e96aaa2ed 100644
      // Miscellaneous
      Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
      Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
-@@ -843,27 +798,31 @@ extern Values values;
+@@ -843,27 +797,31 @@ extern Values values;
  bool getDebugKnobAt(u8 i);
  
  void UpdateGPUAccuracy();
