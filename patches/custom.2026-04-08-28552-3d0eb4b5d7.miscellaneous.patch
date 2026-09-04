@@ -233,7 +233,7 @@ index 54848c4dd1..6ece64f4f3 100644
  
  } // namespace Settings
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..29edf47043 100644
+index bec1e93e79..ceffe96c39 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -171,6 +171,7 @@ struct Values {
@@ -536,7 +536,7 @@ index bec1e93e79..29edf47043 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -408,18 +374,42 @@ struct Values {
+@@ -408,18 +374,51 @@ struct Values {
                                                              true,
                                                              true};
  
@@ -553,6 +553,15 @@ index bec1e93e79..29edf47043 100644
 +                                                  Specialization::RuntimeList,
 +                                                  true,
 +                                                  true};
+ 
++    SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++#ifdef ANDROID
++                                                           AnisotropyMode::Default,
++#else
++                                                           AnisotropyMode::Default,
++#endif
++                                                           "max_anisotropy",
++                                                           Category::Renderer};
 +
 +    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
 +                                                    ScalingFilter::Bicubic,
@@ -575,7 +584,7 @@ index bec1e93e79..29edf47043 100644
 +    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
 +    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
 +    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
- 
++
 +    // Renderer (Advanced)
      SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
  #ifdef ANDROID
@@ -586,7 +595,7 @@ index bec1e93e79..29edf47043 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -427,10 +417,10 @@ struct Values {
+@@ -427,10 +426,10 @@ struct Values {
                                                        true,
                                                        true};
  
@@ -599,30 +608,25 @@ index bec1e93e79..29edf47043 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -442,24 +432,34 @@ struct Values {
+@@ -442,24 +441,25 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
 -    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
--                                                      "nvdec_emulation", Category::RendererAdvanced};
--
-     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
+                                                       "nvdec_emulation", Category::RendererAdvanced};
+ 
+-    SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++    SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
  #ifdef ANDROID
-                                                            AnisotropyMode::Default,
+-                                                           AnisotropyMode::Default,
++                                                            AstcDecodeMode::Cpu,
  #else
 -                                                           AnisotropyMode::Automatic,
-+                                                           AnisotropyMode::Default,
- #endif
-                                                            "max_anisotropy",
-                                                            Category::RendererAdvanced};
-+
-+    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
-+                                                      "nvdec_emulation", Category::RendererAdvanced};
-+
-     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
-+#ifdef ANDROID
-+                                                            AstcDecodeMode::Cpu,
-+#else
+-#endif
+-                                                           "max_anisotropy",
+-                                                           Category::RendererAdvanced};
+-    SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
                                                              AstcDecodeMode::Gpu,
 +#endif
                                                              "accelerate_astc",
@@ -656,10 +660,10 @@ index bec1e93e79..29edf47043 100644
 +                                                    Specialization::Scalar,
 +                                                    true,
 +                                                    true};
- 
++
 +    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
 +                                                     Category::RendererAdvanced};
-+
+ 
 +    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
 +                                                   Category::RendererAdvanced};
  
