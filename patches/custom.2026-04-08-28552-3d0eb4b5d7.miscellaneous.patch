@@ -3988,6 +3988,52 @@ index c0fd9f73fa..15119b2600 100644
      std::unique_ptr<ConfigureDebug> debug_tab;
 -    std::unique_ptr<ConfigureCpuDebug> cpu_debug_tab;
  };
+diff --git a/src/yuzu/configuration/configure_general.ui b/src/yuzu/configuration/configure_general.ui
+index 78b6081d92..3fd63daef7 100644
+--- a/src/yuzu/configuration/configure_general.ui
++++ b/src/yuzu/configuration/configure_general.ui
+@@ -48,20 +48,13 @@
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_external">
++       <property name="toolTip">
++        <string>DLC and Updates</string>
++       </property>
+        <property name="title">
+         <string>External Content</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_external">
+-        <item>
+-         <widget class="QLabel" name="label_external_desc">
+-          <property name="text">
+-           <string>Add directories to scan for DLCs and Updates without installing to NAND</string>
+-          </property>
+-          <property name="wordWrap">
+-           <bool>true</bool>
+-          </property>
+-         </widget>
+-        </item>
+         <item>
+          <widget class="QListWidget" name="external_content_list">
+           <property name="selectionMode">
+diff --git a/src/yuzu/configuration/configure_graphics_extensions.ui b/src/yuzu/configuration/configure_graphics_extensions.ui
+index 79a2107cc9..42cf2e7181 100644
+--- a/src/yuzu/configuration/configure_graphics_extensions.ui
++++ b/src/yuzu/configuration/configure_graphics_extensions.ui
+@@ -23,13 +23,6 @@
+       <string>Hacks</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_6">
+-      <item>
+-       <widget class="QLabel" name="label">
+-        <property name="text">
+-         <string>Changing these options from their default may cause issues. Novitii cavete!</string>
+-        </property>
+-       </widget>
+-      </item>
+       <item>
+        <widget class="QWidget" name="hacks_target" native="true">
+         <layout class="QVBoxLayout" name="verticalLayout_7">
 diff --git a/src/yuzu/configuration/configure_per_game_addons.cpp b/src/yuzu/configuration/configure_per_game_addons.cpp
 index 7d0e15accc..c43e61e632 100644
 --- a/src/yuzu/configuration/configure_per_game_addons.cpp
