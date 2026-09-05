@@ -1,5 +1,5 @@
 diff --git a/dist/languages/zh_CN.ts b/dist/languages/zh_CN.ts
-index 6fb006631b..8638480f49 100644
+index 6fb006631b..27cc9e8d28 100644
 --- a/dist/languages/zh_CN.ts
 +++ b/dist/languages/zh_CN.ts
 @@ -1,4 +1,6 @@
@@ -3495,123 +3495,223 @@ index 6fb006631b..8638480f49 100644
      </message>
  </context>
  <context>
-@@ -2636,10 +2467,15 @@ When a program attempts to open the controller applet, it is immediately closed.
+@@ -2632,264 +2463,264 @@ When a program attempts to open the controller applet, it is immediately closed.
+         <translation>端口：</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="157"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="173"/>
          <source>Logging</source>
          <translation>日志</translation>
      </message>
-+    <message>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="223"/>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="190"/>
+-        <source>Global Log Filter</source>
+-        <translation>全局日志过滤器</translation>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="239"/>
 +        <source>Open Log Location</source>
 +        <translation>打开日志文件夹</translation>
-+    </message>
-     <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="190"/>
-         <source>Global Log Filter</source>
--        <translation>全局日志过滤器</translation>
-+        <translation>全局日志过滤：</translation>
      </message>
      <message>
          <location filename="../../src/yuzu/configuration/configure_debug.ui" line="206"/>
-@@ -2656,11 +2492,6 @@ When a program attempts to open the controller applet, it is immediately closed.
++        <source>Global Log Filter</source>
++        <translation>全局日志过滤：</translation>
++    </message>
++    <message>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="222"/>
+         <source>When checked, the max size of the log increases from 100 MB to 1 GB</source>
+         <translation>选中此项后，日志文件的最大大小从 100MB 增加到 1GB</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="209"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="225"/>
+         <source>Enable Extended Logging**</source>
+         <translation>启用扩展的日志记录**</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="216"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="232"/>
          <source>Show Log in Console</source>
          <translation>显示日志窗口</translation>
      </message>
--    <message>
+     <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="223"/>
 -        <source>Open Log Location</source>
 -        <translation>打开日志位置</translation>
 -    </message>
-     <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="235"/>
+-    <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="235"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="251"/>
          <source>Homebrew</source>
-@@ -2669,7 +2500,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+         <translation>自制游戏</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="243"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="243"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="259"/>
          <source>Arguments String</source>
 -        <translation>参数字符串</translation>
 +        <translation>参数字符串：</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="260"/>
-@@ -2679,7 +2510,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="260"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="276"/>
+         <source>Graphics</source>
+         <translation>图形</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="266"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="266"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="282"/>
          <source>When checked, it executes shaders without loop logic changes</source>
 -        <translation>启用后，yuzu 在执行着色器时，不会修改循环结构的条件判断</translation>
 +        <translation>启用后，在执行着色器时，不会修改循环结构的条件判断</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="269"/>
-@@ -2699,7 +2530,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="269"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="285"/>
+         <source>Disable Loop safety checks</source>
+         <translation>禁用循环体安全检查</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="289"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="279"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="295"/>
+         <source>When checked, it will dump all the macro programs of the GPU</source>
+         <translation>选中后，将转储 GPU 的所有宏程序</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="282"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="298"/>
+         <source>Dump Maxwell Macros</source>
+         <translation>转储 Maxwell 宏</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="289"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="305"/>
          <source>When checked, it enables Nsight Aftermath crash dumps</source>
 -        <translation>启用后，yuzu 将会保存 Nsight Aftermath 格式的崩溃转储文件</translation>
 +        <translation>启用后，将会保存 Nsight Aftermath 格式的崩溃转储文件</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="292"/>
-@@ -2709,7 +2540,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="292"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="308"/>
+         <source>Enable Nsight Aftermath</source>
+         <translation>启用 Nsight Aftermath</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="302"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="302"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="318"/>
          <source>When checked, it will dump all the original assembler shaders from the disk shader cache or game as found</source>
 -        <translation>启用时，将从磁盘着色器缓存或游戏中转储所有的着色器文件。</translation>
 +        <translation>启用时，将从磁盘着色器缓存或游戏中转储所有的着色器文件</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="305"/>
-@@ -2724,7 +2555,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="305"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="321"/>
+         <source>Dump Game Shaders</source>
+         <translation>转储着色器文件</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="322"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="312"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="328"/>
+         <source>Enable Renderdoc Hotkey</source>
+         <translation>启用 Renderdoc 热键</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="322"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="338"/>
          <source>When checked, it disables the macro Just In Time compiler. Enabling this makes games run slower</source>
 -        <translation>启用时，将禁用宏即时编译器。这会降低游戏运行速度。</translation>
 +        <translation>启用时，将禁用宏即时编译器。这会降低游戏运行速度</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="325"/>
-@@ -2734,7 +2565,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="325"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="341"/>
+         <source>Disable Macro JIT</source>
+         <translation>禁用宏即时编译</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="335"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="335"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="351"/>
          <source>When checked, it disables the macro HLE functions. Enabling this makes games run slower</source>
 -        <translation>启用时，将禁用宏高阶模拟。这会降低游戏运行速度。</translation>
 +        <translation>启用时，将禁用宏高阶模拟。这会降低游戏运行速度</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="338"/>
-@@ -2744,7 +2575,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="338"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="354"/>
+         <source>Disable Macro HLE</source>
+         <translation>禁用宏高阶模拟</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="348"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="348"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="364"/>
          <source>When checked, the graphics API enters a slower debugging mode</source>
 -        <translation>启用时，图形 API 将进入较慢的调试模式。</translation>
 +        <translation>启用时，图形界面将进入较慢的调试模式</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="351"/>
-@@ -2754,7 +2585,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="351"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="367"/>
+         <source>Enable Graphics Debugging</source>
+         <translation>启用图形调试</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="374"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="374"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="390"/>
          <source>When checked, yuzu will log statistics about the compiled pipeline cache</source>
 -        <translation>选中时，yuzu 将记录有关已编译着色器缓存的统计信息。</translation>
 +        <translation>选中时，将记录有关已编译着色器缓存的统计信息</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="377"/>
-@@ -2779,7 +2610,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="377"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="393"/>
+         <source>Enable Shader Feedback</source>
+         <translation>启用着色器反馈</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="403"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="384"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="400"/>
+         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When checked, disables reordering of mapped memory uploads which allows to associate uploads with specific draws. May reduce performance in some cases.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;选中时，禁用映射内存上载的重新排序，从而允许将上载与特定绘图关联起来。某些情况下可能会降低性能。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="387"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="403"/>
+         <source>Disable Buffer Reorder</source>
+         <translation>禁用缓存重排序</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="397"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="413"/>
+         <source>Advanced</source>
+         <translation>高级选项</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="403"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="419"/>
          <source>Enables yuzu to check for a working Vulkan environment when the program starts up. Disable this if this is causing issues with external programs seeing yuzu.</source>
 -        <translation>允许 yuzu 在启动时检查 Vulkan 环境是否正常工作。如果是其他程序导致 yuzu 出现相关问题，请禁用此选项。</translation>
 +        <translation>允许在启动时检查 Vulkan 环境是否正常工作。如果是其它程序导致出现相关问题，请禁用此选项。</translation>
      </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="406"/>
-@@ -2794,17 +2625,7 @@ When a program attempts to open the controller applet, it is immediately closed.
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="406"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="422"/>
+         <source>Perform Startup Vulkan Check</source>
+         <translation>启动时进行 Vulkan 检测</translation>
+     </message>
      <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="420"/>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="413"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="429"/>
+         <source>Disable Web Applet</source>
+         <translation>禁用 Web 小程序</translation>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="420"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="436"/>
          <source>Enable All Controller Types</source>
 -        <translation>启用其他类型的控制器</translation>
--    </message>
--    <message>
++        <translation>启用其它类型的控制器</translation>
+     </message>
+     <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="427"/>
 -        <source>Enable Auto-Stub</source>
 -        <translation>开启自动存根</translation>
@@ -3620,11 +3720,11 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="434"/>
 -        <source>Kiosk (Quest) Mode</source>
 -        <translation>Kiosk (Quest) 模式</translation>
-+        <translation>启用其它类型的控制器</translation>
-     </message>
-     <message>
-         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="441"/>
-@@ -2812,84 +2633,94 @@ When a program attempts to open the controller applet, it is immediately closed.
+-    </message>
+-    <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="441"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="457"/>
+         <source>Use dev.keys</source>
          <translation>使用 dev.keys</translation>
      </message>
      <message>
@@ -3639,48 +3739,48 @@ index 6fb006631b..8638480f49 100644
 -    </message>
 -    <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="507"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="585"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="601"/>
          <source>Battery Serial:</source>
 -        <translation>电池序列号:</translation>
 +        <translation>电池序列号：</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="526"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="604"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="620"/>
          <source>Bitmask for quick development toggles</source>
          <translation>用于快速开发切换的位掩码</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="529"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="607"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="623"/>
          <source>Set debug knobs (bitmask)</source>
 -        <translation>设置调试开关 (位掩码)</translation>
 +        <translation>设置调试旋钮（位掩码）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="532"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="610"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="626"/>
          <source>16-bit debug knob set for quick development toggles</source>
 -        <translation>用于快速开发切换的 16 位调试开关组</translation>
 +        <translation>用于快速开发切换的调试旋钮（16位）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="535"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="613"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="629"/>
          <source> (bitmask)</source>
 -        <translation>(位掩码)</translation>
 +        <translation> （位掩码）</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="538"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="616"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="632"/>
          <source>Debug Knobs: </source>
 -        <translation>调试开关:</translation>
 +        <translation>调试旋钮： </translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="572"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="545"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="561"/>
          <source>Unit Serial:</source>
 -        <translation>单元序列号:</translation>
 +        <translation>设备序列号：</translation>
@@ -3689,7 +3789,7 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="601"/>
 -        <source>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</source>
 -        <translation>启用此选项会将最新的音频命令列表输出到控制台。只影响使用音频渲染器的游戏。</translation>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="511"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="527"/>
 +        <source>Censor username in logs</source>
 +        <translation>在日志中屏蔽用户名</translation>
      </message>
@@ -3697,35 +3797,35 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="604"/>
 -        <source>Dump Audio Commands To Console**</source>
 -        <translation>将音频命令转储至控制台**</translation>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="668"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="684"/>
 +        <source>**This will be reset automatically when Eden closes.</source>
 +        <translation>**关闭模拟器后恢复默认。</translation>
-     </message>
-     <message>
--        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="611"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="434"/>
++    </message>
++    <message>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="450"/>
 +        <source>Kiosk (Quest) Mode</source>
 +        <translation>Kiosk（Quest）模式</translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="448"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="464"/>
 +        <source>Enable Debug Asserts</source>
 +        <translation>启用调试断言</translation>
-+    </message>
-+    <message>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="474"/>
+     </message>
+     <message>
+-        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="611"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="490"/>
 +        <source>Debugging</source>
 +        <translation>调试选项</translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="490"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="506"/>
          <source>Flush log output on each line</source>
 -        <translation>每行刷新日志输出</translation>
 +        <translation>在每一行刷新日志输出</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="618"/>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="497"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="513"/>
          <source>Enable FS Access Log</source>
          <translation>启用文件系统访问记录</translation>
      </message>
@@ -3733,7 +3833,7 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="625"/>
 -        <source>Enable Verbose Reporting Services**</source>
 -        <translation>启用详细报告服务**</translation>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="480"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="496"/>
 +        <source>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</source>
 +        <translation>启用此选项会将最新的音频命令列表输出到控制台。只影响使用音频渲染器的游戏。</translation>
      </message>
@@ -3741,7 +3841,7 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="632"/>
 -        <source>Censor username in logs</source>
 -        <translation>审查日志中的用户名</translation>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="427"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="443"/>
 +        <source>Enable Auto-Stub</source>
 +        <translation>启用自动存根</translation>
      </message>
@@ -3749,12 +3849,12 @@ index 6fb006631b..8638480f49 100644
 -        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="668"/>
 -        <source>**This will be reset automatically when Eden closes.</source>
 -        <translation>**这会在 Eden 关闭时自动重置。</translation>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="483"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="499"/>
 +        <source>Dump Audio Commands To Console**</source>
 +        <translation>将音频命令转储至控制台**</translation>
 +    </message>
 +    <message>
-+        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="504"/>
++        <location filename="../../src/yuzu/configuration/configure_debug.ui" line="520"/>
 +        <source>Enable Verbose Reporting Services**</source>
 +        <translation>启用详细报告服务**</translation>
      </message>
@@ -4042,22 +4142,16 @@ index 6fb006631b..8638480f49 100644
      </message>
  </context>
  <context>
-@@ -3260,26 +3098,26 @@ Would you like to delete the old save data?</source>
-     </message>
-     <message>
-         <location filename="../../src/yuzu/configuration/configure_general.ui" line="52"/>
--        <source>External Content</source>
--        <translation>外部内容</translation>
-+        <source>DLC and Updates</source>
-+        <translation>更新和可下载内容</translation>
+@@ -3264,22 +3102,22 @@ Would you like to delete the old save data?</source>
+         <translation>外部内容</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.ui" line="58"/>
 -        <source>Add directories to scan for DLCs and Updates without installing to NAND</source>
 -        <translation>添加目录以扫描 DLC 和更新，无需安装到 NAND 系统</translation>
-+        <location filename="../../src/yuzu/configuration/configure_general.ui" line="55"/>
-+        <source>External Content</source>
-+        <translation>外部内容</translation>
++        <location filename="../../src/yuzu/configuration/configure_general.ui" line="67"/>
++        <source>DLC and Updates</source>
++        <translation>更新和可下载内容</translation>
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.ui" line="77"/>
@@ -4074,7 +4168,7 @@ index 6fb006631b..8638480f49 100644
      </message>
      <message>
 -        <location filename="../../src/yuzu/configuration/configure_general.ui" line="142"/>
-+        <location filename="../../src/yuzu/configuration/configure_general.ui" line="135"/>
++        <location filename="../../src/yuzu/configuration/configure_general.ui" line="122"/>
          <source>Reset All Settings</source>
          <translation>重置所有设置项</translation>
      </message>

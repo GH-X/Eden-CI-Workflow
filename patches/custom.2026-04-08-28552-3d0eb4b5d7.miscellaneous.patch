@@ -3749,10 +3749,33 @@ index fadaf1c01a..853acce91f 100644
      Debugger::ToggleConsole();
      Common::Log::Filter filter;
 diff --git a/src/yuzu/configuration/configure_debug.ui b/src/yuzu/configuration/configure_debug.ui
-index f76f3b012d..3ec6c42bb4 100644
+index f76f3b012d..5e72f8cd76 100644
 --- a/src/yuzu/configuration/configure_debug.ui
 +++ b/src/yuzu/configuration/configure_debug.ui
-@@ -474,8 +474,46 @@
+@@ -142,6 +142,22 @@
+            </layout>
+           </widget>
+          </item>
++         <item>
++          <spacer name="verticalSpacer_2">
++           <property name="orientation">
++            <enum>Qt::Orientation::Vertical</enum>
++           </property>
++           <property name="sizeType">
++            <enum>QSizePolicy::Policy::Expanding</enum>
++           </property>
++           <property name="sizeHint" stdset="0">
++            <size>
++             <width>20</width>
++             <height>0</height>
++            </size>
++           </property>
++          </spacer>
++         </item>
+         </layout>
+        </widget>
+       </item>
+@@ -474,8 +490,46 @@
           <string>Debugging</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_3">
@@ -3800,7 +3823,7 @@ index f76f3b012d..3ec6c42bb4 100644
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
               <horstretch>0</horstretch>
-@@ -504,43 +542,18 @@
+@@ -504,43 +558,18 @@
                 </sizepolicy>
                </property>
                <property name="text">
@@ -3847,7 +3870,7 @@ index f76f3b012d..3ec6c42bb4 100644
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
               <horstretch>0</horstretch>
-@@ -569,17 +582,42 @@
+@@ -569,17 +598,42 @@
                 </sizepolicy>
                </property>
                <property name="text">
@@ -3893,7 +3916,7 @@ index f76f3b012d..3ec6c42bb4 100644
            <spacer name="verticalSpacer_3">
             <property name="orientation">
              <enum>Qt::Orientation::Vertical</enum>
-@@ -595,44 +633,6 @@
+@@ -595,44 +649,6 @@
             </property>
            </spacer>
           </item>
@@ -3989,17 +4012,10 @@ index c0fd9f73fa..15119b2600 100644
 -    std::unique_ptr<ConfigureCpuDebug> cpu_debug_tab;
  };
 diff --git a/src/yuzu/configuration/configure_general.ui b/src/yuzu/configuration/configure_general.ui
-index 78b6081d92..3fd63daef7 100644
+index 78b6081d92..8f8f11d568 100644
 --- a/src/yuzu/configuration/configure_general.ui
 +++ b/src/yuzu/configuration/configure_general.ui
-@@ -48,20 +48,13 @@
-      </item>
-      <item>
-       <widget class="QGroupBox" name="groupBox_external">
-+       <property name="toolTip">
-+        <string>DLC and Updates</string>
-+       </property>
-        <property name="title">
+@@ -52,16 +52,6 @@
          <string>External Content</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_external">
@@ -4016,6 +4032,56 @@ index 78b6081d92..3fd63daef7 100644
          <item>
           <widget class="QListWidget" name="external_content_list">
            <property name="selectionMode">
+@@ -73,6 +63,9 @@
+          <layout class="QHBoxLayout" name="horizontalLayout_external_buttons">
+           <item>
+            <widget class="QPushButton" name="add_external_dir_button">
++            <property name="toolTip">
++             <string>DLC and Updates</string>
++            </property>
+             <property name="text">
+              <string>Add Directory</string>
+             </property>
+@@ -106,19 +99,6 @@
+        </layout>
+       </widget>
+      </item>
+-     <item>
+-      <spacer name="verticalSpacer">
+-       <property name="orientation">
+-        <enum>Qt::Vertical</enum>
+-       </property>
+-       <property name="sizeHint" stdset="0">
+-        <size>
+-         <width>20</width>
+-         <height>40</height>
+-        </size>
+-       </property>
+-      </spacer>
+-     </item>
+      <item>
+       <layout class="QHBoxLayout" name="layout_reset">
+        <property name="spacing">
+@@ -158,6 +138,19 @@
+        </item>
+       </layout>
+      </item>
++     <item>
++      <spacer name="verticalSpacer">
++       <property name="orientation">
++        <enum>Qt::Vertical</enum>
++       </property>
++       <property name="sizeHint" stdset="0">
++        <size>
++         <width>20</width>
++         <height>40</height>
++        </size>
++       </property>
++      </spacer>
++     </item>
+     </layout>
+    </item>
+   </layout>
 diff --git a/src/yuzu/configuration/configure_graphics_extensions.ui b/src/yuzu/configuration/configure_graphics_extensions.ui
 index 79a2107cc9..42cf2e7181 100644
 --- a/src/yuzu/configuration/configure_graphics_extensions.ui
