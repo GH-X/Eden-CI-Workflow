@@ -3021,26 +3021,6 @@ index 6e196ecff0..0000000000
 -  </connection>
 - </connections>
 -</ui>
-diff --git a/src/yuzu/configuration/configure.ui b/src/yuzu/configuration/configure.ui
-index 875e0cea8e..f96f03371f 100644
---- a/src/yuzu/configuration/configure.ui
-+++ b/src/yuzu/configuration/configure.ui
-@@ -7,13 +7,13 @@
-     <x>0</x>
-     <y>0</y>
-     <width>650</width>
--    <height>700</height>
-+    <height>750</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>0</width>
--    <height>675</height>
-+    <height>700</height>
-    </size>
-   </property>
-   <property name="windowTitle">
 diff --git a/src/yuzu/configuration/configure_cpu.cpp b/src/yuzu/configuration/configure_cpu.cpp
 index b31ca849a6..187b188e3e 100644
 --- a/src/yuzu/configuration/configure_cpu.cpp
@@ -3769,7 +3749,7 @@ index fadaf1c01a..853acce91f 100644
      Debugger::ToggleConsole();
      Common::Log::Filter filter;
 diff --git a/src/yuzu/configuration/configure_debug.ui b/src/yuzu/configuration/configure_debug.ui
-index f76f3b012d..3ec6c42bb4 100644
+index f76f3b012d..bd77979d5a 100644
 --- a/src/yuzu/configuration/configure_debug.ui
 +++ b/src/yuzu/configuration/configure_debug.ui
 @@ -474,8 +474,46 @@
@@ -3913,7 +3893,7 @@ index f76f3b012d..3ec6c42bb4 100644
            <spacer name="verticalSpacer_3">
             <property name="orientation">
              <enum>Qt::Orientation::Vertical</enum>
-@@ -595,44 +633,6 @@
+@@ -595,62 +633,11 @@
             </property>
            </spacer>
           </item>
@@ -3958,6 +3938,24 @@ index f76f3b012d..3ec6c42bb4 100644
          </layout>
         </widget>
        </item>
+      </layout>
+     </item>
+-    <item>
+-     <spacer name="verticalSpacer">
+-      <property name="orientation">
+-       <enum>Qt::Orientation::Vertical</enum>
+-      </property>
+-      <property name="sizeHint" stdset="0">
+-       <size>
+-        <width>20</width>
+-        <height>0</height>
+-       </size>
+-      </property>
+-     </spacer>
+-    </item>
+     <item>
+      <widget class="QLabel" name="label_5">
+       <property name="sizePolicy">
 diff --git a/src/yuzu/configuration/configure_debug_tab.cpp b/src/yuzu/configuration/configure_debug_tab.cpp
 index d1ca4752a5..abb5bca1b6 100644
 --- a/src/yuzu/configuration/configure_debug_tab.cpp
@@ -4009,9 +4007,18 @@ index c0fd9f73fa..15119b2600 100644
 -    std::unique_ptr<ConfigureCpuDebug> cpu_debug_tab;
  };
 diff --git a/src/yuzu/configuration/configure_general.ui b/src/yuzu/configuration/configure_general.ui
-index 78b6081d92..7a5e5e7688 100644
+index 78b6081d92..466a0d589a 100644
 --- a/src/yuzu/configuration/configure_general.ui
 +++ b/src/yuzu/configuration/configure_general.ui
+@@ -7,7 +7,7 @@
+     <x>0</x>
+     <y>0</y>
+     <width>744</width>
+-    <height>568</height>
++    <height>528</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
 @@ -52,16 +52,6 @@
          <string>External Content</string>
         </property>
@@ -4039,6 +4046,26 @@ index 78b6081d92..7a5e5e7688 100644
              <property name="text">
               <string>Add Directory</string>
              </property>
+@@ -106,19 +99,6 @@
+        </layout>
+       </widget>
+      </item>
+-     <item>
+-      <spacer name="verticalSpacer">
+-       <property name="orientation">
+-        <enum>Qt::Vertical</enum>
+-       </property>
+-       <property name="sizeHint" stdset="0">
+-        <size>
+-         <width>20</width>
+-         <height>40</height>
+-        </size>
+-       </property>
+-      </spacer>
+-     </item>
+      <item>
+       <layout class="QHBoxLayout" name="layout_reset">
+        <property name="spacing">
 diff --git a/src/yuzu/configuration/configure_graphics_extensions.ui b/src/yuzu/configuration/configure_graphics_extensions.ui
 index 79a2107cc9..42cf2e7181 100644
 --- a/src/yuzu/configuration/configure_graphics_extensions.ui
