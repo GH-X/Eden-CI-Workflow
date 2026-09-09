@@ -1,412 +1,3 @@
-diff --git a/.patch/spirv-tools/0001-netbsd-fix.patch b/.patch/spirv-tools/0001-netbsd-fix.patch
-deleted file mode 100644
-index e4b71f2938..0000000000
---- a/.patch/spirv-tools/0001-netbsd-fix.patch
-+++ /dev/null
-@@ -1,14 +0,0 @@
--diff --git a/external/CMakeLists.txt b/external/CMakeLists.txt
--index eb4e69e..3155805 100644
----- a/external/CMakeLists.txt
--+++ b/external/CMakeLists.txt
--@@ -72,7 +72,8 @@ if (SPIRV_TOOLS_USE_MIMALLOC)
--   pop_variable(MI_BUILD_TESTS)
-- endif()
-- 
---if (DEFINED SPIRV-Headers_SOURCE_DIR)
--+# NetBSD doesn't have SPIRV-Headers readily available on system
--+if (DEFINED SPIRV-Headers_SOURCE_DIR AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "NetBSD")
--   # This allows flexible position of the SPIRV-Headers repo.
--   set(SPIRV_HEADER_DIR ${SPIRV-Headers_SOURCE_DIR})
-- else()
-diff --git a/.patch/spirv-tools/0002-allow-static-only.patch b/.patch/spirv-tools/0002-allow-static-only.patch
-deleted file mode 100644
-index 873589a5ac..0000000000
---- a/.patch/spirv-tools/0002-allow-static-only.patch
-+++ /dev/null
-@@ -1,287 +0,0 @@
--From 67bf3d1381b1faf59e87001d6156ba4e21cada14 Mon Sep 17 00:00:00 2001
--From: crueter <crueter@eden-emu.dev>
--Date: Mon, 29 Dec 2025 21:22:36 -0500
--Subject: [PATCH] [cmake] refactor: shared/static handling
--
--This significantly redoes the way shared and static libraries are
--handled. Now, it's controlled by two options: `SPIRV_TOOLS_BUILD_STATIC`
--and `SPIRV_TOOLS_BUILD_SHARED`.
--
--The default configuration (no `BUILD_SHARED_LIBS` set, options left at
--default) is to build shared ONLY if this is the master project, or
--static ONLY if this is a subproject (e.g. FetchContent, CPM.cmake). Also
--I should note that static-only (i.e. no shared) is now a supported
--target, this is done because projects including it as a submodule e.g.
--on Android or Windows may prefer this.
--
--Now the shared/static handling:
--- static ON, shared OFF: Only generates `.a` libraries.
--- static ON, shared ON: Generates `.a` libraries, but also
--  `libSPIRV-Tools.so`
--- static OFF, shared ON: Only generates `.so` libraries.
--
--Notable TODOs:
--- SPIRV-Tools-shared.pc seems redundant--how should we handle which one
--  to use in the case of distributions that distribute both types (MSYS2
--  for instance)?
--  * *Note: pkgconfig sucks at this and usually just leaves it up to the
--    user, so the optimal solution may indeed be doing absolutely
--    nothing.* CMake is unaffected :)
--- use namespaces in the CMake config files pleaaaaase
--
--This is going to change things a good bit for package maintainers, but
--cest la vie. It's for the greater good, I promise.
--
--Signed-off-by: crueter <crueter@eden-emu.dev>
-----
-- CMakeLists.txt        | 108 +++++++++++++++++++++++++-----------------
-- source/CMakeLists.txt |  62 ++++++++++++------------
-- 2 files changed, 94 insertions(+), 76 deletions(-)
--
--diff --git a/CMakeLists.txt b/CMakeLists.txt
--index 4d843b4d2f..07201f690f 100644
----- a/CMakeLists.txt
--+++ b/CMakeLists.txt
--@@ -14,6 +14,15 @@
-- 
-- cmake_minimum_required(VERSION 3.22.1)
-- 
--+# master project detection--useful for FetchContent/submodule inclusion
--+set(master_project OFF)
--+set(subproject ON)
--+
--+if (NOT DEFINED PROJECT_NAME)
--+  set(master_project ON)
--+  set(subproject OFF)
--+endif()
--+
-- project(spirv-tools)
-- 
-- # Avoid a bug in CMake 3.22.1. By default it will set -std=c++11 for
--@@ -135,46 +144,49 @@ if (DEFINED SPIRV_TOOLS_EXTRA_DEFINITIONS)
--   add_definitions(${SPIRV_TOOLS_EXTRA_DEFINITIONS})
-- endif()
-- 
---# Library build setting definitions:
---#
---# * SPIRV_TOOLS_BUILD_STATIC - ON or OFF - Defaults to ON.
---#   If enabled the following targets will be created:
---#     ${SPIRV_TOOLS}-static - STATIC library.
---#                             Has full public symbol visibility.
---#     ${SPIRV_TOOLS}-shared - SHARED library.
---#                             Has default-hidden symbol visibility.
---#     ${SPIRV_TOOLS}        - will alias to one of above, based on BUILD_SHARED_LIBS.
---#   If disabled the following targets will be created:
---#     ${SPIRV_TOOLS}        - either STATIC or SHARED based on SPIRV_TOOLS_LIBRARY_TYPE.
---#                             Has full public symbol visibility.
---#     ${SPIRV_TOOLS}-shared - SHARED library.
---#                             Has default-hidden symbol visibility.
---#
---# * SPIRV_TOOLS_LIBRARY_TYPE - SHARED or STATIC.
---#   Specifies the library type used for building SPIRV-Tools libraries.
---#   Defaults to SHARED when BUILD_SHARED_LIBS=1, otherwise STATIC.
---#
---# * SPIRV_TOOLS_FULL_VISIBILITY - "${SPIRV_TOOLS}-static" or "${SPIRV_TOOLS}"
---#   Evaluates to the SPIRV_TOOLS target library name that has no hidden symbols.
---#   This is used by internal targets for accessing symbols that are non-public.
---#   Note this target provides no API stability guarantees.
---#
---# Ideally, all of these will go away - see https://github.com/KhronosGroup/SPIRV-Tools/issues/3909.
---option(ENABLE_EXCEPTIONS_ON_MSVC "Build SPIRV-TOOLS with c++ exceptions enabled in MSVC" ON)
---option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS}-static target. ${SPIRV_TOOLS} will alias to ${SPIRV_TOOLS}-static or ${SPIRV_TOOLS}-shared based on BUILD_SHARED_LIBS" ON)
---if(SPIRV_TOOLS_BUILD_STATIC)
---  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
--+# If BUILD_SHARED_LIBS is undefined, set it based on whether we are
--+# the master project or a subproject
--+if (NOT DEFINED BUILD_SHARED_LIBS)
--+  set(BUILD_SHARED_LIBS ${master_project})
--+endif()
--+
--+if (BUILD_SHARED_LIBS)
--+  set(static_default OFF)
--+else()
--+  set(static_default ON)
--+endif()
--+
--+option(SPIRV_TOOLS_BUILD_SHARED "Build ${SPIRV_TOOLS} as a shared library"
--+       ${BUILD_SHARED_LIBS})
--+option(SPIRV_TOOLS_BUILD_STATIC "Build ${SPIRV_TOOLS} as a static library"
--+       ${static_default})
--+
--+# Avoid conflict between the dll import library and
--+# the static library (thanks microsoft)
--+if(CMAKE_STATIC_LIBRARY_PREFIX STREQUAL "" AND
--+   CMAKE_STATIC_LIBRARY_SUFFIX STREQUAL ".lib")
--+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}-static")
--+else()
--+    set(SPIRV_TOOLS_STATIC_LIBNAME "${SPIRV_TOOLS}")
--+endif()
--+
--+if (SPIRV_TOOLS_BUILD_STATIC)
--+  # If building a static library at all, always build other libraries as static,
--+  # and link to the static SPIRV-Tools library.
--   set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
---else(SPIRV_TOOLS_BUILD_STATIC)
---  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS})
---  if (NOT DEFINED SPIRV_TOOLS_LIBRARY_TYPE)
---      if(BUILD_SHARED_LIBS)
---        set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
---      else()
---        set(SPIRV_TOOLS_LIBRARY_TYPE "STATIC")
---      endif()
---  endif()
---endif(SPIRV_TOOLS_BUILD_STATIC)
--+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-static)
--+elseif (SPIRV_TOOLS_BUILD_SHARED)
--+  # If only building a shared library, link other libraries to the
--+  # shared library. Also, other libraries should be shared
--+  set(SPIRV_TOOLS_LIBRARY_TYPE "SHARED")
--+  set(SPIRV_TOOLS_FULL_VISIBILITY ${SPIRV_TOOLS}-shared)
--+else()
--+  message(FATAL_ERROR "You must set one of "
--+    "SPIRV_TOOLS_BUILD_STATIC or SPIRV_TOOLS_BUILD_SHARED!")
--+endif()
--+
--+option(ENABLE_EXCEPTIONS_ON_MSVC
--+    "Build SPIRV-TOOLS with C++ exceptions enabled in MSVC" ON)
-- 
-- function(spvtools_default_compile_options TARGET)
--   target_compile_options(${TARGET} PRIVATE ${SPIRV_WARNINGS})
--@@ -372,7 +384,7 @@ if (NOT "${SPIRV_SKIP_TESTS}")
-- endif()
-- 
-- set(SPIRV_LIBRARIES "-lSPIRV-Tools-opt -lSPIRV-Tools -lSPIRV-Tools-link")
---set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools-shared")
--+set(SPIRV_SHARED_LIBRARIES "-lSPIRV-Tools")
-- 
-- # Build pkg-config file
-- # Use a first-class target so it's regenerated when relevant files are updated.
--@@ -388,7 +400,12 @@ add_custom_command(
--                       -DSPIRV_LIBRARIES=${SPIRV_LIBRARIES}
--                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
--         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
---add_custom_command(
--+
--+set(pc_files ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
--+
--+# TODO(crueter): remove?
--+if (SPIRV_TOOLS_BUILD_SHARED)
--+  add_custom_command(
--         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc
--         COMMAND ${CMAKE_COMMAND}
--                       -DCHANGES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/CHANGES
--@@ -400,9 +417,12 @@ add_custom_command(
--                       -DSPIRV_SHARED_LIBRARIES=${SPIRV_SHARED_LIBRARIES}
--                       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
--         DEPENDS "CHANGES" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools-shared.pc.in" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake")
---add_custom_target(spirv-tools-pkg-config 
---        ALL 
---        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc)
--+  set(pc_files ${pc_files} ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools-shared.pc)
--+endif()
--+
--+add_custom_target(spirv-tools-pkg-config
--+        ALL
--+        DEPENDS ${pc_files})
-- 
-- # Install pkg-config file
-- if (ENABLE_SPIRV_TOOLS_INSTALL)
--diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
--index bfa1e661bc..fd3712c70c 100644
----- a/source/CMakeLists.txt
--+++ b/source/CMakeLists.txt
--@@ -337,49 +337,44 @@ function(spirv_tools_default_target_options target)
--   )
--   set_property(TARGET ${target} PROPERTY FOLDER "SPIRV-Tools libraries")
--   spvtools_check_symbol_exports(${target})
---  add_dependencies(${target} spirv-tools-build-version core_tables extinst_tables)
--+  add_dependencies(${target}
--+    spirv-tools-build-version core_tables extinst_tables)
-- endfunction()
-- 
---# Always build ${SPIRV_TOOLS}-shared. This is expected distro packages, and
---# unlike the other SPIRV_TOOLS target, defaults to hidden symbol visibility.
---add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
---if (SPIRV_TOOLS_USE_MIMALLOC)
---  target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--+if (SPIRV_TOOLS_BUILD_SHARED)
--+  add_library(${SPIRV_TOOLS}-shared SHARED ${SPIRV_SOURCES})
--+  if (SPIRV_TOOLS_USE_MIMALLOC)
--+    target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--+  endif()
--+
--+  set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES
--+    OUTPUT_NAME "${SPIRV_TOOLS}")
--+  spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
--+
--+  target_compile_definitions(${SPIRV_TOOLS}-shared
--+    PRIVATE SPIRV_TOOLS_IMPLEMENTATION
--+    PUBLIC SPIRV_TOOLS_SHAREDLIB)
--+
--+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-shared)
-- endif()
---spirv_tools_default_target_options(${SPIRV_TOOLS}-shared)
---set_target_properties(${SPIRV_TOOLS}-shared PROPERTIES CXX_VISIBILITY_PRESET hidden)
---target_compile_definitions(${SPIRV_TOOLS}-shared
---  PRIVATE SPIRV_TOOLS_IMPLEMENTATION
---  PUBLIC SPIRV_TOOLS_SHAREDLIB
---)
-- 
-- if(SPIRV_TOOLS_BUILD_STATIC)
--   add_library(${SPIRV_TOOLS}-static STATIC ${SPIRV_SOURCES})
--   if (SPIRV_TOOLS_USE_MIMALLOC AND SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD)
--     target_link_libraries(${SPIRV_TOOLS}-shared PRIVATE mimalloc-static)
--   endif()
--+
--   spirv_tools_default_target_options(${SPIRV_TOOLS}-static)
---  # The static target does not have the '-static' suffix.
---  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES OUTPUT_NAME "${SPIRV_TOOLS}")
---
---  # Create the "${SPIRV_TOOLS}" target as an alias to either "${SPIRV_TOOLS}-static"
---  # or "${SPIRV_TOOLS}-shared" depending on the value of BUILD_SHARED_LIBS.
---  if(BUILD_SHARED_LIBS)
---    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-shared)
---  else()
---    add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS}-static)
---  endif()
--+  set_target_properties(${SPIRV_TOOLS}-static PROPERTIES
--+    OUTPUT_NAME "${SPIRV_TOOLS_STATIC_LIBNAME}")
-- 
---  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static ${SPIRV_TOOLS}-shared)
---else()
---  add_library(${SPIRV_TOOLS} ${SPIRV_TOOLS_LIBRARY_TYPE} ${SPIRV_SOURCES})
---  if (SPIRV_TOOLS_USE_MIMALLOC)
---    target_link_libraries(${SPIRV_TOOLS} PRIVATE mimalloc-static)
---  endif()
---  spirv_tools_default_target_options(${SPIRV_TOOLS})
---  set(SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS} ${SPIRV_TOOLS}-shared)
--+  list(APPEND SPIRV_TOOLS_TARGETS ${SPIRV_TOOLS}-static)
-- endif()
-- 
--+# Create the "SPIRV-Tools" target as an alias to either "SPIRV-Tools-static"
--+# or "SPIRV-Tools-shared" depending on the value of SPIRV_TOOLS_BUILD_SHARED.
--+add_library(${SPIRV_TOOLS} ALIAS ${SPIRV_TOOLS_FULL_VISIBILITY})
--+
-- if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
--   find_library(LIBRT rt)
--   if(LIBRT)
--@@ -390,14 +385,17 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
-- endif()
-- 
-- if(ENABLE_SPIRV_TOOLS_INSTALL)
---  if (SPIRV_TOOLS_USE_MIMALLOC AND (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
--+  if (SPIRV_TOOLS_USE_MIMALLOC AND
--+    (NOT SPIRV_TOOLS_BUILD_STATIC OR SPIRV_TOOLS_USE_MIMALLOC_IN_STATIC_BUILD))
--     list(APPEND SPIRV_TOOLS_TARGETS mimalloc-static)
--   endif()
--   install(TARGETS ${SPIRV_TOOLS_TARGETS} EXPORT ${SPIRV_TOOLS}Targets)
--   export(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake)
-- 
--   spvtools_config_package_dir(${SPIRV_TOOLS} PACKAGE_DIR)
---  install(EXPORT ${SPIRV_TOOLS}Targets FILE ${SPIRV_TOOLS}Target.cmake DESTINATION ${PACKAGE_DIR})
--+  install(EXPORT ${SPIRV_TOOLS}Targets
--+    FILE ${SPIRV_TOOLS}Target.cmake
--+    DESTINATION ${PACKAGE_DIR})
-- 
--   # Special config file for root library compared to other libs.
--   file(WRITE ${CMAKE_BINARY_DIR}/${SPIRV_TOOLS}Config.cmake
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 42717c496d..1f000141f0 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -130,7 +130,6 @@ if (YUZU_STATIC_BUILD)
- 
-         # these libs do not properly provide static libs/let you do it with cmake
-         set(fmt_FORCE_BUNDLED ON)
--        set(SPIRV-Tools_FORCE_BUNDLED ON)
-         set(SPIRV-Headers_FORCE_BUNDLED ON)
-         set(zstd_FORCE_BUNDLED ON)
-     endif()
-@@ -523,7 +522,6 @@ if (NOT YUZU_STATIC_ROOM)
-     find_package(VulkanMemoryAllocator)
-     find_package(VulkanUtilityLibraries)
-     find_package(SimpleIni)
--    find_package(SPIRV-Tools)
-     find_package(sirit)
-     find_package(gamemode)
-     find_package(frozen)
-diff --git a/CMakeModules/FindSPIRV-Tools.cmake b/CMakeModules/FindSPIRV-Tools.cmake
-deleted file mode 100644
-index e0f9a88d54..0000000000
---- a/CMakeModules/FindSPIRV-Tools.cmake
-+++ /dev/null
-@@ -1,26 +0,0 @@
--# SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
--# SPDX-License-Identifier: GPL-3.0-or-later
--
--# SPDX-FileCopyrightText: 2022 yuzu Emulator Project
--# SPDX-License-Identifier: GPL-2.0-or-later
--
--include(FindPackageHandleStandardArgs)
--
--find_package(PkgConfig QUIET)
--pkg_search_module(SPIRV-Tools QUIET IMPORTED_TARGET SPIRV-Tools)
--find_package_handle_standard_args(SPIRV-Tools
--    REQUIRED_VARS SPIRV-Tools_LINK_LIBRARIES
--    VERSION_VAR SPIRV-Tools_VERSION
--)
--
--if (PLATFORM_MSYS)
--    FixMsysPath(PkgConfig::SPIRV-Tools)
--endif()
--
--if (SPIRV-Tools_FOUND AND NOT TARGET SPIRV-Tools::SPIRV-Tools)
--    if (TARGET SPIRV-Tools)
--        add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools)
--    else()
--        add_library(SPIRV-Tools::SPIRV-Tools ALIAS PkgConfig::SPIRV-Tools)
--    endif()
--endif()
-diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
-index ba0545b7a7..e230f709fa 100644
---- a/externals/CMakeLists.txt
-+++ b/externals/CMakeLists.txt
-@@ -192,14 +192,6 @@ else()
-     endif()
- endif()
- 
--# SPIRV Tools
--AddJsonPackage(spirv-tools)
--
--if (SPIRV-Tools_ADDED)
--    add_library(SPIRV-Tools::SPIRV-Tools ALIAS SPIRV-Tools-static)
--    target_link_libraries(SPIRV-Tools-static PRIVATE SPIRV-Tools-opt SPIRV-Tools-link)
--endif()
--
- # Catch2
- if (YUZU_TESTS OR DYNARMIC_TESTS)
-     AddJsonPackage(catch2)
-diff --git a/externals/cpmfile.json b/externals/cpmfile.json
-index b8472774ae..0f8d34230c 100644
---- a/externals/cpmfile.json
-+++ b/externals/cpmfile.json
-@@ -102,20 +102,6 @@
-         "git_version": "1.3.18",
-         "find_args": "MODULE"
-     },
--    "spirv-tools": {
--        "package": "SPIRV-Tools",
--        "repo": "KhronosGroup/SPIRV-Tools",
--        "sha": "0a7e28689a",
--        "hash": "eadfcceb82f4b414528d99962335e4f806101168474028f3cf7691ac40c37f323decf2a42c525e2d5bfa6f14ff132d6c5cf9b87c151490efad01f5e13ade1520",
--        "git_version": "2025.4",
--        "options": [
--            "SPIRV_SKIP_EXECUTABLES ON"
--        ],
--        "patches": [
--            "0001-netbsd-fix.patch",
--            "0002-allow-static-only.patch"
--        ]
--    },
-     "spirv-headers": {
-         "package": "SPIRV-Headers",
-         "repo": "KhronosGroup/SPIRV-Headers",
 diff --git a/externals/ffmpeg/CMakeLists.txt b/externals/ffmpeg/CMakeLists.txt
 index 3140f8e545..87a3cacc70 100644
 --- a/externals/ffmpeg/CMakeLists.txt
@@ -420,19 +11,24 @@ index 3140f8e545..87a3cacc70 100644
          WORKING_DIRECTORY
              ${FFmpeg_BUILD_DIR}
      )
+diff --git a/src/common/lru_cache.h b/src/common/lru_cache.h
+index 36cea5d27e..be18efc6b6 100644
+--- a/src/common/lru_cache.h
++++ b/src/common/lru_cache.h
+@@ -60,7 +60,7 @@ public:
+     template <typename Func>
+     void ForEachItemBelow(TickType tick, Func&& func) {
+         static constexpr bool RETURNS_BOOL =
+-            std::is_same_v<std::invoke_result<Func, ObjectType>, bool>;
++            std::is_same_v<std::invoke_result_t<Func, ObjectType>, bool>;
+         Item* iterator = first_item;
+         while (iterator) {
+             if (static_cast<s64>(tick) - static_cast<s64>(iterator->tick) < 0) {
 diff --git a/src/common/settings.cpp b/src/common/settings.cpp
-index 54848c4dd1..3db8e28255 100644
+index 54848c4dd1..6ece64f4f3 100644
 --- a/src/common/settings.cpp
 +++ b/src/common/settings.cpp
-@@ -61,7 +61,6 @@ SWITCHABLE(NvdecEmulation, false);
- SWITCHABLE(Region, true);
- SWITCHABLE(RendererBackend, true);
- SWITCHABLE(ScalingFilter, false);
--SWITCHABLE(SpirvOptimizeMode, true);
- SWITCHABLE(TimeZone, true);
- SETTING(VSyncMode, true);
- SWITCHABLE(bool, false);
-@@ -157,39 +156,34 @@ void UpdateGPUAccuracy() {
+@@ -157,39 +157,34 @@ void UpdateGPUAccuracy() {
      values.current_gpu_accuracy = values.gpu_accuracy.GetValue();
  }
  
@@ -485,7 +81,7 @@ index 54848c4dd1..3db8e28255 100644
  #endif
  }
  
-@@ -214,7 +208,15 @@ bool IsNceEnabled() {
+@@ -214,7 +209,15 @@ bool IsNceEnabled() {
  }
  
  bool IsDockedMode() {
@@ -502,7 +98,7 @@ index 54848c4dd1..3db8e28255 100644
  }
  
  float Volume() {
-@@ -233,8 +235,9 @@ const char* TranslateCategory(Category category) {
+@@ -233,8 +236,9 @@ const char* TranslateCategory(Category category) {
      case Category::Core:
          return "Core";
      case Category::Cpu:
@@ -513,7 +109,7 @@ index 54848c4dd1..3db8e28255 100644
          return "Cpu";
      case Category::Overlay:
          return "Overlay";
-@@ -387,52 +390,86 @@ void SetConfiguringGlobal(bool is_global) {
+@@ -387,52 +391,86 @@ void SetConfiguringGlobal(bool is_global) {
      configuring_global = is_global;
  }
  
@@ -637,18 +233,10 @@ index 54848c4dd1..3db8e28255 100644
  
  } // namespace Settings
 diff --git a/src/common/settings.h b/src/common/settings.h
-index bec1e93e79..c62e99095e 100644
+index bec1e93e79..ceffe96c39 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
-@@ -77,7 +77,6 @@ SWITCHABLE(NvdecEmulation, false);
- SWITCHABLE(Region, true);
- SWITCHABLE(RendererBackend, true);
- SWITCHABLE(ScalingFilter, false);
--SWITCHABLE(SpirvOptimizeMode, true);
- SWITCHABLE(TimeZone, true);
- SETTING(VSyncMode, true);
- SWITCHABLE(bool, false);
-@@ -171,6 +170,7 @@ struct Values {
+@@ -171,6 +171,7 @@ struct Values {
      SwitchableSetting<bool> enable_overlay{linkage, false, "enable_overlay", Category::LibraryApplet};
  
      // Audio
@@ -656,7 +244,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<AudioEngine> sink_id{linkage, AudioEngine::Auto, "output_engine",
                                             Category::Audio, Specialization::RuntimeList};
      SwitchableSetting<std::string> audio_output_device_id{
-@@ -192,24 +192,57 @@ struct Values {
+@@ -192,24 +193,57 @@ struct Values {
                                         true};
      Setting<bool, false> audio_muted{
                                       linkage, false, "audio_muted", Category::Audio, Specialization::Default, true, true};
@@ -726,7 +314,7 @@ index bec1e93e79..c62e99095e 100644
                                               "speed_limit",
                                               Category::Core,
                                               Specialization::Countable | Specialization::Percentage,
-@@ -217,31 +250,40 @@ struct Values {
+@@ -217,31 +251,40 @@ struct Values {
                                               true,
                                               &use_speed_limit};
  
@@ -789,7 +377,7 @@ index bec1e93e79..c62e99095e 100644
  
      // Cpu
      SwitchableSetting<CpuBackend, true> cpu_backend{linkage,
-@@ -258,75 +300,36 @@ struct Values {
+@@ -258,75 +301,36 @@ struct Values {
  #endif
                                                      "cpu_backend",
                                                      Category::Cpu};
@@ -891,7 +479,7 @@ index bec1e93e79..c62e99095e 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -337,41 +340,10 @@ struct Values {
+@@ -337,41 +341,10 @@ struct Values {
  #endif
          "backend", Category::Renderer};
      SwitchableSetting<int> vulkan_device{linkage, 0, "vulkan_device", Category::Renderer, Specialization::RuntimeList};
@@ -934,7 +522,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<AspectRatio, true> aspect_ratio{linkage,
                                                        AspectRatio::R16_9,
                                                        "aspect_ratio",
-@@ -387,13 +359,6 @@ struct Values {
+@@ -387,13 +360,6 @@ struct Values {
                                                    Specialization::Default,
                                                    true,
                                                    true};
@@ -948,7 +536,7 @@ index bec1e93e79..c62e99095e 100644
      // *nix platforms may have issues with the borderless windowed fullscreen mode.
      // Default to exclusive fullscreen on these platforms for now.
      SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
-@@ -408,18 +373,42 @@ struct Values {
+@@ -408,18 +374,51 @@ struct Values {
                                                              true,
                                                              true};
  
@@ -965,6 +553,15 @@ index bec1e93e79..c62e99095e 100644
 +                                                  Specialization::RuntimeList,
 +                                                  true,
 +                                                  true};
+ 
++    SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++#ifdef ANDROID
++                                                           AnisotropyMode::Default,
++#else
++                                                           AnisotropyMode::Default,
++#endif
++                                                           "max_anisotropy",
++                                                           Category::Renderer};
 +
 +    SwitchableSetting<ScalingFilter> scaling_filter{linkage,
 +                                                    ScalingFilter::Bicubic,
@@ -987,7 +584,7 @@ index bec1e93e79..c62e99095e 100644
 +    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
 +    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
 +    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
- 
++
 +    // Renderer (Advanced)
      SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
  #ifdef ANDROID
@@ -998,7 +595,7 @@ index bec1e93e79..c62e99095e 100644
  #endif
                                                        "gpu_accuracy",
                                                        Category::RendererAdvanced,
-@@ -427,10 +416,10 @@ struct Values {
+@@ -427,10 +426,10 @@ struct Values {
                                                        true,
                                                        true};
  
@@ -1011,30 +608,25 @@ index bec1e93e79..c62e99095e 100644
                                                        "dma_accuracy",
                                                        Category::RendererAdvanced,
                                                        Specialization::Default,
-@@ -442,24 +431,34 @@ struct Values {
+@@ -442,24 +441,25 @@ struct Values {
                                                             "vram_usage_mode",
                                                             Category::RendererAdvanced};
  
 -    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
--                                                      "nvdec_emulation", Category::RendererAdvanced};
--
-     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
+                                                       "nvdec_emulation", Category::RendererAdvanced};
+ 
+-    SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
++    SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
  #ifdef ANDROID
-                                                            AnisotropyMode::Default,
+-                                                           AnisotropyMode::Default,
++                                                            AstcDecodeMode::Cpu,
  #else
 -                                                           AnisotropyMode::Automatic,
-+                                                           AnisotropyMode::Default,
- #endif
-                                                            "max_anisotropy",
-                                                            Category::RendererAdvanced};
-+
-+    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
-+                                                      "nvdec_emulation", Category::RendererAdvanced};
-+
-     SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
-+#ifdef ANDROID
-+                                                            AstcDecodeMode::Cpu,
-+#else
+-#endif
+-                                                           "max_anisotropy",
+-                                                           Category::RendererAdvanced};
+-    SwitchableSetting<AstcDecodeMode, true> accelerate_astc{linkage,
                                                              AstcDecodeMode::Gpu,
 +#endif
                                                              "accelerate_astc",
@@ -1051,7 +643,7 @@ index bec1e93e79..c62e99095e 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -468,36 +467,30 @@ struct Values {
+@@ -468,36 +468,30 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -1068,10 +660,10 @@ index bec1e93e79..c62e99095e 100644
 +                                                    Specialization::Scalar,
 +                                                    true,
 +                                                    true};
- 
++
 +    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
 +                                                     Category::RendererAdvanced};
-+
+ 
 +    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
 +                                                   Category::RendererAdvanced};
  
@@ -1103,7 +695,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> use_reactive_flushing{linkage,
  #ifdef ANDROID
                                                    false,
-@@ -507,8 +500,8 @@ struct Values {
+@@ -507,8 +501,8 @@ struct Values {
                                                    "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
@@ -1114,7 +706,7 @@ index bec1e93e79..c62e99095e 100644
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
                                                    false,
-@@ -518,6 +511,16 @@ struct Values {
+@@ -518,6 +512,16 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -1122,7 +714,7 @@ index bec1e93e79..c62e99095e 100644
 +                                                  Category::RendererAdvanced};
 +
 +    SwitchableSetting<bool> use_vulkan_driver_pipeline_cache{
-+        linkage, false, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
++        linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
 +        Specialization::Default};
 +
 +    SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
@@ -1131,7 +723,7 @@ index bec1e93e79..c62e99095e 100644
  #ifdef ANDROID
      SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
                                                   false,
-@@ -528,15 +531,7 @@ struct Values {
+@@ -528,15 +532,7 @@ struct Values {
                                                   true};
  #endif
  
@@ -1148,7 +740,7 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
                                                          "skip_cpu_inner_invalidation",
-@@ -544,6 +539,15 @@ struct Values {
+@@ -544,6 +540,15 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -1164,22 +756,22 @@ index bec1e93e79..c62e99095e 100644
      SwitchableSetting<bool> async_presentation{linkage,
  #ifdef ANDROID
                                                 true,
-@@ -552,47 +556,31 @@ struct Values {
+@@ -552,47 +557,30 @@ struct Values {
  #endif
                                                 "async_presentation", Category::RendererHacks};
  
 -    SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
 -                                                     Category::RendererHacks};
--
++    SwitchableSetting<bool> use_asynchronous_shaders{linkage, true, "use_asynchronous_shaders", Category::RendererHacks};
+ 
 -    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
 -                                                     Category::RendererHacks};
 -
-     SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
-                                                      Category::RendererHacks};
- 
+-    SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
+-                                                     Category::RendererHacks};
 +    SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
 +                                                  Category::RendererHacks};
-+
+ 
      SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
 -                                                  GpuUnswizzleSize::Large,
 +                                                  GpuUnswizzleSize::Normal,
@@ -1383,12 +975,15 @@ index bbc16f52ec..ad77c87193 100644
      Renderer,
      RendererAdvanced,
 diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
-index 638be4127f..0f4384e06f 100644
+index 638be4127f..ab3be2bb27 100644
 --- a/src/common/settings_enums.h
 +++ b/src/common/settings_enums.h
-@@ -128,16 +128,17 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+@@ -126,18 +126,19 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+     GmtPlusZero, GmtMinusZero, GmtZero, Greenwich, Hongkong, Hst, Iceland, Iran, Israel, Jamaica,
+     Japan, Kwajalein, Libya, Met, Mst, Mst7Mdt, Navajo, Nz, NzChat, Poland, Portugal, Prc, Pst8Pdt,
      Roc, Rok, Singapore, Turkey, Uct, Universal, Utc, WSu, Wet, Zulu);
- ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
+-ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16, X32, X64, None);
++ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16);
  ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
 -ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
 -ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
@@ -1704,6 +1299,42 @@ index b216dc2094..8de31f024c 100644
  }
  
  std::optional<s64> CoreTiming::Advance() {
+diff --git a/src/core/file_sys/patch_manager.cpp b/src/core/file_sys/patch_manager.cpp
+index 6af926eac0..c3eb3bb035 100644
+--- a/src/core/file_sys/patch_manager.cpp
++++ b/src/core/file_sys/patch_manager.cpp
+@@ -908,8 +908,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
+                     .type = PatchType::Mod,
+                     .program_id = title_id,
+                     .title_id = title_id,
+-                    .source = PatchSource::Unknown,
+-                    .location = f->GetFullPath(),
++                    .source = PatchSource::Unknown
+                 });
+             }
+ 
+@@ -956,8 +955,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
+                            .type = PatchType::Mod,
+                            .program_id = title_id,
+                            .title_id = title_id,
+-                           .source = PatchSource::Unknown,
+-                           .location = mod->GetFullPath()});
++                           .source = PatchSource::Unknown});
+         }
+     }
+ 
+diff --git a/src/core/file_sys/patch_manager.h b/src/core/file_sys/patch_manager.h
+index 755d924fd4..c326d433cc 100644
+--- a/src/core/file_sys/patch_manager.h
++++ b/src/core/file_sys/patch_manager.h
+@@ -47,7 +47,6 @@ struct Patch {
+     u64 program_id;
+     u64 title_id;
+     PatchSource source;
+-    std::string location;
+     u32 numeric_version{0};
+ };
+ 
 diff --git a/src/core/file_sys/vfs/vfs_real.cpp b/src/core/file_sys/vfs/vfs_real.cpp
 index 1eafff6c06..e6caa8d088 100644
 --- a/src/core/file_sys/vfs/vfs_real.cpp
@@ -1718,6 +1349,20 @@ index 1eafff6c06..e6caa8d088 100644
  
  constexpr FS::FileAccessMode ModeFlagsToFileAccessMode(OpenMode mode) {
      switch (mode) {
+diff --git a/src/frontend_common/CMakeLists.txt b/src/frontend_common/CMakeLists.txt
+index f9b3805939..237258e89b 100644
+--- a/src/frontend_common/CMakeLists.txt
++++ b/src/frontend_common/CMakeLists.txt
+@@ -13,8 +13,7 @@ add_library(frontend_common STATIC
+     data_manager.h data_manager.cpp
+     play_time_manager.cpp
+     play_time_manager.h
+-    settings_generator.h settings_generator.cpp
+-    mod_manager.h mod_manager.cpp)
++    settings_generator.h settings_generator.cpp)
+ 
+ if (ENABLE_UPDATE_CHECKER)
+     target_link_libraries(frontend_common PRIVATE httplib::httplib)
 diff --git a/src/frontend_common/config.cpp b/src/frontend_common/config.cpp
 index f275727c17..853bb9dc5a 100644
 --- a/src/frontend_common/config.cpp
@@ -1738,6 +1383,30 @@ index f275727c17..853bb9dc5a 100644
      WriteCategory(Settings::Category::CpuDebug);
      WriteCategory(Settings::Category::CpuUnsafe);
  
+diff --git a/src/qt_common/CMakeLists.txt b/src/qt_common/CMakeLists.txt
+index 399fbe67a0..3c63312e31 100644
+--- a/src/qt_common/CMakeLists.txt
++++ b/src/qt_common/CMakeLists.txt
+@@ -24,8 +24,6 @@ add_library(qt_common STATIC
+     util/rom.h util/rom.cpp
+     util/applet.h util/applet.cpp
+     util/compress.h util/compress.cpp
+-    util/fs.h util/fs.cpp
+-    util/mod.h util/mod.cpp
+ 
+     abstract/frontend.h abstract/frontend.cpp
+     abstract/progress.h abstract/progress.cpp
+@@ -33,7 +31,9 @@ add_library(qt_common STATIC
+     qt_string_lookup.h
+     qt_compat.h
+ 
+-    discord/discord.h)
++    discord/discord.h
++    util/fs.h util/fs.cpp
++)
+ 
+ if (UNIX)
+     target_sources(qt_common PRIVATE gui_settings.cpp gui_settings.h)
 diff --git a/src/qt_common/config/uisettings.cpp b/src/qt_common/config/uisettings.cpp
 index f4f5688781..3f3c2ace52 100644
 --- a/src/qt_common/config/uisettings.cpp
@@ -1816,7 +1485,7 @@ index f4f5688781..3f3c2ace52 100644
  // clang-format on
  
 diff --git a/src/qt_common/config/uisettings.h b/src/qt_common/config/uisettings.h
-index 4549a36345..6c9af3a444 100644
+index 4549a36345..dd2c0dd47a 100644
 --- a/src/qt_common/config/uisettings.h
 +++ b/src/qt_common/config/uisettings.h
 @@ -98,18 +98,18 @@ struct Values {
@@ -1879,114 +1548,173 @@ index 4549a36345..6c9af3a444 100644
  
      // Size & File Types Column
      Setting<bool> show_size{linkage, true, "show_size", Category::UiGameList};
-@@ -268,4 +268,3 @@ Q_DECLARE_METATYPE(Settings::AntiAliasing);
- Q_DECLARE_METATYPE(Settings::RendererBackend);
- Q_DECLARE_METATYPE(Settings::AstcRecompression);
- Q_DECLARE_METATYPE(Settings::AstcDecodeMode);
--Q_DECLARE_METATYPE(Settings::SpirvOptimizeMode);
-diff --git a/src/shader_recompiler/CMakeLists.txt b/src/shader_recompiler/CMakeLists.txt
-index e91803c8c6..d02ee268f0 100644
---- a/src/shader_recompiler/CMakeLists.txt
-+++ b/src/shader_recompiler/CMakeLists.txt
-@@ -243,7 +243,7 @@ add_library(shader_recompiler STATIC
- 
- )
- 
--target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit SPIRV-Tools::SPIRV-Tools)
-+target_link_libraries(shader_recompiler PUBLIC common fmt::fmt sirit::sirit)
- 
- if (MSVC)
-     target_compile_options(shader_recompiler PRIVATE
-diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.cpp b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-index 313a1deb30..bdb15fa728 100644
---- a/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-+++ b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
-@@ -9,7 +9,6 @@
- #include <type_traits>
- #include <utility>
- #include <vector>
--#include <spirv-tools/optimizer.hpp>
- 
- #include "common/settings.h"
- #include "shader_recompiler/backend/spirv/emit_spirv.h"
-@@ -22,15 +21,7 @@ namespace Shader::Backend::SPIRV {
- namespace {
- template <class Func>
- struct FuncTraits {};
--    thread_local std::unique_ptr<spvtools::Optimizer> thread_optimizer;
- 
--    spvtools::Optimizer& GetThreadOptimizer() {
--        if (!thread_optimizer) {
--            thread_optimizer = std::make_unique<spvtools::Optimizer>(SPV_ENV_VULKAN_1_3);
--            thread_optimizer->RegisterPerformancePasses();
+diff --git a/src/qt_common/util/mod.cpp b/src/qt_common/util/mod.cpp
+deleted file mode 100644
+index 38bc8f5be0..0000000000
+--- a/src/qt_common/util/mod.cpp
++++ /dev/null
+@@ -1,141 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+-#include <filesystem>
+-#include <JlCompress.h>
+-#include "frontend_common/mod_manager.h"
+-#include "mod.h"
+-#include "qt_common/abstract/frontend.h"
+-
+-namespace QtCommon::Mod {
+-QStringList GetModFolders(const QString& root, const QString& fallbackName) {
+-    namespace fs = std::filesystem;
+-
+-    const auto std_root = root.toStdString();
+-
+-    auto paths = FrontendCommon::GetModFolder(std_root);
+-
+-    // multi mod zip
+-    if (paths.size() > 1) {
+-        // We just have to assume it's properly formed here.
+-        // If not, you're out of luck.
+-        QStringList qpaths;
+-        for (const fs::path& path : paths) {
+-            qpaths << QString::fromStdString(path.string());
 -        }
--        return *thread_optimizer;
+-
+-        return qpaths;
 -    }
- template <class ReturnType_, class... Args>
- struct FuncTraits<ReturnType_ (*)(Args...)> {
-     using ReturnType = ReturnType_;
-@@ -501,8 +492,7 @@ void PatchPhiNodes(IR::Program& program, EmitContext& ctx) {
-         }
- } // Anonymous namespace
- 
--std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
--                           IR::Program& program, Bindings& bindings, bool optimize) {
-+std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
-     EmitContext ctx{profile, runtime_info, program, bindings};
-     const Id main{DefineMain(ctx, program)};
-     DefineEntryPoint(program, ctx, main);
-@@ -514,29 +504,7 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
-     SetupCapabilities(profile, program.info, ctx);
-     SetupTransformFeedbackCapabilities(ctx, main);
-     PatchPhiNodes(program, ctx);
+-    // either frontend didn't detect any romfs/exefs, or is a single-mod zip
+-    else {
+-        fs::path std_path;
+-        if (!paths.empty())
+-            std_path = paths[0];
 -
--    if (!optimize) {
--        return ctx.Assemble();
--    } else {
--        std::vector<u32> spirv = ctx.Assemble();
+-        QString default_name;
+-        if (!fallbackName.isEmpty())
+-            default_name = fallbackName;
+-        else if (!paths.empty())
+-            default_name = QString::fromStdString(std_path.filename().string());
+-        else
+-            default_name = root.split(QLatin1Char('/')).last();
 -
--        // Use thread-local optimizer instead of creating a new one
--        auto& spv_opt = GetThreadOptimizer();
--        spv_opt.SetMessageConsumer([](spv_message_level_t, const char*, const spv_position_t&, const char* m) {
--            LOG_ERROR(HW_GPU, "spirv-opt: {}", m);
--        });
+-        QString name = QtCommon::Frontend::GetTextInput(
+-            tr("Mod Name"), tr("What should this mod be called?"), default_name);
 -
--        spvtools::OptimizerOptions opt_options;
--        opt_options.set_run_validator(false);
+-        if (name.isEmpty())
+-            return {};
 -
--        std::vector<u32> result;
--        if (!spv_opt.Run(spirv.data(), spirv.size(), &result, opt_options)) {
--            LOG_ERROR(HW_GPU,
--                      "Failed to optimize SPIRV shader output, continuing without optimization");
--            result = std::move(spirv);
+-        // if std_path is empty, frontend_common could not determine mod type and/or name.
+-        // so we have to prompt the user and set up the structure ourselves
+-        if (paths.empty()) {
+-            // TODO: Carboxyl impl.
+-            const QStringList choices = {
+-                tr("RomFS"),
+-                tr("ExeFS/Patch"),
+-                tr("Cheat"),
+-            };
+-
+-            int choice = QtCommon::Frontend::Choice(
+-                tr("Mod Type"),
+-                tr("Could not detect mod type automatically. Please manually "
+-                   "specify the type of mod you downloaded.\n\nMost mods are RomFS mods, but "
+-                   "patches "
+-                   "(.pchtxt) are typically ExeFS mods."),
+-                choices);
+-
+-            std::string to_make;
+-
+-            switch (choice) {
+-            case 0:
+-                to_make = "romfs";
+-                break;
+-            case 1:
+-                to_make = "exefs";
+-                break;
+-            case 2:
+-                to_make = "cheats";
+-                break;
+-            default:
+-                return {};
+-            }
+-
+-            // now make a temp directory...
+-            const auto mod_dir = fs::temp_directory_path() / "eden" / "mod" / name.toStdString();
+-            const auto tmp = mod_dir / to_make;
+-            fs::remove_all(mod_dir);
+-            if (!fs::create_directories(tmp)) {
+-                LOG_ERROR(Frontend, "Failed to create temporary directory {}", tmp.string());
+-                return {};
+-            }
+-
+-            std_path = mod_dir;
+-
+-            // ... and copy everything from the root to the temp dir
+-            for (const auto& entry : fs::directory_iterator(root.toStdString())) {
+-                const auto target = tmp / entry.path().filename();
+-
+-                fs::copy(entry.path(), target,
+-                         fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+-            }
+-        } else {
+-            // Rename the existing mod folder.
+-            const auto new_path = std_path.parent_path() / name.toStdString();
+-            fs::remove_all(new_path);
+-            fs::rename(std_path, new_path);
+-            std_path = new_path;
 -        }
--        return result;
--    }
-+    return ctx.Assemble();
- }
- 
- Id EmitPhi(EmitContext& ctx, IR::Inst* inst) {
-diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.h b/src/shader_recompiler/backend/spirv/emit_spirv.h
-index 6bb8596925..89a1aaa7b2 100644
---- a/src/shader_recompiler/backend/spirv/emit_spirv.h
-+++ b/src/shader_recompiler/backend/spirv/emit_spirv.h
-@@ -33,13 +33,10 @@ constexpr u32 RESCALING_LAYOUT_WORDS_OFFSET = offsetof(RescalingLayout, rescalin
- constexpr u32 RESCALING_LAYOUT_DOWN_FACTOR_OFFSET = offsetof(RescalingLayout, down_factor);
- constexpr u32 RENDERAREA_LAYOUT_OFFSET = offsetof(RenderAreaLayout, render_area);
- 
--[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info,
--                                         IR::Program& program, Bindings& bindings, bool optimize);
 -
--[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program,
--                                                bool optimize) {
-+[[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings);
-+[[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program) {
-     Bindings binding;
--    return EmitSPIRV(profile, {}, program, binding, optimize);
-+    return EmitSPIRV(profile, {}, program, binding);
- }
- 
- } // namespace Shader::Backend::SPIRV
+-        return {QString::fromStdString(std_path.string())};
+-    }
+-}
+-
+-// TODO(crueter): Make this a common extract_to_tmp func
+-const QString ExtractMod(const QString& path) {
+-    namespace fs = std::filesystem;
+-    fs::path tmp{fs::temp_directory_path() / "eden" / "unzip_mod"};
+-
+-    fs::remove_all(tmp);
+-    if (!fs::create_directories(tmp)) {
+-        QtCommon::Frontend::Critical(tr("Mod Extract Failed"),
+-                                     tr("Failed to create temporary directory %1")
+-                                         .arg(QString::fromStdString(tmp.string())));
+-        return QString();
+-    }
+-
+-    QString qCacheDir = QString::fromStdString(tmp.string());
+-
+-    QFile zip{path};
+-
+-    // TODO(crueter): use QtCompress
+-    QStringList result = JlCompress::extractDir(&zip, qCacheDir);
+-    if (result.isEmpty()) {
+-        QtCommon::Frontend::Critical(tr("Mod Extract Failed"),
+-                                     tr("Zip file %1 is empty").arg(path));
+-        return QString();
+-    }
+-
+-    return qCacheDir;
+-}
+-
+-} // namespace QtCommon::Mod
+diff --git a/src/qt_common/util/mod.h b/src/qt_common/util/mod.h
+deleted file mode 100644
+index 2148bed65c..0000000000
+--- a/src/qt_common/util/mod.h
++++ /dev/null
+@@ -1,14 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+-#pragma once
+-
+-#include <QString>
+-
+-namespace QtCommon::Mod {
+-
+-QStringList GetModFolders(const QString& root, const QString& fallbackName);
+-
+-const QString ExtractMod(const QString& path);
+-
+-} // namespace QtCommon::Mod
 diff --git a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp b/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
 index 2d4feca02c..809879c981 100644
 --- a/src/shader_recompiler/ir_opt/global_memory_to_storage_buffer_pass.cpp
@@ -2311,59 +2039,6 @@ index 4ed42487aa..1f5ff99153 100644
      std::function<void()> operation([this, is_synced, streamer, query_base = query, query_location,
                                       pointer, pointer_timestamp] {
          if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
-diff --git a/src/video_core/renderer_opengl/gl_shader_cache.cpp b/src/video_core/renderer_opengl/gl_shader_cache.cpp
-index aac7732005..cf62b02c97 100644
---- a/src/video_core/renderer_opengl/gl_shader_cache.cpp
-+++ b/src/video_core/renderer_opengl/gl_shader_cache.cpp
-@@ -181,7 +181,6 @@ ShaderCache::ShaderCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
-       state_tracker{state_tracker_}, shader_notify{shader_notify_},
-       use_asynchronous_shaders{device.UseAsynchronousShaders()},
-       strict_context_required{device.StrictContextRequired()},
--      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
-       profile{
-           .supported_spirv = 0x00010000,
- 
-@@ -348,10 +347,6 @@ void ShaderCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading,
-     if (!use_asynchronous_shaders) {
-         workers.reset();
-     }
--
--    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
--        this->optimize_spirv_output = false;
--    }
- }
- 
- GraphicsPipeline* ShaderCache::CurrentGraphicsPipeline() {
-@@ -537,7 +532,7 @@ std::unique_ptr<GraphicsPipeline> ShaderCache::CreateGraphicsPipeline(
-             break;
-         case Settings::RendererBackend::OpenGL_SPIRV:
-             ConvertLegacyToGeneric(program, runtime_info);
--            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output);
-+            sources_spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
-             break;
-         default:
-             UNREACHABLE();
-@@ -598,7 +593,7 @@ std::unique_ptr<ComputePipeline> ShaderCache::CreateComputePipeline(
-         code = EmitGLASM(profile, info, program);
-         break;
-     case Settings::RendererBackend::OpenGL_SPIRV:
--        code_spirv = EmitSPIRV(profile, program, this->optimize_spirv_output);
-+        code_spirv = EmitSPIRV(profile, program);
-         break;
-     default:
-         UNREACHABLE();
-diff --git a/src/video_core/renderer_opengl/gl_shader_cache.h b/src/video_core/renderer_opengl/gl_shader_cache.h
-index 3398ba6f51..02e54539fc 100644
---- a/src/video_core/renderer_opengl/gl_shader_cache.h
-+++ b/src/video_core/renderer_opengl/gl_shader_cache.h
-@@ -76,7 +76,6 @@ private:
-     VideoCore::ShaderNotify& shader_notify;
-     const bool use_asynchronous_shaders;
-     const bool strict_context_required;
--    bool optimize_spirv_output{};
- 
-     GraphicsPipelineKey graphics_key{};
-     GraphicsPipeline* current_pipeline{};
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 958988f27e..88cc165215 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
@@ -2432,59 +2107,6 @@ index b73fcd162b..dad9038c6d 100644
      void Finish();
  
      u64 GetDeviceLocalMemory() const;
-diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 5f86506961..f8864d216a 100644
---- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-+++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-@@ -369,7 +369,6 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
-       texture_cache{texture_cache_}, shader_notify{shader_notify_},
-       use_asynchronous_shaders{Settings::values.use_asynchronous_shaders.GetValue()},
-       use_vulkan_pipeline_cache{Settings::values.use_vulkan_driver_pipeline_cache.GetValue()},
--      optimize_spirv_output{Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Never},
-       workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers(),
-               "VkPipelineBuilder"),
-       serialization_thread(1, "VkPipelineSerialization") {
-@@ -663,10 +662,6 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
-     if (state.statistics) {
-         state.statistics->Report();
-     }
--
--    if (Settings::values.optimize_spirv_output.GetValue() != Settings::SpirvOptimizeMode::Always) {
--        this->optimize_spirv_output = false;
--    }
- }
- 
- GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
-@@ -771,7 +766,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
- 
-         const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
-         ConvertLegacyToGeneric(program, runtime_info);
--        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding, this->optimize_spirv_output)};
-+        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding)};
-         device.SaveShader(code);
-         modules[stage_index] = BuildShader(device, code);
- 
-@@ -889,7 +884,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
-                     max_shared_memory / 1024);
-         program.shared_memory_size = max_shared_memory;
-     }
--    const std::vector<u32> code{EmitSPIRV(profile, program, this->optimize_spirv_output)};
-+    const std::vector<u32> code{EmitSPIRV(profile, program)};
-     device.SaveShader(code);
-     vk::ShaderModule spv_module{BuildShader(device, code)};
- 
-diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-index 1f7dab935c..490f9da81a 100644
---- a/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-+++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
-@@ -153,7 +153,6 @@ private:
-     VideoCore::ShaderNotify& shader_notify;
-     bool use_asynchronous_shaders{};
-     bool use_vulkan_pipeline_cache{};
--    bool optimize_spirv_output{};
- 
-     GraphicsPipelineCacheKey graphics_key{};
-     GraphicsPipeline* current_pipeline{};
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 index 226619d8d6..fc4bda3022 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
@@ -2506,7 +2128,7 @@ index 226619d8d6..fc4bda3022 100644
      AllocateWorkerCommandBuffer();
      worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
 diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
-index 0e4c274d94..508f3dc969 100644
+index 0e4c274d94..d12444ec40 100644
 --- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
 @@ -49,7 +49,7 @@ static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
@@ -2518,7 +2140,19 @@ index 0e4c274d94..508f3dc969 100644
              return mode;
          }
          switch (mode) {
-@@ -179,9 +179,18 @@ bool Swapchain::AcquireNextImage() {
+@@ -65,8 +65,10 @@ static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
+             return mode;
+         }
+     }();
++    if (setting == Settings::VSyncMode::Immediate && !has_imm) {
++        setting = Settings::VSyncMode::Mailbox;
++    }
+     if ((setting == Settings::VSyncMode::Mailbox && !has_mailbox) ||
+-        (setting == Settings::VSyncMode::Immediate && !has_imm) ||
+         (setting == Settings::VSyncMode::FifoRelaxed && !has_fifo_relaxed)) {
+         setting = Settings::VSyncMode::Fifo;
+     }
+@@ -179,9 +181,18 @@ bool Swapchain::AcquireNextImage() {
      case Settings::FramePacingMode::Target_Auto:
          scheduler.Wait(resource_ticks[image_index]);
          break;
@@ -2537,7 +2171,7 @@ index 0e4c274d94..508f3dc969 100644
      case Settings::FramePacingMode::Target_60:
          scheduler.Wait(resource_ticks[image_index], 60.0);
          break;
-@@ -195,13 +204,18 @@ bool Swapchain::AcquireNextImage() {
+@@ -195,13 +206,18 @@ bool Swapchain::AcquireNextImage() {
      };
  
  #ifdef __ANDROID__
@@ -2572,7 +2206,7 @@ index 1998849e84..677d0c89f5 100644
          return uncompressed_size;
      }
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index efae825885..fda73cf645 100644
+index efae825885..91f27fb827 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -56,28 +56,17 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
@@ -2614,7 +2248,7 @@ index efae825885..fda73cf645 100644
      }
  
      const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
-@@ -118,110 +107,61 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
+@@ -118,61 +107,43 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
  
  template <class P>
  void TextureCache<P>::RunGarbageCollector() {
@@ -2697,10 +2331,9 @@ index efae825885..fda73cf645 100644
 -                         swizzle_data_buffer);
 +            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
          }
--
+ 
          if (True(image.flags & ImageFlagBits::Tracked)) {
-             UntrackImage(image, image_id);
-         }
+@@ -181,47 +152,17 @@ void TextureCache<P>::RunGarbageCollector() {
          UnregisterImage(image_id);
          DeleteImage(image_id, image.scale_tick > frame_tick + 5);
  
@@ -2753,7 +2386,7 @@ index efae825885..fda73cf645 100644
  }
  
  template <class P>
-@@ -230,9 +170,7 @@ void TextureCache<P>::TickFrame() {
+@@ -230,9 +171,7 @@ void TextureCache<P>::TickFrame() {
      if (runtime.CanReportMemoryUsage()) {
          total_used_memory = runtime.GetDeviceMemoryUsage();
      }
@@ -2764,7 +2397,7 @@ index efae825885..fda73cf645 100644
      sentenced_images.Tick();
      sentenced_framebuffers.Tick();
      sentenced_image_view.Tick();
-@@ -1196,10 +1134,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1196,10 +1135,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
      }
  
      image.flags &= ~ImageFlagBits::CpuModified;
@@ -2775,7 +2408,7 @@ index efae825885..fda73cf645 100644
      TrackImage(image, image_id);
  
      if (image.info.num_samples > 1 && !runtime.CanUploadMSAA()) {
-@@ -1221,7 +1155,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
+@@ -1221,7 +1156,6 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
          image.info.resources.layers == 1 &&
          MapSizeBytes(image) >= gpu_unswizzle_maxsize &&
          False(image.flags & ImageFlagBits::GpuModified)) {
@@ -2783,7 +2416,7 @@ index efae825885..fda73cf645 100644
          QueueAsyncUnswizzle(image, image_id);
          return;
      }
-@@ -1510,11 +1443,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1510,11 +1444,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          return;
      }
  
@@ -2795,7 +2428,7 @@ index efae825885..fda73cf645 100644
      PendingUnswizzle& task = unswizzle_queue.front();
      Image& image = slot_images[task.image_id];
  
-@@ -1575,9 +1503,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
+@@ -1575,9 +1504,6 @@ void TextureCache<P>::TickAsyncUnswizzle() {
          runtime.FreeDeferredStagingBuffer(task.staging_buffer);
          image.flags &= ~ImageFlagBits::IsDecoding;
          unswizzle_queue.pop_front();
@@ -2805,7 +2438,7 @@ index efae825885..fda73cf645 100644
      }
  }
  
-@@ -1619,39 +1544,6 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
+@@ -1619,39 +1545,6 @@ ImageId TextureCache<P>::InsertImage(const ImageInfo& info, GPUVAddr gpu_addr,
          }
      }
      ASSERT_MSG(cpu_addr, "Tried to insert an image to an invalid gpu_addr=0x{:x}", gpu_addr);
@@ -2845,7 +2478,7 @@ index efae825885..fda73cf645 100644
      const ImageId image_id = JoinImages(info, gpu_addr, *cpu_addr);
      const Image& image = slot_images[image_id];
      // Using "image.gpu_addr" instead of "gpu_addr" is important because it might be different
-@@ -1667,27 +1559,6 @@ template <class P>
+@@ -1667,27 +1560,6 @@ template <class P>
  ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
      ImageInfo new_info = info;
      const size_t size_bytes = CalculateGuestSizeInBytes(new_info);
@@ -3126,11 +2759,40 @@ index d5d2a16c91..ca2c129069 100644
 +void CompressBC7(std::span<const u8> data, u32 width, u32 height, u32 depth, std::span<u8> output);
 +
  } // namespace Tegra::Texture::BCN
+diff --git a/src/video_core/textures/texture.cpp b/src/video_core/textures/texture.cpp
+index d32872e35d..78eb577e10 100644
+--- a/src/video_core/textures/texture.cpp
++++ b/src/video_core/textures/texture.cpp
+@@ -80,16 +80,16 @@ float TSCEntry::MaxAnisotropy() const noexcept {
+     case Settings::AnisotropyMode::X4:
+     case Settings::AnisotropyMode::X8:
+     case Settings::AnisotropyMode::X16:
+-    case Settings::AnisotropyMode::X32:
+-    case Settings::AnisotropyMode::X64:
+-        added_anisotropic = u32(anisotropic_settings) - 1U;
++        added_anisotropic = s32(anisotropic_settings) - 1;
+         break;
+-    case Settings::AnisotropyMode::Automatic:
+-        added_anisotropic = Settings::values.resolution_info.up_scale >> Settings::values.resolution_info.down_shift;
+-        added_anisotropic = (std::max)(added_anisotropic - 1U, 0U);
++    case Settings::AnisotropyMode::Automatic: {
++        const u32 resolution_scale = Settings::values.resolution_info.up_scale >>
++                                     Settings::values.resolution_info.down_shift;
++        if (resolution_scale > 1U) {
++            added_anisotropic = static_cast<s32>(resolution_scale - 1U);
++        }
+         break;
+-    case Settings::AnisotropyMode::None:
+-        return 1.0f; //No use of anisotropy
++    }
+     }
+     return float(1U << (max_anisotropy + added_anisotropic));
+ }
 diff --git a/src/yuzu/CMakeLists.txt b/src/yuzu/CMakeLists.txt
-index 1ed1fdff2a..0b998e53f8 100644
+index 1ed1fdff2a..0d00dbd3fd 100644
 --- a/src/yuzu/CMakeLists.txt
 +++ b/src/yuzu/CMakeLists.txt
-@@ -55,9 +55,6 @@ add_executable(yuzu
+@@ -55,18 +55,12 @@ add_executable(yuzu
      configuration/configure_cpu.cpp
      configuration/configure_cpu.h
      configuration/configure_cpu.ui
@@ -3140,6 +2802,234 @@ index 1ed1fdff2a..0b998e53f8 100644
      configuration/configure_debug.cpp
      configuration/configure_debug.h
      configuration/configure_debug.ui
+     configuration/configure_debug_controller.cpp
+     configuration/configure_debug_controller.h
+     configuration/configure_debug_controller.ui
+-    configuration/configure_debug_tab.cpp
+-    configuration/configure_debug_tab.h
+-    configuration/configure_debug_tab.ui
+     configuration/configure_dialog.cpp
+     configuration/configure_dialog.h
+     configuration/configure_filesystem.cpp
+@@ -241,7 +235,6 @@ add_executable(yuzu
+ 
+     configuration/system/new_user_dialog.h configuration/system/new_user_dialog.cpp configuration/system/new_user_dialog.ui
+     configuration/system/profile_avatar_dialog.h configuration/system/profile_avatar_dialog.cpp
+-    configuration/addon/mod_select_dialog.h configuration/addon/mod_select_dialog.cpp configuration/addon/mod_select_dialog.ui
+ 
+     render/performance_overlay.h render/performance_overlay.cpp render/performance_overlay.ui
+     libqt_common.h libqt_common.cpp
+diff --git a/src/yuzu/configuration/addon/mod_select_dialog.cpp b/src/yuzu/configuration/addon/mod_select_dialog.cpp
+deleted file mode 100644
+index 467de5a764..0000000000
+--- a/src/yuzu/configuration/addon/mod_select_dialog.cpp
++++ /dev/null
+@@ -1,67 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+-#include <QFileInfo>
+-#include <qnamespace.h>
+-#include "mod_select_dialog.h"
+-#include "ui_mod_select_dialog.h"
+-
+-ModSelectDialog::ModSelectDialog(const QStringList& mods, QWidget* parent)
+-    : QDialog(parent), ui(new Ui::ModSelectDialog) {
+-    ui->setupUi(this);
+-
+-    item_model = new QStandardItemModel(ui->treeView);
+-    ui->treeView->setModel(item_model);
+-
+-    // We must register all custom types with the Qt Automoc system so that we are able to use it
+-    // with signals/slots. In this case, QList falls under the umbrella of custom types.
+-    qRegisterMetaType<QList<QStandardItem*>>("QList<QStandardItem*>");
+-
+-    for (const auto& mod : mods) {
+-        const auto basename = QFileInfo(mod).fileName();
+-
+-        auto* const first_item = new QStandardItem;
+-        first_item->setText(basename);
+-        first_item->setData(mod);
+-
+-        first_item->setCheckable(true);
+-        first_item->setCheckState(Qt::Checked);
+-
+-        item_model->appendRow(first_item);
+-    }
+-
+-    ui->treeView->expandAll();
+-    ui->treeView->resizeColumnToContents(0);
+-
+-    int rows = item_model->rowCount();
+-    int height =
+-        ui->treeView->contentsMargins().top() * 4 + ui->treeView->contentsMargins().bottom() * 4;
+-    int width = 0;
+-
+-    for (int i = 0; i < rows; ++i) {
+-        height += ui->treeView->sizeHintForRow(i);
+-        width = qMax(width, item_model->item(i)->sizeHint().width());
+-    }
+-
+-    width +=
+-        ui->treeView->contentsMargins().left() * 4 + ui->treeView->contentsMargins().right() * 4;
+-    ui->treeView->setMinimumHeight(qMin(height, 600));
+-    ui->treeView->setMinimumWidth(qMin(width, 700));
+-    adjustSize();
+-
+-    connect(this, &QDialog::accepted, this, [this]() {
+-        QStringList selected_mods;
+-
+-        for (qsizetype i = 0; i < item_model->rowCount(); ++i) {
+-            auto* const item = item_model->item(i);
+-            if (item->checkState() == Qt::Checked)
+-                selected_mods << item->data().toString();
+-        }
+-
+-        emit modsSelected(selected_mods);
+-    });
+-}
+-
+-ModSelectDialog::~ModSelectDialog() {
+-    delete ui;
+-}
+diff --git a/src/yuzu/configuration/addon/mod_select_dialog.h b/src/yuzu/configuration/addon/mod_select_dialog.h
+deleted file mode 100644
+index ab6d4686b0..0000000000
+--- a/src/yuzu/configuration/addon/mod_select_dialog.h
++++ /dev/null
+@@ -1,27 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+-// SPDX-License-Identifier: GPL-3.0-or-later
+-
+-#pragma once
+-
+-#include <QDialog>
+-#include <QStandardItemModel>
+-
+-namespace Ui {
+-class ModSelectDialog;
+-}
+-
+-class ModSelectDialog : public QDialog {
+-    Q_OBJECT
+-
+-public:
+-    explicit ModSelectDialog(const QStringList& mods, QWidget* parent = nullptr);
+-    ~ModSelectDialog();
+-
+-signals:
+-    void modsSelected(const QStringList& mods);
+-
+-private:
+-    Ui::ModSelectDialog* ui;
+-
+-    QStandardItemModel* item_model;
+-};
+diff --git a/src/yuzu/configuration/addon/mod_select_dialog.ui b/src/yuzu/configuration/addon/mod_select_dialog.ui
+deleted file mode 100644
+index 6e196ecff0..0000000000
+--- a/src/yuzu/configuration/addon/mod_select_dialog.ui
++++ /dev/null
+@@ -1,99 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<ui version="4.0">
+- <class>ModSelectDialog</class>
+- <widget class="QDialog" name="ModSelectDialog">
+-  <property name="geometry">
+-   <rect>
+-    <x>0</x>
+-    <y>0</y>
+-    <width>400</width>
+-    <height>430</height>
+-   </rect>
+-  </property>
+-  <property name="windowTitle">
+-   <string>Dialog</string>
+-  </property>
+-  <layout class="QVBoxLayout" name="verticalLayout">
+-   <item>
+-    <widget class="QLabel" name="label">
+-     <property name="text">
+-      <string>The specified folder or archive contains the following mods. Select which ones to install.</string>
+-     </property>
+-     <property name="wordWrap">
+-      <bool>true</bool>
+-     </property>
+-    </widget>
+-   </item>
+-   <item>
+-    <widget class="QTreeView" name="treeView">
+-     <property name="contextMenuPolicy">
+-      <enum>Qt::ContextMenuPolicy::NoContextMenu</enum>
+-     </property>
+-     <property name="editTriggers">
+-      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+-     </property>
+-     <property name="alternatingRowColors">
+-      <bool>true</bool>
+-     </property>
+-     <property name="verticalScrollMode">
+-      <enum>QAbstractItemView::ScrollMode::ScrollPerPixel</enum>
+-     </property>
+-     <property name="uniformRowHeights">
+-      <bool>true</bool>
+-     </property>
+-     <property name="sortingEnabled">
+-      <bool>true</bool>
+-     </property>
+-     <property name="headerHidden">
+-      <bool>true</bool>
+-     </property>
+-    </widget>
+-   </item>
+-   <item>
+-    <widget class="QDialogButtonBox" name="buttonBox">
+-     <property name="orientation">
+-      <enum>Qt::Orientation::Horizontal</enum>
+-     </property>
+-     <property name="standardButtons">
+-      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+-     </property>
+-    </widget>
+-   </item>
+-  </layout>
+- </widget>
+- <resources/>
+- <connections>
+-  <connection>
+-   <sender>buttonBox</sender>
+-   <signal>accepted()</signal>
+-   <receiver>ModSelectDialog</receiver>
+-   <slot>accept()</slot>
+-   <hints>
+-    <hint type="sourcelabel">
+-     <x>248</x>
+-     <y>254</y>
+-    </hint>
+-    <hint type="destinationlabel">
+-     <x>157</x>
+-     <y>274</y>
+-    </hint>
+-   </hints>
+-  </connection>
+-  <connection>
+-   <sender>buttonBox</sender>
+-   <signal>rejected()</signal>
+-   <receiver>ModSelectDialog</receiver>
+-   <slot>reject()</slot>
+-   <hints>
+-    <hint type="sourcelabel">
+-     <x>316</x>
+-     <y>260</y>
+-    </hint>
+-    <hint type="destinationlabel">
+-     <x>286</x>
+-     <y>274</y>
+-    </hint>
+-   </hints>
+-  </connection>
+- </connections>
+-</ui>
 diff --git a/src/yuzu/configuration/configure_cpu.cpp b/src/yuzu/configuration/configure_cpu.cpp
 index b31ca849a6..187b188e3e 100644
 --- a/src/yuzu/configuration/configure_cpu.cpp
@@ -3491,6 +3381,360 @@ index 90eeba6978..c3bd5ef2ec 100644
             <property name="leftMargin">
              <number>0</number>
             </property>
+diff --git a/src/yuzu/configuration/configure_cpu_debug.cpp b/src/yuzu/configuration/configure_cpu_debug.cpp
+deleted file mode 100644
+index 8cfef0cc1c..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.cpp
++++ /dev/null
+@@ -1,78 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#include "common/settings.h"
+-#include "core/core.h"
+-#include "ui_configure_cpu_debug.h"
+-#include "yuzu/configuration/configure_cpu_debug.h"
+-
+-ConfigureCpuDebug::ConfigureCpuDebug(const Core::System& system_, QWidget* parent)
+-    : QWidget(parent), ui{std::make_unique<Ui::ConfigureCpuDebug>()}, system{system_} {
+-    ui->setupUi(this);
+-
+-    SetConfiguration();
+-}
+-
+-ConfigureCpuDebug::~ConfigureCpuDebug() = default;
+-
+-void ConfigureCpuDebug::SetConfiguration() {
+-    const bool runtime_lock = !system.IsPoweredOn();
+-
+-    ui->cpuopt_page_tables->setEnabled(runtime_lock);
+-    ui->cpuopt_page_tables->setChecked(Settings::values.cpuopt_page_tables.GetValue());
+-    ui->cpuopt_block_linking->setEnabled(runtime_lock);
+-    ui->cpuopt_block_linking->setChecked(Settings::values.cpuopt_block_linking.GetValue());
+-    ui->cpuopt_return_stack_buffer->setEnabled(runtime_lock);
+-    ui->cpuopt_return_stack_buffer->setChecked(
+-        Settings::values.cpuopt_return_stack_buffer.GetValue());
+-    ui->cpuopt_fast_dispatcher->setEnabled(runtime_lock);
+-    ui->cpuopt_fast_dispatcher->setChecked(Settings::values.cpuopt_fast_dispatcher.GetValue());
+-    ui->cpuopt_context_elimination->setEnabled(runtime_lock);
+-    ui->cpuopt_context_elimination->setChecked(
+-        Settings::values.cpuopt_context_elimination.GetValue());
+-    ui->cpuopt_const_prop->setEnabled(runtime_lock);
+-    ui->cpuopt_const_prop->setChecked(Settings::values.cpuopt_const_prop.GetValue());
+-    ui->cpuopt_misc_ir->setEnabled(runtime_lock);
+-    ui->cpuopt_misc_ir->setChecked(Settings::values.cpuopt_misc_ir.GetValue());
+-    ui->cpuopt_reduce_misalign_checks->setEnabled(runtime_lock);
+-    ui->cpuopt_reduce_misalign_checks->setChecked(
+-        Settings::values.cpuopt_reduce_misalign_checks.GetValue());
+-    ui->cpuopt_fastmem->setEnabled(runtime_lock);
+-    ui->cpuopt_fastmem->setChecked(Settings::values.cpuopt_fastmem.GetValue());
+-    ui->cpuopt_fastmem_exclusives->setEnabled(runtime_lock);
+-    ui->cpuopt_fastmem_exclusives->setChecked(
+-        Settings::values.cpuopt_fastmem_exclusives.GetValue());
+-    ui->cpuopt_recompile_exclusives->setEnabled(runtime_lock);
+-    ui->cpuopt_recompile_exclusives->setChecked(
+-        Settings::values.cpuopt_recompile_exclusives.GetValue());
+-    ui->cpuopt_ignore_memory_aborts->setEnabled(runtime_lock);
+-    ui->cpuopt_ignore_memory_aborts->setChecked(
+-        Settings::values.cpuopt_ignore_memory_aborts.GetValue());
+-}
+-
+-void ConfigureCpuDebug::ApplyConfiguration() {
+-    Settings::values.cpuopt_page_tables = ui->cpuopt_page_tables->isChecked();
+-    Settings::values.cpuopt_block_linking = ui->cpuopt_block_linking->isChecked();
+-    Settings::values.cpuopt_return_stack_buffer = ui->cpuopt_return_stack_buffer->isChecked();
+-    Settings::values.cpuopt_fast_dispatcher = ui->cpuopt_fast_dispatcher->isChecked();
+-    Settings::values.cpuopt_context_elimination = ui->cpuopt_context_elimination->isChecked();
+-    Settings::values.cpuopt_const_prop = ui->cpuopt_const_prop->isChecked();
+-    Settings::values.cpuopt_misc_ir = ui->cpuopt_misc_ir->isChecked();
+-    Settings::values.cpuopt_reduce_misalign_checks = ui->cpuopt_reduce_misalign_checks->isChecked();
+-    Settings::values.cpuopt_fastmem = ui->cpuopt_fastmem->isChecked();
+-    Settings::values.cpuopt_fastmem_exclusives = ui->cpuopt_fastmem_exclusives->isChecked();
+-    Settings::values.cpuopt_recompile_exclusives = ui->cpuopt_recompile_exclusives->isChecked();
+-    Settings::values.cpuopt_ignore_memory_aborts = ui->cpuopt_ignore_memory_aborts->isChecked();
+-}
+-
+-void ConfigureCpuDebug::changeEvent(QEvent* event) {
+-    if (event->type() == QEvent::LanguageChange) {
+-        RetranslateUI();
+-    }
+-
+-    QWidget::changeEvent(event);
+-}
+-
+-void ConfigureCpuDebug::RetranslateUI() {
+-    ui->retranslateUi(this);
+-}
+diff --git a/src/yuzu/configuration/configure_cpu_debug.h b/src/yuzu/configuration/configure_cpu_debug.h
+deleted file mode 100644
+index 566ae7ecce..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.h
++++ /dev/null
+@@ -1,35 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#pragma once
+-
+-#include <memory>
+-#include <QWidget>
+-
+-namespace Core {
+-class System;
+-}
+-
+-namespace Ui {
+-class ConfigureCpuDebug;
+-}
+-
+-class ConfigureCpuDebug : public QWidget {
+-    Q_OBJECT
+-
+-public:
+-    explicit ConfigureCpuDebug(const Core::System& system_, QWidget* parent = nullptr);
+-    ~ConfigureCpuDebug() override;
+-
+-    void ApplyConfiguration();
+-
+-private:
+-    void changeEvent(QEvent* event) override;
+-    void RetranslateUI();
+-
+-    void SetConfiguration();
+-
+-    std::unique_ptr<Ui::ConfigureCpuDebug> ui;
+-
+-    const Core::System& system;
+-};
+diff --git a/src/yuzu/configuration/configure_cpu_debug.ui b/src/yuzu/configuration/configure_cpu_debug.ui
+deleted file mode 100644
+index 3010f7fad3..0000000000
+--- a/src/yuzu/configuration/configure_cpu_debug.ui
++++ /dev/null
+@@ -1,223 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<ui version="4.0">
+- <class>ConfigureCpuDebug</class>
+- <widget class="QWidget" name="ConfigureCpuDebug">
+-  <property name="geometry">
+-   <rect>
+-    <x>0</x>
+-    <y>0</y>
+-    <width>592</width>
+-    <height>503</height>
+-   </rect>
+-  </property>
+-  <property name="windowTitle">
+-   <string>Form</string>
+-  </property>
+-  <property name="accessibleName">
+-   <string>CPU</string>
+-  </property>
+-  <layout class="QVBoxLayout">
+-   <item>
+-    <layout class="QVBoxLayout">
+-     <item>
+-      <widget class="QGroupBox" name="groupBox">
+-       <property name="title">
+-        <string>Toggle CPU Optimizations</string>
+-       </property>
+-       <layout class="QVBoxLayout">
+-        <item>
+-         <widget class="QLabel" name="label">
+-          <property name="text">
+-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;For debugging only.&lt;/span&gt;&lt;br/&gt;If you're not sure what these do, keep all of these enabled. &lt;br/&gt;These settings, when disabled, only take effect when CPU Debugging is enabled. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+-          </property>
+-          <property name="wordWrap">
+-           <bool>false</bool>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_page_tables">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it inlines accesses to PageTable::pointers into emitted code.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all memory accesses to go through the Memory::Read/Memory::Write functions.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable inline page tables</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_block_linking">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;This optimization avoids dispatcher lookups by allowing emitted basic blocks to jump directly to other basic blocks if the destination PC is static.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable block linking</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_return_stack_buffer">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;This optimization avoids dispatcher lookups by keeping track potential return addresses of BL instructions. This approximates what happens with a return stack buffer on a real CPU.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable return stack buffer</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fast_dispatcher">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enable a two-tiered dispatch system. A faster dispatcher written in assembly has a small MRU cache of jump destinations is used first. If that fails, dispatch falls back to the slower C++ dispatcher.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable fast dispatcher</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_context_elimination">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables an IR optimization that reduces unnecessary accesses to the CPU context structure.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable context elimination</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_const_prop">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables IR optimizations that involve constant propagation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable constant propagation</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_misc_ir">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div&gt;Enables miscellaneous IR optimizations.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable miscellaneous optimizations</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_reduce_misalign_checks">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;When enabled, a misalignment is only triggered when an access crosses a page boundary.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;When disabled, a misalignment is triggered on all misaligned accesses.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable misalignment check reduction</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fastmem">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it causes guest memory reads/writes to be done directly into memory and make use of Host's MMU.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all memory accesses to use Software MMU Emulation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable Host MMU Emulation (general memory instructions)</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_fastmem_exclusives">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up exclusive memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it causes guest exclusive memory reads/writes to be done directly into memory and make use of Host's MMU.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Disabling this forces all exclusive memory accesses to use Software MMU Emulation.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable Host MMU Emulation (exclusive memory instructions)</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_recompile_exclusives">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up exclusive memory accesses by the guest program.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it reduces the overhead of fastmem failure of exclusive memory accesses.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable recompilation of exclusive memory instructions</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item>
+-         <widget class="QCheckBox" name="cpuopt_ignore_memory_aborts">
+-          <property name="toolTip">
+-           <string>
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;This optimization speeds up memory accesses by allowing invalid memory accesses to succeed.&lt;/div&gt;
+-            &lt;div style=&quot;white-space: nowrap&quot;&gt;Enabling it reduces the overhead of all memory accesses and has no impact on programs that don't access invalid memory.&lt;/div&gt;
+-           </string>
+-          </property>
+-          <property name="text">
+-           <string>Enable fallbacks for invalid memory accesses</string>
+-          </property>
+-         </widget>
+-        </item>
+-       </layout>
+-      </widget>
+-     </item>
+-    </layout>
+-   </item>
+-   <item>
+-    <spacer name="verticalSpacer">
+-     <property name="orientation">
+-      <enum>Qt::Vertical</enum>
+-     </property>
+-     <property name="sizeHint" stdset="0">
+-      <size>
+-       <width>20</width>
+-       <height>40</height>
+-      </size>
+-     </property>
+-    </spacer>
+-   </item>
+-   <item>
+-    <widget class="QLabel" name="label_disable_info">
+-     <property name="text">
+-      <string>CPU settings are available only when game is not running.</string>
+-     </property>
+-     <property name="wordWrap">
+-      <bool>true</bool>
+-     </property>
+-    </widget>
+-   </item>
+-  </layout>
+- </widget>
+- <resources/>
+- <connections/>
+-</ui>
 diff --git a/src/yuzu/configuration/configure_debug.cpp b/src/yuzu/configuration/configure_debug.cpp
 index fadaf1c01a..853acce91f 100644
 --- a/src/yuzu/configuration/configure_debug.cpp
@@ -3514,73 +3758,612 @@ index fadaf1c01a..853acce91f 100644
      Debugger::ToggleConsole();
      Common::Log::Filter filter;
 diff --git a/src/yuzu/configuration/configure_debug.ui b/src/yuzu/configuration/configure_debug.ui
-index f76f3b012d..3ec6c42bb4 100644
+index f76f3b012d..ba182c1e2d 100644
 --- a/src/yuzu/configuration/configure_debug.ui
 +++ b/src/yuzu/configuration/configure_debug.ui
-@@ -474,8 +474,46 @@
-          <string>Debugging</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_3">
-+         <item row="1" column="0">
-+          <widget class="QCheckBox" name="dump_audio_commands">
-+           <property name="toolTip">
-+            <string>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</string>
+@@ -1,679 +1,692 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <ui version="4.0">
+  <class>ConfigureDebug</class>
+- <widget class="QScrollArea" name="ConfigureDebug">
++ <widget class="QWidget" name="ConfigureDebug">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+-    <width>831</width>
+-    <height>760</height>
++    <width>826</width>
++    <height>649</height>
+    </rect>
+   </property>
+-  <property name="widgetResizable">
+-   <bool>true</bool>
++  <property name="windowTitle">
++   <string>Form</string>
+   </property>
+-  <widget class="QWidget" name="widget">
+-   <property name="geometry">
+-    <rect>
+-     <x>0</x>
+-     <y>0</y>
+-     <width>829</width>
+-     <height>758</height>
+-    </rect>
+-   </property>
+-   <layout class="QVBoxLayout" name="verticalLayout_1">
+-    <item>
+-     <layout class="QHBoxLayout" name="horizontalLayout">
+-      <property name="topMargin">
+-       <number>0</number>
+-      </property>
+-      <item>
+-       <widget class="QGroupBox" name="groupBox">
+-        <property name="sizePolicy">
+-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+-          <horstretch>0</horstretch>
+-          <verstretch>0</verstretch>
+-         </sizepolicy>
+-        </property>
+-        <property name="title">
+-         <string>Debugger</string>
+-        </property>
+-        <property name="alignment">
+-         <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+-        </property>
+-        <property name="flat">
+-         <bool>false</bool>
+-        </property>
+-        <property name="checkable">
+-         <bool>false</bool>
+-        </property>
+-        <layout class="QVBoxLayout" name="verticalLayout_3">
+-         <item>
+-          <widget class="QWidget" name="debug_widget" native="true">
+-           <property name="sizePolicy">
+-            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-             <horstretch>0</horstretch>
+-             <verstretch>0</verstretch>
+-            </sizepolicy>
+-           </property>
+-           <layout class="QVBoxLayout" name="verticalLayout">
+-            <property name="sizeConstraint">
+-             <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+-            </property>
+-            <property name="leftMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="topMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="rightMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="bottomMargin">
+-             <number>0</number>
+-            </property>
+-            <item>
+-             <widget class="QCheckBox" name="toggle_gdbstub">
+-              <property name="sizePolicy">
+-               <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+-                <horstretch>0</horstretch>
+-                <verstretch>0</verstretch>
+-               </sizepolicy>
+-              </property>
+-              <property name="text">
+-               <string>Enable GDB Stub</string>
+-              </property>
+-             </widget>
+-            </item>
+-            <item>
+-             <widget class="QWidget" name="horizontalWidget_3" native="true">
+-              <property name="sizePolicy">
+-               <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-                <horstretch>0</horstretch>
+-                <verstretch>0</verstretch>
+-               </sizepolicy>
+-              </property>
+-              <layout class="QHBoxLayout" name="horizontalLayout_3">
+-               <property name="leftMargin">
+-                <number>0</number>
+-               </property>
+-               <property name="topMargin">
+-                <number>0</number>
+-               </property>
+-               <property name="rightMargin">
+-                <number>0</number>
+-               </property>
+-               <property name="bottomMargin">
+-                <number>0</number>
+-               </property>
+-               <item>
+-                <widget class="QLabel" name="label_11">
+-                 <property name="sizePolicy">
+-                  <sizepolicy hsizetype="Minimum" vsizetype="Maximum">
+-                   <horstretch>0</horstretch>
+-                   <verstretch>0</verstretch>
+-                  </sizepolicy>
+-                 </property>
+-                 <property name="text">
+-                  <string>Port:</string>
+-                 </property>
+-                </widget>
+-               </item>
+-               <item>
+-                <widget class="QSpinBox" name="gdbport_spinbox">
+-                 <property name="sizePolicy">
+-                  <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-                   <horstretch>0</horstretch>
+-                   <verstretch>0</verstretch>
+-                  </sizepolicy>
+-                 </property>
+-                 <property name="minimum">
+-                  <number>1024</number>
+-                 </property>
+-                 <property name="maximum">
+-                  <number>65535</number>
+-                 </property>
+-                </widget>
+-               </item>
+-              </layout>
+-             </widget>
+-            </item>
+-           </layout>
+-          </widget>
+-         </item>
+-        </layout>
+-       </widget>
+-      </item>
+-      <item>
+-       <widget class="QGroupBox" name="groupBox_2">
+-        <property name="sizePolicy">
+-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+-          <horstretch>0</horstretch>
+-          <verstretch>0</verstretch>
+-         </sizepolicy>
+-        </property>
+-        <property name="title">
+-         <string>Logging</string>
+-        </property>
+-        <layout class="QGridLayout" name="gridLayout_1">
+-         <item row="0" column="0" colspan="2">
+-          <widget class="QWidget" name="logging_widget" native="true">
+-           <property name="sizePolicy">
+-            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-             <horstretch>0</horstretch>
+-             <verstretch>0</verstretch>
+-            </sizepolicy>
+-           </property>
+-           <layout class="QHBoxLayout" name="horizontalLayout_1">
+-            <property name="leftMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="topMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="rightMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="bottomMargin">
+-             <number>0</number>
+-            </property>
+-            <item>
+-             <widget class="QLabel" name="label_1">
+-              <property name="sizePolicy">
+-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+-                <horstretch>0</horstretch>
+-                <verstretch>0</verstretch>
+-               </sizepolicy>
++  <property name="accessibleName">
++   <string>Debug</string>
++  </property>
++  <layout class="QVBoxLayout" name="verticalLayout_1">
++   <item>
++    <layout class="QHBoxLayout" name="horizontalLayout">
++     <property name="topMargin">
++      <number>0</number>
++     </property>
++     <item>
++      <widget class="QGroupBox" name="groupBox">
++       <property name="sizePolicy">
++        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
++         <horstretch>0</horstretch>
++         <verstretch>0</verstretch>
++        </sizepolicy>
++       </property>
++       <property name="title">
++        <string>Debugger</string>
++       </property>
++       <property name="flat">
++        <bool>false</bool>
++       </property>
++       <property name="checkable">
++        <bool>false</bool>
++       </property>
++       <layout class="QVBoxLayout" name="verticalLayout_3">
++        <item>
++         <widget class="QWidget" name="debug_widget" native="true">
++          <property name="sizePolicy">
++           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++            <horstretch>0</horstretch>
++            <verstretch>0</verstretch>
++           </sizepolicy>
++          </property>
++          <layout class="QVBoxLayout" name="verticalLayout">
++           <property name="sizeConstraint">
++            <enum>QLayout::SetDefaultConstraint</enum>
 +           </property>
-+           <property name="text">
-+            <string>Dump Audio Commands To Console**</string>
++           <property name="leftMargin">
++            <number>0</number>
 +           </property>
-+          </widget>
-+         </item>
-+         <item row="2" column="0">
-+          <widget class="QCheckBox" name="flush_line">
-+           <property name="text">
-+            <string>Flush log output on each line</string>
++           <property name="topMargin">
++            <number>0</number>
 +           </property>
-+          </widget>
-+         </item>
-+         <item row="3" column="0">
-+          <widget class="QCheckBox" name="fs_access_log">
-+           <property name="text">
-+            <string>Enable FS Access Log</string>
++           <property name="rightMargin">
++            <number>0</number>
 +           </property>
-+          </widget>
-+         </item>
-+         <item row="4" column="0">
-+          <widget class="QCheckBox" name="reporting_services">
-+           <property name="text">
-+            <string>Enable Verbose Reporting Services**</string>
++           <property name="bottomMargin">
++            <number>0</number>
 +           </property>
-+          </widget>
-+         </item>
-+         <item row="5" column="0">
-+          <widget class="QCheckBox" name="censor_username">
-+           <property name="text">
-+            <string>Censor username in logs</string>
-+           </property>
-+          </widget>
-+         </item>
-          <item row="6" column="0">
++           <item>
++            <widget class="QCheckBox" name="toggle_gdbstub">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
++             <property name="text">
++              <string>Enable GDB Stub</string>
++             </property>
++            </widget>
++           </item>
++           <item>
++            <widget class="QWidget" name="horizontalWidget_3" native="true">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
++             <layout class="QHBoxLayout" name="horizontalLayout_3">
++              <property name="leftMargin">
++               <number>0</number>
+               </property>
+-              <property name="text">
+-               <string>Global Log Filter</string>
++              <property name="topMargin">
++               <number>0</number>
+               </property>
+-             </widget>
+-            </item>
+-            <item>
+-             <widget class="QLineEdit" name="log_filter_edit"/>
+-            </item>
+-           </layout>
+-          </widget>
+-         </item>
+-         <item row="2" column="0">
+-          <widget class="QCheckBox" name="extended_logging">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, the max size of the log increases from 100 MB to 1 GB</string>
+-           </property>
+-           <property name="text">
+-            <string>Enable Extended Logging**</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="1" column="0">
+-          <widget class="QCheckBox" name="toggle_console">
+-           <property name="text">
+-            <string>Show Log in Console</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="1" column="1">
+-          <widget class="QPushButton" name="open_log_button">
+-           <property name="text">
+-            <string>Open Log Location</string>
+-           </property>
+-          </widget>
+-         </item>
+-        </layout>
+-       </widget>
+-      </item>
+-     </layout>
+-    </item>
+-    <item>
+-     <widget class="QGroupBox" name="groupBox_3">
+-      <property name="title">
+-       <string>Homebrew</string>
+-      </property>
+-      <layout class="QVBoxLayout" name="verticalLayout_5">
+-       <item>
+-        <layout class="QHBoxLayout" name="horizontalLayout_4">
+-         <item>
+-          <widget class="QLabel" name="label_3">
+-           <property name="text">
+-            <string>Arguments String</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item>
+-          <widget class="QLineEdit" name="homebrew_args_edit"/>
+-         </item>
+-        </layout>
+-       </item>
+-      </layout>
+-     </widget>
+-    </item>
+-    <item>
+-     <layout class="QHBoxLayout" name="horizontalLayout_2">
+-      <item>
+-       <widget class="QGroupBox" name="groupBox_4">
+-        <property name="title">
+-         <string>Graphics</string>
+-        </property>
+-        <layout class="QGridLayout" name="gridLayout_2">
+-         <item row="4" column="0">
+-          <widget class="QCheckBox" name="disable_loop_safety_checks">
+-           <property name="toolTip">
+-            <string>When checked, it executes shaders without loop logic changes</string>
+-           </property>
+-           <property name="text">
+-            <string>Disable Loop safety checks</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="8" column="0">
+-          <widget class="QCheckBox" name="dump_macros">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, it will dump all the macro programs of the GPU</string>
+-           </property>
+-           <property name="text">
+-            <string>Dump Maxwell Macros</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="3" column="0">
+-          <widget class="QCheckBox" name="enable_nsight_aftermath">
+-           <property name="toolTip">
+-            <string>When checked, it enables Nsight Aftermath crash dumps</string>
+-           </property>
+-           <property name="text">
+-            <string>Enable Nsight Aftermath</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="6" column="0">
+-          <widget class="QCheckBox" name="dump_shaders">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, it will dump all the original assembler shaders from the disk shader cache or game as found</string>
+-           </property>
+-           <property name="text">
+-            <string>Dump Game Shaders</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="1" column="0">
+-          <widget class="QCheckBox" name="enable_renderdoc_hotkey">
+-           <property name="text">
+-            <string>Enable Renderdoc Hotkey</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="7" column="0">
+-          <widget class="QCheckBox" name="disable_macro_jit">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, it disables the macro Just In Time compiler. Enabling this makes games run slower</string>
+-           </property>
+-           <property name="text">
+-            <string>Disable Macro JIT</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="9" column="0">
+-          <widget class="QCheckBox" name="disable_macro_hle">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, it disables the macro HLE functions. Enabling this makes games run slower</string>
+-           </property>
+-           <property name="text">
+-            <string>Disable Macro HLE</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="0" column="0">
+-          <widget class="QCheckBox" name="enable_graphics_debugging">
+-           <property name="enabled">
+-            <bool>true</bool>
+-           </property>
+-           <property name="toolTip">
+-            <string>When checked, the graphics API enters a slower debugging mode</string>
+-           </property>
+-           <property name="text">
+-            <string>Enable Graphics Debugging</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="10" column="0">
+-          <spacer name="verticalSpacer_5">
+-           <property name="orientation">
+-            <enum>Qt::Orientation::Vertical</enum>
+-           </property>
+-           <property name="sizeType">
+-            <enum>QSizePolicy::Policy::Preferred</enum>
+-           </property>
+-           <property name="sizeHint" stdset="0">
+-            <size>
+-             <width>20</width>
+-             <height>0</height>
+-            </size>
+-           </property>
+-          </spacer>
+-         </item>
+-         <item row="2" column="0">
+-          <widget class="QCheckBox" name="enable_shader_feedback">
+-           <property name="toolTip">
+-            <string>When checked, yuzu will log statistics about the compiled pipeline cache</string>
+-           </property>
+-           <property name="text">
+-            <string>Enable Shader Feedback</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="5" column="0">
+-          <widget class="QCheckBox" name="disable_buffer_reorder">
+-           <property name="toolTip">
+-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When checked, disables reordering of mapped memory uploads which allows to associate uploads with specific draws. May reduce performance in some cases.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+-           </property>
+-           <property name="text">
+-            <string>Disable Buffer Reorder</string>
+-           </property>
+-          </widget>
+-         </item>
+-        </layout>
+-       </widget>
+-      </item>
+-      <item>
+-       <widget class="QGroupBox" name="groupBox_6">
+-        <property name="title">
+-         <string>Advanced</string>
+-        </property>
+-        <layout class="QGridLayout" name="gridLayout_4">
+-         <item row="3" column="0">
+-          <widget class="QCheckBox" name="perform_vulkan_check">
+-           <property name="toolTip">
+-            <string>Enables yuzu to check for a working Vulkan environment when the program starts up. Disable this if this is causing issues with external programs seeing yuzu.</string>
+-           </property>
+-           <property name="text">
+-            <string>Perform Startup Vulkan Check</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="4" column="0">
+-          <widget class="QCheckBox" name="disable_web_applet">
+-           <property name="text">
+-            <string>Disable Web Applet</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="5" column="0">
+-          <widget class="QCheckBox" name="enable_all_controllers">
+-           <property name="text">
+-            <string>Enable All Controller Types</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="6" column="0">
+-          <widget class="QCheckBox" name="use_auto_stub">
+-           <property name="text">
+-            <string>Enable Auto-Stub</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="0" column="0">
+-          <widget class="QCheckBox" name="quest_flag">
+-           <property name="text">
+-            <string>Kiosk (Quest) Mode</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="1" column="0">
+-          <widget class="QCheckBox" name="use_dev_keys">
+-           <property name="text">
+-            <string>Use dev.keys</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="2" column="0">
+-          <widget class="QCheckBox" name="use_debug_asserts">
+-           <property name="text">
+-            <string>Enable Debug Asserts</string>
+-           </property>
+-          </widget>
+-         </item>
+-         <item row="7" column="0">
+-          <spacer name="verticalSpacer_4">
+-           <property name="orientation">
+-            <enum>Qt::Orientation::Vertical</enum>
+-           </property>
+-           <property name="sizeType">
+-            <enum>QSizePolicy::Policy::Expanding</enum>
+-           </property>
+-           <property name="sizeHint" stdset="0">
+-            <size>
+-             <width>20</width>
+-             <height>0</height>
+-            </size>
+-           </property>
+-          </spacer>
+-         </item>
+-        </layout>
+-       </widget>
+-      </item>
+-      <item>
+-       <widget class="QGroupBox" name="groupBox_5">
+-        <property name="title">
+-         <string>Debugging</string>
+-        </property>
+-        <layout class="QGridLayout" name="gridLayout_3">
+-         <item row="6" column="0">
 -          <widget class="QWidget" name="serial_battery_widget" native="true">
-+          <widget class="QWidget" name="serial_board_widget" native="true">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-@@ -504,43 +542,18 @@
-                </sizepolicy>
+-           <property name="sizePolicy">
+-            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-             <horstretch>0</horstretch>
+-             <verstretch>0</verstretch>
+-            </sizepolicy>
+-           </property>
+-           <layout class="QHBoxLayout" name="horizontalLayout_11">
+-            <property name="leftMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="topMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="rightMargin">
+-             <number>0</number>
+-            </property>
+-            <property name="bottomMargin">
+-             <number>0</number>
+-            </property>
+-            <item>
+-             <widget class="QLabel" name="label_12">
+-              <property name="sizePolicy">
+-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+-                <horstretch>0</horstretch>
+-                <verstretch>0</verstretch>
+-               </sizepolicy>
++              <property name="rightMargin">
++               <number>0</number>
                </property>
-               <property name="text">
+-              <property name="text">
 -               <string>Battery Serial:</string>
-+               <string>Unit Serial:</string>
++              <property name="bottomMargin">
++               <number>0</number>
                </property>
-              </widget>
-             </item>
-             <item>
+-             </widget>
+-            </item>
+-            <item>
 -             <widget class="QLineEdit" name="serial_battery_edit"/>
-+             <widget class="QLineEdit" name="serial_board_edit"/>
-             </item>
-            </layout>
-           </widget>
-          </item>
+-            </item>
+-           </layout>
+-          </widget>
+-         </item>
 -          <item row="8" column="0">
 -            <widget class="QSpinBox" name="debug_knobs_spinbox">
 -                <property name="minimum">
@@ -3591,77 +4374,152 @@ index f76f3b012d..3ec6c42bb4 100644
 -                </property>
 -                <property name="toolTip">
 -                <string>Bitmask for quick development toggles</string>
--                </property>
++              <item>
++               <widget class="QLabel" name="label_11">
++                <property name="sizePolicy">
++                 <sizepolicy hsizetype="Minimum" vsizetype="Maximum">
++                  <horstretch>0</horstretch>
++                  <verstretch>0</verstretch>
++                 </sizepolicy>
+                 </property>
 -                <property name="statusTip">
 -                <string>Set debug knobs (bitmask)</string>
--                </property>
++                <property name="text">
++                 <string>Port:</string>
+                 </property>
 -                <property name="whatsThis">
 -                <string>16-bit debug knob set for quick development toggles</string>
--                </property>
++               </widget>
++              </item>
++              <item>
++               <widget class="QSpinBox" name="gdbport_spinbox">
++                <property name="sizePolicy">
++                 <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++                  <horstretch>0</horstretch>
++                  <verstretch>0</verstretch>
++                 </sizepolicy>
+                 </property>
 -                <property name="suffix">
 -                <string> (bitmask)</string>
--                </property>
++                <property name="minimum">
++                 <number>1024</number>
+                 </property>
 -                <property name="prefix">
 -                <string>Debug Knobs: </string>
--                </property>
--            </widget>
--          </item>
-          <item row="7" column="0">
--          <widget class="QWidget" name="serial_board_widget" native="true">
-+          <widget class="QWidget" name="serial_battery_widget" native="true">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-@@ -569,17 +582,42 @@
-                </sizepolicy>
-               </property>
-               <property name="text">
--               <string>Unit Serial:</string>
-+               <string>Battery Serial:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
--             <widget class="QLineEdit" name="serial_board_edit"/>
-+             <widget class="QLineEdit" name="serial_battery_edit"/>
-             </item>
-            </layout>
-           </widget>
-          </item>
--         <item row="0" column="0">
-+         <item row="8" column="0">
-+            <widget class="QSpinBox" name="debug_knobs_spinbox">
-+                <property name="minimum">
-+                <number>0</number>
-+                </property>
 +                <property name="maximum">
-+                <number>65535</number>
-+                </property>
-+                <property name="toolTip">
-+                <string>Bitmask for quick development toggles</string>
-+                </property>
-+                <property name="statusTip">
-+                <string>Set debug knobs (bitmask)</string>
-+                </property>
-+                <property name="whatsThis">
-+                <string>16-bit debug knob set for quick development toggles</string>
-+                </property>
-+                <property name="suffix">
-+                <string> (bitmask)</string>
-+                </property>
-+                <property name="prefix">
-+                <string>Debug Knobs: </string>
-+                </property>
-+            </widget>
-+         </item>
-+         <item row="9" column="0">
-           <spacer name="verticalSpacer_3">
-            <property name="orientation">
-             <enum>Qt::Orientation::Vertical</enum>
-@@ -595,44 +633,6 @@
-            </property>
-           </spacer>
-          </item>
++                 <number>65535</number>
+                 </property>
++               </widget>
++              </item>
++             </layout>
+             </widget>
++           </item>
++          </layout>
++         </widget>
++        </item>
++       </layout>
++      </widget>
++     </item>
++     <item>
++      <widget class="QGroupBox" name="groupBox_2">
++       <property name="sizePolicy">
++        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
++         <horstretch>0</horstretch>
++         <verstretch>0</verstretch>
++        </sizepolicy>
++       </property>
++       <property name="title">
++        <string>Logging</string>
++       </property>
++       <layout class="QGridLayout" name="gridLayout_1">
++        <item row="0" column="0" colspan="3">
++         <layout class="QHBoxLayout" name="horizontalLayout">
++          <item>
++           <widget class="QCheckBox" name="extended_logging">
++            <property name="enabled">
++             <bool>true</bool>
++            </property>
++            <property name="toolTip">
++             <string>When checked, the max size of the log increases from 100 MB to 1 GB</string>
++            </property>
++            <property name="text">
++             <string>Enable Extended Logging**</string>
++            </property>
++           </widget>
+           </item>
+-         <item row="7" column="0">
+-          <widget class="QWidget" name="serial_board_widget" native="true">
+-           <property name="sizePolicy">
+-            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+-             <horstretch>0</horstretch>
+-             <verstretch>0</verstretch>
+-            </sizepolicy>
+-           </property>
+-           <layout class="QHBoxLayout" name="horizontalLayout_12">
+-            <property name="leftMargin">
+-             <number>0</number>
++          <item>
++           <spacer name="horizontalSpacer">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
+             </property>
+-            <property name="topMargin">
+-             <number>0</number>
++            <property name="sizeType">
++             <enum>QSizePolicy::Fixed</enum>
+             </property>
+-            <property name="rightMargin">
+-             <number>0</number>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
+             </property>
+-            <property name="bottomMargin">
+-             <number>0</number>
++           </spacer>
++          </item>
++          <item>
++           <widget class="QCheckBox" name="toggle_console">
++            <property name="text">
++             <string>Show Log in Console</string>
+             </property>
+-            <item>
+-             <widget class="QLabel" name="label_13">
+-              <property name="sizePolicy">
+-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+-                <horstretch>0</horstretch>
+-                <verstretch>0</verstretch>
+-               </sizepolicy>
+-              </property>
+-              <property name="text">
+-               <string>Unit Serial:</string>
+-              </property>
+-             </widget>
+-            </item>
+-            <item>
+-             <widget class="QLineEdit" name="serial_board_edit"/>
+-            </item>
+-           </layout>
+-          </widget>
+-         </item>
+-         <item row="0" column="0">
+-          <spacer name="verticalSpacer_3">
+-           <property name="orientation">
+-            <enum>Qt::Orientation::Vertical</enum>
+-           </property>
+-           <property name="sizeType">
+-            <enum>QSizePolicy::Policy::Expanding</enum>
+-           </property>
+-           <property name="sizeHint" stdset="0">
+-            <size>
+-             <width>20</width>
+-             <height>0</height>
+-            </size>
+-           </property>
+-          </spacer>
+-         </item>
 -         <item row="1" column="0">
 -          <widget class="QCheckBox" name="dump_audio_commands">
 -           <property name="toolTip">
@@ -3700,59 +4558,1886 @@ index f76f3b012d..3ec6c42bb4 100644
 -           </property>
 -          </widget>
 -         </item>
-         </layout>
-        </widget>
+-        </layout>
+-       </widget>
++           </widget>
++          </item>
++          <item>
++           <spacer name="horizontalSpacer_2">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
++         </layout>
++        </item>
++        <item row="1" column="0">
++         <widget class="QWidget" name="logging_widget" native="true">
++          <property name="sizePolicy">
++           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++            <horstretch>0</horstretch>
++            <verstretch>0</verstretch>
++           </sizepolicy>
++          </property>
++          <layout class="QHBoxLayout" name="horizontalLayout_1">
++           <property name="leftMargin">
++            <number>0</number>
++           </property>
++           <property name="topMargin">
++            <number>0</number>
++           </property>
++           <property name="rightMargin">
++            <number>0</number>
++           </property>
++           <property name="bottomMargin">
++            <number>0</number>
++           </property>
++           <item>
++            <widget class="QLabel" name="label_1">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
++             <property name="text">
++              <string>Global Log Filter</string>
++             </property>
++            </widget>
++           </item>
++           <item>
++            <widget class="QLineEdit" name="log_filter_edit"/>
++           </item>
++          </layout>
++         </widget>
++        </item>
++        <item row="1" column="1">
++         <widget class="QPushButton" name="open_log_button">
++          <property name="text">
++           <string>Open Log Location</string>
++          </property>
++         </widget>
++        </item>
++       </layout>
++      </widget>
++     </item>
++    </layout>
++   </item>
++   <item>
++    <widget class="QGroupBox" name="groupBox_3">
++     <property name="title">
++      <string>Homebrew</string>
++     </property>
++     <layout class="QVBoxLayout" name="verticalLayout_5">
++      <item>
++       <layout class="QHBoxLayout" name="horizontalLayout_4">
++        <item>
++         <widget class="QLabel" name="label_3">
++          <property name="text">
++           <string>Arguments String</string>
++          </property>
++         </widget>
++        </item>
++        <item>
++         <widget class="QLineEdit" name="homebrew_args_edit"/>
++        </item>
++       </layout>
        </item>
+      </layout>
+-    </item>
+-    <item>
+-     <spacer name="verticalSpacer">
+-      <property name="orientation">
+-       <enum>Qt::Orientation::Vertical</enum>
+-      </property>
+-      <property name="sizeHint" stdset="0">
+-       <size>
+-        <width>20</width>
+-        <height>0</height>
+-       </size>
+-      </property>
+-     </spacer>
+-    </item>
+-    <item>
+-     <widget class="QLabel" name="label_5">
+-      <property name="sizePolicy">
+-       <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+-        <horstretch>0</horstretch>
+-        <verstretch>0</verstretch>
+-       </sizepolicy>
+-      </property>
+-      <property name="font">
+-       <font>
+-        <italic>true</italic>
+-       </font>
+-      </property>
+-      <property name="text">
+-       <string>**This will be reset automatically when Eden closes.</string>
+-      </property>
+-      <property name="indent">
+-       <number>20</number>
+-      </property>
+-     </widget>
+-    </item>
+-   </layout>
+-  </widget>
++    </widget>
++   </item>
++   <item>
++    <layout class="QHBoxLayout" name="horizontalLayout_2">
++     <item>
++      <widget class="QGroupBox" name="groupBox_4">
++       <property name="title">
++        <string>Graphics</string>
++       </property>
++       <layout class="QGridLayout" name="gridLayout_2">
++        <item row="0" column="0">
++         <widget class="QCheckBox" name="enable_graphics_debugging">
++          <property name="enabled">
++           <bool>true</bool>
++          </property>
++          <property name="toolTip">
++           <string>When checked, the graphics API enters a slower debugging mode</string>
++          </property>
++          <property name="text">
++           <string>Enable Graphics Debugging</string>
++          </property>
++         </widget>
++        </item>
++        <item row="1" column="0">
++         <widget class="QCheckBox" name="enable_shader_feedback">
++          <property name="toolTip">
++           <string>When checked, yuzu will log statistics about the compiled pipeline cache</string>
++          </property>
++          <property name="text">
++           <string>Enable Shader Feedback</string>
++          </property>
++         </widget>
++        </item>
++        <item row="2" column="0">
++         <widget class="QCheckBox" name="enable_renderdoc_hotkey">
++          <property name="text">
++           <string>Enable Renderdoc Hotkey</string>
++          </property>
++         </widget>
++        </item>
++        <item row="3" column="0">
++         <widget class="QCheckBox" name="enable_nsight_aftermath">
++          <property name="toolTip">
++           <string>When checked, it enables Nsight Aftermath crash dumps</string>
++          </property>
++          <property name="text">
++           <string>Enable Nsight Aftermath</string>
++          </property>
++         </widget>
++        </item>
++        <item row="4" column="0">
++         <widget class="QCheckBox" name="disable_loop_safety_checks">
++          <property name="toolTip">
++           <string>When checked, it executes shaders without loop logic changes</string>
++          </property>
++          <property name="text">
++           <string>Disable Loop safety checks</string>
++          </property>
++         </widget>
++        </item>
++        <item row="5" column="0">
++         <widget class="QCheckBox" name="disable_buffer_reorder">
++          <property name="toolTip">
++           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When checked, disables reordering of mapped memory uploads which allows to associate uploads with specific draws. May reduce performance in some cases.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
++          </property>
++          <property name="text">
++           <string>Disable Buffer Reorder</string>
++          </property>
++         </widget>
++        </item>
++        <item row="6" column="0">
++         <widget class="QCheckBox" name="disable_macro_jit">
++          <property name="enabled">
++           <bool>true</bool>
++          </property>
++          <property name="toolTip">
++           <string>When checked, it disables the macro Just In Time compiler. Enabling this makes games run slower</string>
++          </property>
++          <property name="text">
++           <string>Disable Macro JIT</string>
++          </property>
++         </widget>
++        </item>
++        <item row="7" column="0">
++         <widget class="QCheckBox" name="disable_macro_hle">
++          <property name="enabled">
++           <bool>true</bool>
++          </property>
++          <property name="toolTip">
++           <string>When checked, it disables the macro HLE functions. Enabling this makes games run slower</string>
++          </property>
++          <property name="text">
++           <string>Disable Macro HLE</string>
++          </property>
++         </widget>
++        </item>
++        <item row="8" column="0">
++         <widget class="QCheckBox" name="dump_macros">
++          <property name="enabled">
++           <bool>true</bool>
++          </property>
++          <property name="toolTip">
++           <string>When checked, it will dump all the macro programs of the GPU</string>
++          </property>
++          <property name="text">
++           <string>Dump Maxwell Macros</string>
++          </property>
++         </widget>
++        </item>
++        <item row="9" column="0">
++         <widget class="QCheckBox" name="dump_shaders">
++          <property name="enabled">
++           <bool>true</bool>
++          </property>
++          <property name="toolTip">
++           <string>When checked, it will dump all the original assembler shaders from the disk shader cache or game as found</string>
++          </property>
++          <property name="text">
++           <string>Dump Game Shaders</string>
++          </property>
++         </widget>
++        </item>
++       </layout>
++      </widget>
++     </item>
++     <item>
++      <widget class="QGroupBox" name="groupBox_6">
++       <property name="title">
++        <string>Advanced</string>
++       </property>
++       <layout class="QGridLayout" name="gridLayout_4">
++        <item row="0" column="0">
++         <widget class="QCheckBox" name="disable_web_applet">
++          <property name="text">
++           <string>Disable Web Applet</string>
++          </property>
++         </widget>
++        </item>
++        <item row="1" column="0">
++         <widget class="QCheckBox" name="quest_flag">
++          <property name="text">
++           <string>Kiosk (Quest) Mode</string>
++          </property>
++         </widget>
++        </item>
++        <item row="2" column="0">
++         <widget class="QCheckBox" name="use_dev_keys">
++          <property name="text">
++           <string>Use dev.keys</string>
++          </property>
++         </widget>
++        </item>
++        <item row="3" column="0">
++         <widget class="QCheckBox" name="perform_vulkan_check">
++          <property name="toolTip">
++           <string>Enables yuzu to check for a working Vulkan environment when the program starts up. Disable this if this is causing issues with external programs seeing yuzu.</string>
++          </property>
++          <property name="text">
++           <string>Perform Startup Vulkan Check</string>
++          </property>
++         </widget>
++        </item>
++        <item row="4" column="0">
++         <widget class="QCheckBox" name="enable_all_controllers">
++          <property name="text">
++           <string>Enable All Controller Types</string>
++          </property>
++         </widget>
++        </item>
++        <item row="5" column="0">
++         <widget class="QCheckBox" name="use_debug_asserts">
++          <property name="text">
++           <string>Enable Debug Asserts</string>
++          </property>
++         </widget>
++        </item>
++        <item row="6" column="0">
++         <widget class="QCheckBox" name="use_auto_stub">
++          <property name="text">
++           <string>Enable Auto-Stub</string>
++          </property>
++         </widget>
++        </item>
++        <item row="7" column="0">
++         <spacer name="verticalSpacer_3">
++          <property name="orientation">
++           <enum>Qt::Vertical</enum>
++          </property>
++          <property name="sizeType">
++           <enum>QSizePolicy::Expanding</enum>
++          </property>
++          <property name="sizeHint" stdset="0">
++           <size>
++            <width>0</width>
++            <height>0</height>
++           </size>
++          </property>
++         </spacer>
++        </item>
++       </layout>
++      </widget>
++     </item>
++     <item>
++      <widget class="QGroupBox" name="groupBox_5">
++       <property name="title">
++        <string>Debugging</string>
++       </property>
++       <layout class="QGridLayout" name="gridLayout_3">
++        <item row="1" column="0">
++         <widget class="QCheckBox" name="dump_audio_commands">
++          <property name="toolTip">
++           <string>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</string>
++          </property>
++          <property name="text">
++           <string>Dump Audio Commands To Console**</string>
++          </property>
++         </widget>
++        </item>
++        <item row="2" column="0">
++         <widget class="QCheckBox" name="flush_line">
++          <property name="text">
++           <string>Flush log output on each line</string>
++          </property>
++         </widget>
++        </item>
++        <item row="3" column="0">
++         <widget class="QCheckBox" name="censor_username">
++          <property name="text">
++           <string>Censor username in logs</string>
++          </property>
++         </widget>
++        </item>
++        <item row="4" column="0">
++         <widget class="QCheckBox" name="fs_access_log">
++          <property name="text">
++           <string>Enable FS Access Log</string>
++          </property>
++         </widget>
++        </item>
++        <item row="5" column="0">
++         <widget class="QCheckBox" name="reporting_services">
++          <property name="text">
++           <string>Enable Verbose Reporting Services**</string>
++          </property>
++         </widget>
++        </item>
++        <item row="6" column="0">
++         <widget class="QWidget" name="serial_board_widget" native="true">
++          <property name="sizePolicy">
++           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++            <horstretch>0</horstretch>
++            <verstretch>0</verstretch>
++           </sizepolicy>
++          </property>
++          <layout class="QHBoxLayout" name="horizontalLayout_11">
++           <property name="leftMargin">
++            <number>0</number>
++           </property>
++           <property name="topMargin">
++            <number>0</number>
++           </property>
++           <property name="rightMargin">
++            <number>0</number>
++           </property>
++           <property name="bottomMargin">
++            <number>0</number>
++           </property>
++           <item>
++            <widget class="QLabel" name="label_12">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
++             <property name="text">
++              <string>Unit Serial:</string>
++             </property>
++            </widget>
++           </item>
++           <item>
++            <widget class="QLineEdit" name="serial_board_edit"/>
++           </item>
++          </layout>
++         </widget>
++        </item>
++        <item row="7" column="0">
++         <widget class="QWidget" name="serial_battery_widget" native="true">
++          <property name="sizePolicy">
++           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
++            <horstretch>0</horstretch>
++            <verstretch>0</verstretch>
++           </sizepolicy>
++          </property>
++          <layout class="QHBoxLayout" name="horizontalLayout_12">
++           <property name="leftMargin">
++            <number>0</number>
++           </property>
++           <property name="topMargin">
++            <number>0</number>
++           </property>
++           <property name="rightMargin">
++            <number>0</number>
++           </property>
++           <property name="bottomMargin">
++            <number>0</number>
++           </property>
++           <item>
++            <widget class="QLabel" name="label_13">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
++             <property name="text">
++              <string>Battery Serial:</string>
++             </property>
++            </widget>
++           </item>
++           <item>
++            <widget class="QLineEdit" name="serial_battery_edit"/>
++           </item>
++          </layout>
++         </widget>
++        </item>
++        <item row="8" column="0">
++         <widget class="QSpinBox" name="debug_knobs_spinbox">
++          <property name="toolTip">
++           <string>Bitmask for quick development toggles</string>
++          </property>
++          <property name="statusTip">
++           <string>Set debug knobs (bitmask)</string>
++          </property>
++          <property name="whatsThis">
++           <string>16-bit debug knob set for quick development toggles</string>
++          </property>
++          <property name="suffix">
++           <string> (bitmask)</string>
++          </property>
++          <property name="prefix">
++           <string>Debug Knobs: </string>
++          </property>
++          <property name="minimum">
++           <number>0</number>
++          </property>
++          <property name="maximum">
++           <number>65535</number>
++          </property>
++         </widget>
++        </item>
++        <item row="9" column="0">
++         <spacer name="verticalSpacer_2">
++          <property name="orientation">
++           <enum>Qt::Vertical</enum>
++          </property>
++          <property name="sizeType">
++           <enum>QSizePolicy::Expanding</enum>
++          </property>
++          <property name="sizeHint" stdset="0">
++           <size>
++            <width>0</width>
++            <height>0</height>
++           </size>
++          </property>
++         </spacer>
++        </item>
++       </layout>
++      </widget>
++     </item>
++    </layout>
++   </item>
++   <item>
++    <spacer name="verticalSpacer">
++     <property name="orientation">
++      <enum>Qt::Vertical</enum>
++     </property>
++     <property name="sizeType">
++      <enum>QSizePolicy::Expanding</enum>
++     </property>
++     <property name="sizeHint" stdset="0">
++      <size>
++       <width>0</width>
++       <height>0</height>
++      </size>
++     </property>
++    </spacer>
++   </item>
++   <item>
++    <widget class="QLabel" name="label_5">
++     <property name="sizePolicy">
++      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
++       <horstretch>0</horstretch>
++       <verstretch>0</verstretch>
++      </sizepolicy>
++     </property>
++     <property name="font">
++      <font>
++       <italic>true</italic>
++      </font>
++     </property>
++     <property name="text">
++      <string>**This will be reset automatically when Eden closes.</string>
++     </property>
++     <property name="indent">
++      <number>20</number>
++     </property>
++    </widget>
++   </item>
++  </layout>
+  </widget>
+  <tabstops>
+   <tabstop>log_filter_edit</tabstop>
 diff --git a/src/yuzu/configuration/configure_debug_tab.cpp b/src/yuzu/configuration/configure_debug_tab.cpp
-index d1ca4752a5..abb5bca1b6 100644
+deleted file mode 100644
+index d1ca4752a5..0000000000
 --- a/src/yuzu/configuration/configure_debug_tab.cpp
-+++ b/src/yuzu/configuration/configure_debug_tab.cpp
-@@ -3,18 +3,15 @@
- 
- #include <memory>
- #include "ui_configure_debug_tab.h"
++++ /dev/null
+@@ -1,45 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#include <memory>
+-#include "ui_configure_debug_tab.h"
 -#include "yuzu/configuration/configure_cpu_debug.h"
- #include "yuzu/configuration/configure_debug.h"
- #include "yuzu/configuration/configure_debug_tab.h"
- 
- ConfigureDebugTab::ConfigureDebugTab(const Core::System& system_, QWidget* parent)
-     : QWidget(parent), ui{std::make_unique<Ui::ConfigureDebugTab>()},
+-#include "yuzu/configuration/configure_debug.h"
+-#include "yuzu/configuration/configure_debug_tab.h"
+-
+-ConfigureDebugTab::ConfigureDebugTab(const Core::System& system_, QWidget* parent)
+-    : QWidget(parent), ui{std::make_unique<Ui::ConfigureDebugTab>()},
 -      debug_tab{std::make_unique<ConfigureDebug>(system_, this)},
 -      cpu_debug_tab{std::make_unique<ConfigureCpuDebug>(system_, this)} {
-+      debug_tab{std::make_unique<ConfigureDebug>(system_, this)} {
-     ui->setupUi(this);
- 
-     ui->tabWidget->addTab(debug_tab.get(), tr("Debug"));
+-    ui->setupUi(this);
+-
+-    ui->tabWidget->addTab(debug_tab.get(), tr("Debug"));
 -    ui->tabWidget->addTab(cpu_debug_tab.get(), tr("CPU"));
- 
-     SetConfiguration();
- }
-@@ -23,7 +20,6 @@ ConfigureDebugTab::~ConfigureDebugTab() = default;
- 
- void ConfigureDebugTab::ApplyConfiguration() {
-     debug_tab->ApplyConfiguration();
+-
+-    SetConfiguration();
+-}
+-
+-ConfigureDebugTab::~ConfigureDebugTab() = default;
+-
+-void ConfigureDebugTab::ApplyConfiguration() {
+-    debug_tab->ApplyConfiguration();
 -    cpu_debug_tab->ApplyConfiguration();
+-}
+-
+-void ConfigureDebugTab::SetCurrentIndex(int index) {
+-    ui->tabWidget->setCurrentIndex(index);
+-}
+-
+-void ConfigureDebugTab::changeEvent(QEvent* event) {
+-    if (event->type() == QEvent::LanguageChange) {
+-        RetranslateUI();
+-    }
+-
+-    QWidget::changeEvent(event);
+-}
+-
+-void ConfigureDebugTab::RetranslateUI() {
+-    ui->retranslateUi(this);
+-}
+-
+-void ConfigureDebugTab::SetConfiguration() {}
+diff --git a/src/yuzu/configuration/configure_debug_tab.h b/src/yuzu/configuration/configure_debug_tab.h
+deleted file mode 100644
+index c0fd9f73fa..0000000000
+--- a/src/yuzu/configuration/configure_debug_tab.h
++++ /dev/null
+@@ -1,41 +0,0 @@
+-// SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-#pragma once
+-
+-#include <memory>
+-#include <QWidget>
+-
+-class ConfigureDebug;
+-class ConfigureCpuDebug;
+-
+-namespace Core {
+-class System;
+-}
+-
+-namespace Ui {
+-class ConfigureDebugTab;
+-}
+-
+-class ConfigureDebugTab : public QWidget {
+-    Q_OBJECT
+-
+-public:
+-    explicit ConfigureDebugTab(const Core::System& system_, QWidget* parent = nullptr);
+-    ~ConfigureDebugTab() override;
+-
+-    void ApplyConfiguration();
+-
+-    void SetCurrentIndex(int index);
+-
+-private:
+-    void changeEvent(QEvent* event) override;
+-    void RetranslateUI();
+-
+-    void SetConfiguration();
+-
+-    std::unique_ptr<Ui::ConfigureDebugTab> ui;
+-
+-    std::unique_ptr<ConfigureDebug> debug_tab;
+-    std::unique_ptr<ConfigureCpuDebug> cpu_debug_tab;
+-};
+diff --git a/src/yuzu/configuration/configure_debug_tab.ui b/src/yuzu/configuration/configure_debug_tab.ui
+deleted file mode 100644
+index 15ec747273..0000000000
+--- a/src/yuzu/configuration/configure_debug_tab.ui
++++ /dev/null
+@@ -1,31 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<ui version="4.0">
+- <class>ConfigureDebugTab</class>
+- <widget class="QWidget" name="ConfigureDebugTab">
+-  <property name="geometry">
+-   <rect>
+-    <x>0</x>
+-    <y>0</y>
+-    <width>320</width>
+-    <height>240</height>
+-   </rect>
+-  </property>
+-  <property name="windowTitle">
+-   <string>Form</string>
+-  </property>
+-  <property name="accessibleName">
+-   <string>Debug</string>
+-  </property>
+-  <layout class="QVBoxLayout" name="verticalLayout">
+-   <item>
+-    <widget class="QTabWidget" name="tabWidget">
+-     <property name="currentIndex">
+-      <number>-1</number>
+-     </property>
+-    </widget>
+-   </item>
+-  </layout>
+- </widget>
+- <resources/>
+- <connections/>
+-</ui>
+diff --git a/src/yuzu/configuration/configure_dialog.cpp b/src/yuzu/configuration/configure_dialog.cpp
+index d4a16e9f73..eabee2fa2b 100644
+--- a/src/yuzu/configuration/configure_dialog.cpp
++++ b/src/yuzu/configuration/configure_dialog.cpp
+@@ -15,7 +15,7 @@
+ #include "yuzu/configuration/configure_applets.h"
+ #include "yuzu/configuration/configure_audio.h"
+ #include "yuzu/configuration/configure_cpu.h"
+-#include "yuzu/configuration/configure_debug_tab.h"
++#include "yuzu/configuration/configure_debug.h"
+ #include "yuzu/configuration/configure_dialog.h"
+ #include "yuzu/configuration/configure_filesystem.h"
+ #include "yuzu/configuration/configure_general.h"
+@@ -42,7 +42,7 @@ ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry_,
+       applets_tab{std::make_unique<ConfigureApplets>(system_, nullptr, *builder, this)},
+       audio_tab{std::make_unique<ConfigureAudio>(system_, nullptr, *builder, this)},
+       cpu_tab{std::make_unique<ConfigureCpu>(system_, nullptr, *builder, this)},
+-      debug_tab_tab{std::make_unique<ConfigureDebugTab>(system_, this)},
++      debug_tab{std::make_unique<ConfigureDebug>(system_, this)},
+       filesystem_tab{std::make_unique<ConfigureFilesystem>(this)},
+       general_tab{std::make_unique<ConfigureGeneral>(system_, nullptr, *builder, this)},
+       graphics_advanced_tab{
+@@ -69,7 +69,7 @@ ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry_,
+     ui->tabWidget->addTab(applets_tab.get(), tr("Applets"));
+     ui->tabWidget->addTab(audio_tab.get(), tr("Audio"));
+     ui->tabWidget->addTab(cpu_tab.get(), tr("CPU"));
+-    ui->tabWidget->addTab(debug_tab_tab.get(), tr("Debug"));
++    ui->tabWidget->addTab(debug_tab.get(), tr("Debug"));
+     ui->tabWidget->addTab(filesystem_tab.get(), tr("Filesystem"));
+     ui->tabWidget->addTab(general_tab.get(), tr("General"));
+     ui->tabWidget->addTab(graphics_tab.get(), tr("Graphics"));
+@@ -93,11 +93,6 @@ ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry_,
+     SetConfiguration();
+     PopulateSelectionList();
+ 
+-    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+-        if (index != -1) {
+-            debug_tab_tab->SetCurrentIndex(0);
+-        }
+-    });
+     connect(ui_tab.get(), &ConfigureUi::LanguageChanged, this, &ConfigureDialog::OnLanguageChanged);
+     connect(general_tab.get(), &ConfigureGeneral::ExternalContentDirsChanged, this,
+             &ConfigureDialog::ExternalContentDirsChanged);
+@@ -134,7 +129,7 @@ void ConfigureDialog::ApplyConfiguration() {
+     graphics_advanced_tab->ApplyConfiguration();
+     graphics_extensions_tab->ApplyConfiguration();
+     audio_tab->ApplyConfiguration();
+-    debug_tab_tab->ApplyConfiguration();
++    debug_tab->ApplyConfiguration();
+     web_tab->ApplyConfiguration();
+     network_tab->ApplyConfiguration();
+     applets_tab->ApplyConfiguration();
+@@ -173,7 +168,7 @@ Q_DECLARE_METATYPE(QList<QWidget*>);
+ void ConfigureDialog::PopulateSelectionList() {
+     const std::array<std::pair<QString, QList<QWidget*>>, 6> items{
+         {{tr("General"),
+-          {general_tab.get(), hotkeys_tab.get(), ui_tab.get(), web_tab.get(), debug_tab_tab.get()}},
++          {general_tab.get(), hotkeys_tab.get(), ui_tab.get(), web_tab.get(), debug_tab.get()}},
+          {tr("System"),
+           {system_tab.get(), profile_tab.get(), network_tab.get(), filesystem_tab.get(),
+            applets_tab.get()}},
+diff --git a/src/yuzu/configuration/configure_dialog.h b/src/yuzu/configuration/configure_dialog.h
+index 5c504c9a16..07e0a9d527 100644
+--- a/src/yuzu/configuration/configure_dialog.h
++++ b/src/yuzu/configuration/configure_dialog.h
+@@ -21,7 +21,7 @@ class System;
+ class ConfigureApplets;
+ class ConfigureAudio;
+ class ConfigureCpu;
+-class ConfigureDebugTab;
++class ConfigureDebug;
+ class ConfigureFilesystem;
+ class ConfigureGeneral;
+ class ConfigureGraphics;
+@@ -84,7 +84,7 @@ private:
+     std::unique_ptr<ConfigureApplets> applets_tab;
+     std::unique_ptr<ConfigureAudio> audio_tab;
+     std::unique_ptr<ConfigureCpu> cpu_tab;
+-    std::unique_ptr<ConfigureDebugTab> debug_tab_tab;
++    std::unique_ptr<ConfigureDebug> debug_tab;
+     std::unique_ptr<ConfigureFilesystem> filesystem_tab;
+     std::unique_ptr<ConfigureGeneral> general_tab;
+     std::unique_ptr<ConfigureGraphicsAdvanced> graphics_advanced_tab;
+diff --git a/src/yuzu/configuration/configure_filesystem.ui b/src/yuzu/configuration/configure_filesystem.ui
+index 75c61c74a6..f3c4fc03ab 100644
+--- a/src/yuzu/configuration/configure_filesystem.ui
++++ b/src/yuzu/configuration/configure_filesystem.ui
+@@ -6,8 +6,8 @@
+    <rect>
+     <x>0</x>
+     <y>0</y>
+-    <width>453</width>
+-    <height>561</height>
++    <width>472</width>
++    <height>624</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+@@ -18,7 +18,7 @@
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+-    <layout class="QVBoxLayout" name="verticalLayout_3">
++    <layout class="QVBoxLayout" name="verticalLayout_1">
+      <item>
+       <widget class="QGroupBox" name="groupBox">
+        <property name="title">
+@@ -32,19 +32,16 @@
+           </property>
+          </widget>
+         </item>
+-        <item row="0" column="3">
++        <item row="0" column="1">
++         <widget class="QLineEdit" name="nand_directory_edit"/>
++        </item>
++        <item row="0" column="2">
+          <widget class="QToolButton" name="nand_directory_button">
+           <property name="text">
+            <string>...</string>
+           </property>
+          </widget>
+         </item>
+-        <item row="0" column="2">
+-         <widget class="QLineEdit" name="nand_directory_edit"/>
+-        </item>
+-        <item row="1" column="2">
+-         <widget class="QLineEdit" name="sdmc_directory_edit"/>
+-        </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+@@ -52,7 +49,10 @@
+           </property>
+          </widget>
+         </item>
+-        <item row="1" column="3">
++        <item row="1" column="1">
++         <widget class="QLineEdit" name="sdmc_directory_edit"/>
++        </item>
++        <item row="1" column="2">
+          <widget class="QToolButton" name="sdmc_directory_button">
+           <property name="text">
+            <string>...</string>
+@@ -66,32 +66,16 @@
+           </property>
+          </widget>
+         </item>
+-        <item row="2" column="2">
++        <item row="2" column="1">
+          <widget class="QLineEdit" name="save_directory_edit"/>
+         </item>
+-        <item row="2" column="3">
++        <item row="2" column="2">
+          <widget class="QToolButton" name="save_directory_button">
+           <property name="text">
+            <string>...</string>
+           </property>
+          </widget>
+         </item>
+-        <item row="0" column="1">
+-         <spacer name="horizontalSpacer">
+-          <property name="orientation">
+-           <enum>Qt::Horizontal</enum>
+-          </property>
+-          <property name="sizeType">
+-           <enum>QSizePolicy::Maximum</enum>
+-          </property>
+-          <property name="sizeHint" stdset="0">
+-           <size>
+-            <width>60</width>
+-            <height>20</height>
+-           </size>
+-          </property>
+-         </spacer>
+-        </item>
+        </layout>
+       </widget>
+      </item>
+@@ -101,31 +85,67 @@
+         <string>Gamecard</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_2">
+-        <item row="2" column="1">
++        <item row="0" column="0" colspan="3">
++         <layout class="QHBoxLayout" name="horizontalLayout">
++          <item>
++           <widget class="QCheckBox" name="gamecard_inserted">
++            <property name="text">
++             <string>Inserted</string>
++            </property>
++           </widget>
++          </item>
++          <item>
++           <spacer name="horizontalSpacer">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Fixed</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
++          <item>
++           <widget class="QCheckBox" name="gamecard_current_game">
++            <property name="text">
++             <string>Current Game</string>
++            </property>
++           </widget>
++          </item>
++          <item>
++           <spacer name="horizontalSpacer_2">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
++         </layout>
++        </item>
++        <item row="1" column="0">
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>Path</string>
+           </property>
+          </widget>
+         </item>
+-        <item row="2" column="2">
+-         <widget class="QLineEdit" name="gamecard_path_edit"/>
+-        </item>
+-        <item row="0" column="1">
+-         <widget class="QCheckBox" name="gamecard_inserted">
+-          <property name="text">
+-           <string>Inserted</string>
+-          </property>
+-         </widget>
+-        </item>
+         <item row="1" column="1">
+-         <widget class="QCheckBox" name="gamecard_current_game">
+-          <property name="text">
+-           <string>Current Game</string>
+-          </property>
+-         </widget>
++         <widget class="QLineEdit" name="gamecard_path_edit"/>
+         </item>
+-        <item row="2" column="3">
++        <item row="1" column="2">
+          <widget class="QToolButton" name="gamecard_path_button">
+           <property name="text">
+            <string>...</string>
+@@ -141,28 +161,8 @@
+         <string>Patch Manager</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_4">
+-        <item row="1" column="2">
+-         <widget class="QLineEdit" name="load_path_edit"/>
+-        </item>
+-        <item row="0" column="2">
+-         <widget class="QLineEdit" name="dump_path_edit"/>
+-        </item>
+-        <item row="0" column="3">
+-         <widget class="QToolButton" name="dump_path_button">
+-          <property name="text">
+-           <string>...</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item row="1" column="3">
+-         <widget class="QToolButton" name="load_path_button">
+-          <property name="text">
+-           <string>...</string>
+-          </property>
+-         </widget>
+-        </item>
+-        <item row="2" column="0" colspan="4">
+-         <layout class="QHBoxLayout" name="horizontalLayout">
++        <item row="0" column="0" colspan="3">
++         <layout class="QHBoxLayout" name="horizontalLayout_1">
+           <item>
+            <widget class="QCheckBox" name="dump_nso">
+             <property name="text">
+@@ -170,6 +170,22 @@
+             </property>
+            </widget>
+           </item>
++          <item>
++           <spacer name="horizontalSpacer_3">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Fixed</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
+           <item>
+            <widget class="QCheckBox" name="dump_exefs">
+             <property name="text">
+@@ -177,37 +193,57 @@
+             </property>
+            </widget>
+           </item>
++          <item>
++           <spacer name="horizontalSpacer_4">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>20</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
+          </layout>
+         </item>
+         <item row="1" column="0">
+-         <widget class="QLabel" name="label_9">
++         <widget class="QLabel" name="label_8">
+           <property name="text">
+-           <string>Mod Load Root</string>
++           <string>Dump Root</string>
+           </property>
+          </widget>
+         </item>
+-        <item row="0" column="0">
+-         <widget class="QLabel" name="label_8">
++        <item row="1" column="1">
++         <widget class="QLineEdit" name="dump_path_edit"/>
++        </item>
++        <item row="1" column="2">
++         <widget class="QToolButton" name="dump_path_button">
+           <property name="text">
+-           <string>Dump Root</string>
++           <string>...</string>
+           </property>
+          </widget>
+         </item>
+-        <item row="0" column="1">
+-         <spacer name="horizontalSpacer_2">
+-          <property name="orientation">
+-           <enum>Qt::Horizontal</enum>
+-          </property>
+-          <property name="sizeType">
+-           <enum>QSizePolicy::Fixed</enum>
++        <item row="2" column="0">
++         <widget class="QLabel" name="label_9">
++          <property name="text">
++           <string>Mod Load Root</string>
+           </property>
+-          <property name="sizeHint" stdset="0">
+-           <size>
+-            <width>40</width>
+-            <height>20</height>
+-           </size>
++         </widget>
++        </item>
++        <item row="2" column="1">
++         <widget class="QLineEdit" name="load_path_edit"/>
++        </item>
++        <item row="2" column="2">
++         <widget class="QToolButton" name="load_path_button">
++          <property name="text">
++           <string>...</string>
+           </property>
+-         </spacer>
++         </widget>
+         </item>
+        </layout>
+       </widget>
+@@ -218,7 +254,7 @@
+         <string>Caching</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_5">
+-        <item row="0" column="0" colspan="2">
++        <item row="0" column="0" colspan="3">
+          <layout class="QHBoxLayout" name="horizontalLayout_2">
+           <item>
+            <widget class="QCheckBox" name="cache_game_list">
+@@ -227,6 +263,22 @@
+             </property>
+            </widget>
+           </item>
++          <item>
++           <spacer name="horizontalSpacer_5">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Fixed</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>40</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
+           <item>
+            <widget class="QPushButton" name="reset_game_list_cache">
+             <property name="text">
+@@ -234,6 +286,22 @@
+             </property>
+            </widget>
+           </item>
++          <item>
++           <spacer name="horizontalSpacer_6">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>40</height>
++             </size>
++            </property>
++           </spacer>
++          </item>
+          </layout>
+         </item>
+        </layout>
+@@ -246,10 +314,13 @@
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
++     <property name="sizeType">
++      <enum>QSizePolicy::Expanding</enum>
++     </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+-       <width>20</width>
+-       <height>40</height>
++       <width>0</width>
++       <height>0</height>
+       </size>
+      </property>
+     </spacer>
+diff --git a/src/yuzu/configuration/configure_general.ui b/src/yuzu/configuration/configure_general.ui
+index 78b6081d92..b7e08e2fa2 100644
+--- a/src/yuzu/configuration/configure_general.ui
++++ b/src/yuzu/configuration/configure_general.ui
+@@ -6,8 +6,8 @@
+    <rect>
+     <x>0</x>
+     <y>0</y>
+-    <width>744</width>
+-    <height>568</height>
++    <width>691</width>
++    <height>409</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+@@ -52,18 +52,11 @@
+         <string>External Content</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_external">
+-        <item>
+-         <widget class="QLabel" name="label_external_desc">
+-          <property name="text">
+-           <string>Add directories to scan for DLCs and Updates without installing to NAND</string>
+-          </property>
+-          <property name="wordWrap">
+-           <bool>true</bool>
+-          </property>
+-         </widget>
+-        </item>
+         <item>
+          <widget class="QListWidget" name="external_content_list">
++          <property name="toolTip">
++           <string>DLC and Updates</string>
++          </property>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::SingleSelection</enum>
+           </property>
+@@ -72,34 +65,37 @@
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_external_buttons">
+           <item>
+-           <widget class="QPushButton" name="add_external_dir_button">
+-            <property name="text">
+-             <string>Add Directory</string>
++           <spacer name="horizontalSpacer_external">
++            <property name="orientation">
++             <enum>Qt::Horizontal</enum>
+             </property>
+-           </widget>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
++            </property>
++            <property name="sizeHint" stdset="0">
++             <size>
++              <width>40</width>
++              <height>40</height>
++             </size>
++            </property>
++           </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="remove_external_dir_button">
+-            <property name="text">
+-             <string>Remove Selected</string>
+-            </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
++            <property name="text">
++             <string>Remove Selected</string>
++            </property>
+            </widget>
+           </item>
+           <item>
+-           <spacer name="horizontalSpacer_external">
+-            <property name="orientation">
+-             <enum>Qt::Horizontal</enum>
+-            </property>
+-            <property name="sizeHint" stdset="0">
+-             <size>
+-              <width>40</width>
+-              <height>20</height>
+-             </size>
++           <widget class="QPushButton" name="add_external_dir_button">
++            <property name="text">
++             <string>Add Directory</string>
+             </property>
+-           </spacer>
++           </widget>
+           </item>
+          </layout>
+         </item>
+@@ -111,31 +107,19 @@
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
++       <property name="sizeType">
++        <enum>QSizePolicy::Expanding</enum>
++       </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+-         <width>20</width>
+-         <height>40</height>
++         <width>0</width>
++         <height>0</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="layout_reset">
+-       <property name="spacing">
+-        <number>6</number>
+-       </property>
+-       <property name="leftMargin">
+-        <number>5</number>
+-       </property>
+-       <property name="topMargin">
+-        <number>5</number>
+-       </property>
+-       <property name="rightMargin">
+-        <number>5</number>
+-       </property>
+-       <property name="bottomMargin">
+-        <number>5</number>
+-       </property>
+        <item>
+         <widget class="QPushButton" name="button_reset_defaults">
+          <property name="text">
+@@ -148,10 +132,13 @@
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
++         <property name="sizeType">
++          <enum>QSizePolicy::Expanding</enum>
++         </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+-           <height>20</height>
++           <height>40</height>
+           </size>
+          </property>
+         </spacer>
+diff --git a/src/yuzu/configuration/configure_graphics_extensions.ui b/src/yuzu/configuration/configure_graphics_extensions.ui
+index 79a2107cc9..42cf2e7181 100644
+--- a/src/yuzu/configuration/configure_graphics_extensions.ui
++++ b/src/yuzu/configuration/configure_graphics_extensions.ui
+@@ -23,13 +23,6 @@
+       <string>Hacks</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_6">
+-      <item>
+-       <widget class="QLabel" name="label">
+-        <property name="text">
+-         <string>Changing these options from their default may cause issues. Novitii cavete!</string>
+-        </property>
+-       </widget>
+-      </item>
+       <item>
+        <widget class="QWidget" name="hacks_target" native="true">
+         <layout class="QVBoxLayout" name="verticalLayout_7">
+diff --git a/src/yuzu/configuration/configure_input_player.cpp b/src/yuzu/configuration/configure_input_player.cpp
+index 821825f6e1..68548dc664 100644
+--- a/src/yuzu/configuration/configure_input_player.cpp
++++ b/src/yuzu/configuration/configure_input_player.cpp
+@@ -1098,6 +1098,10 @@ void ConfigureInputPlayer::SetConnectableControllers() {
+         add_item(Core::HID::NpadStyleIndex::Fullkey, tr("Pro Controller"));
+     }
+ 
++    if (npad_style_set.gamecube == 1) {
++        add_item(Core::HID::NpadStyleIndex::GameCube, tr("GameCube Controller"));
++    }
++
+     if (npad_style_set.joycon_dual == 1) {
+         add_item(Core::HID::NpadStyleIndex::JoyconDual, tr("Dual Joycons"));
+     }
+@@ -1114,10 +1118,6 @@ void ConfigureInputPlayer::SetConnectableControllers() {
+         add_item(Core::HID::NpadStyleIndex::Handheld, tr("Handheld"));
+     }
+ 
+-    if (npad_style_set.gamecube == 1) {
+-        add_item(Core::HID::NpadStyleIndex::GameCube, tr("GameCube Controller"));
+-    }
+-
+     // Disable all unsupported controllers
+     if (!Settings::values.enable_all_controllers) {
+         return;
+diff --git a/src/yuzu/configuration/configure_input_player.ui b/src/yuzu/configuration/configure_input_player.ui
+index b8e0465386..2b1bbd82ef 100644
+--- a/src/yuzu/configuration/configure_input_player.ui
++++ b/src/yuzu/configuration/configure_input_player.ui
+@@ -1794,7 +1794,7 @@
+            <item>
+             <widget class="PlayerControlPreview" name="controllerFrame">
+              <property name="sizePolicy">
+-              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
++              <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+diff --git a/src/yuzu/configuration/configure_per_game_addons.cpp b/src/yuzu/configuration/configure_per_game_addons.cpp
+index 7d0e15accc..c43e61e632 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.cpp
++++ b/src/yuzu/configuration/configure_per_game_addons.cpp
+@@ -14,7 +14,6 @@
+ #include <QHeaderView>
+ #include <QMenu>
+ #include <QStandardItemModel>
+-#include <QStandardPaths>
+ #include <QString>
+ #include <QTimer>
+ #include <QTreeView>
+@@ -22,14 +21,11 @@
+ #include "common/common_types.h"
+ #include "common/fs/fs.h"
+ #include "common/fs/path_util.h"
+-#include "configuration/addon/mod_select_dialog.h"
+ #include "core/core.h"
+ #include "core/file_sys/patch_manager.h"
++#include "core/file_sys/xts_archive.h"
+ #include "core/loader/loader.h"
+-#include "frontend_common/mod_manager.h"
+-#include "qt_common/abstract/frontend.h"
+ #include "qt_common/config/uisettings.h"
+-#include "qt_common/util/mod.h"
+ #include "ui_configure_per_game_addons.h"
+ #include "yuzu/configuration/configure_input.h"
+ #include "yuzu/configuration/configure_per_game_addons.h"
+@@ -43,14 +39,14 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
+     item_model = new QStandardItemModel(tree_view);
+     tree_view->setModel(item_model);
+     tree_view->setAlternatingRowColors(true);
+-    tree_view->setSelectionMode(QHeaderView::ExtendedSelection);
++    tree_view->setSelectionMode(QHeaderView::SingleSelection);
+     tree_view->setSelectionBehavior(QHeaderView::SelectRows);
+     tree_view->setVerticalScrollMode(QHeaderView::ScrollPerPixel);
+     tree_view->setHorizontalScrollMode(QHeaderView::ScrollPerPixel);
+     tree_view->setSortingEnabled(true);
+     tree_view->setEditTriggers(QHeaderView::NoEditTriggers);
+     tree_view->setUniformRowHeights(true);
+-    tree_view->setContextMenuPolicy(Qt::CustomContextMenu);
++    tree_view->setContextMenuPolicy(Qt::NoContextMenu);
+ 
+     item_model->insertColumns(0, 2);
+     item_model->setHeaderData(0, Qt::Horizontal, tr("Patch Name"));
+@@ -76,12 +72,6 @@ ConfigurePerGameAddons::ConfigurePerGameAddons(Core::System& system_, QWidget* p
+             &ConfigurePerGameAddons::OnItemChanged);
+     connect(item_model, &QStandardItemModel::itemChanged,
+             [] { UISettings::values.is_game_list_reload_pending.exchange(true); });
+-
+-    connect(ui->folder, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModFolder);
+-    connect(ui->zip, &QAbstractButton::clicked, this, &ConfigurePerGameAddons::InstallModZip);
+-
+-    connect(tree_view, &QTreeView::customContextMenuRequested, this,
+-            &ConfigurePerGameAddons::showContextMenu);
  }
  
- void ConfigureDebugTab::SetCurrentIndex(int index) {
-diff --git a/src/yuzu/configuration/configure_debug_tab.h b/src/yuzu/configuration/configure_debug_tab.h
-index c0fd9f73fa..15119b2600 100644
---- a/src/yuzu/configuration/configure_debug_tab.h
-+++ b/src/yuzu/configuration/configure_debug_tab.h
-@@ -7,7 +7,6 @@
- #include <QWidget>
+ ConfigurePerGameAddons::~ConfigurePerGameAddons() = default;
+@@ -140,146 +130,6 @@ void ConfigurePerGameAddons::SetTitleId(u64 id) {
+     this->title_id = id;
+ }
  
- class ConfigureDebug;
--class ConfigureCpuDebug;
+-void ConfigurePerGameAddons::InstallMods(const QStringList& mods) {
+-    QStringList failed;
+-    for (const auto& mod : mods) {
+-        if (FrontendCommon::InstallMod(mod.toStdString(), title_id, true) ==
+-            FrontendCommon::Failed) {
+-            failed << QFileInfo(mod).baseName();
+-        }
+-    }
+-
+-    if (failed.empty()) {
+-        QtCommon::Frontend::Information(tr("Mod Install Succeeded"),
+-                                        tr("Successfully installed all mods."));
+-
+-        item_model->removeRows(0, item_model->rowCount());
+-        list_items.clear();
+-        LoadConfiguration();
+-
+-        UISettings::values.is_game_list_reload_pending.exchange(true);
+-    } else {
+-        QtCommon::Frontend::Critical(
+-            tr("Mod Install Failed"),
+-            tr("Failed to install the following mods:\n\t%1\nCheck the log for details.")
+-                .arg(failed.join(QStringLiteral("\n\t"))));
+-    }
+-}
+-
+-void ConfigurePerGameAddons::InstallModPath(const QString& path, const QString& fallbackName) {
+-    const auto mods = QtCommon::Mod::GetModFolders(path, fallbackName);
+-
+-    if (mods.size() > 1) {
+-        ModSelectDialog* dialog = new ModSelectDialog(mods, this);
+-        connect(dialog, &ModSelectDialog::modsSelected, this, &ConfigurePerGameAddons::InstallMods);
+-        dialog->show();
+-    } else if (!mods.empty()) {
+-        InstallMods(mods);
+-    }
+-}
+-
+-void ConfigurePerGameAddons::InstallModFolder() {
+-    const auto path = QtCommon::Frontend::GetExistingDirectory(
+-        tr("Mod Folder"), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+-    if (path.isEmpty()) {
+-        return;
+-    }
+-
+-    InstallModPath(path);
+-}
+-
+-void ConfigurePerGameAddons::InstallModZip() {
+-    // TODO(crueter): use GetOpenFileName to allow select multiple ZIPs
+-    const auto path = QtCommon::Frontend::GetOpenFileName(
+-        tr("Zipped Mod Location"),
+-        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+-        tr("Zipped Archives (*.zip)"));
+-    if (path.isEmpty()) {
+-        return;
+-    }
+-
+-    const QString extracted = QtCommon::Mod::ExtractMod(path);
+-    if (!extracted.isEmpty())
+-        InstallModPath(extracted, QFileInfo(path).baseName());
+-}
+-
+-void ConfigurePerGameAddons::AddonDeleteRequested(QList<QModelIndex> selected) {
+-    QList<QModelIndex> filtered;
+-    for (const QModelIndex& index : selected) {
+-        if (!index.data(PATCH_LOCATION).toString().isEmpty())
+-            filtered << index;
+-    }
+-
+-    if (filtered.empty()) {
+-        QtCommon::Frontend::Critical(tr("Invalid Selection"),
+-                                     tr("Only mods, cheats, and patches can be deleted.\nTo delete "
+-                                        "NAND-installed updates, right-click the game in the game "
+-                                        "list and click Remove -> Remove Installed Update."));
+-        return;
+-    }
+-
+-    const auto header = tr("You are about to delete the following installed mods:\n");
+-    QString selected_str;
+-    for (const QModelIndex& index : filtered) {
+-        selected_str = selected_str % index.data().toString() % QStringLiteral("\n");
+-    }
+-
+-    const auto footer = tr("\nOnce deleted, these can NOT be recovered. Are you 100% sure "
+-                           "you want to delete them?");
+-
+-    QString caption = header % selected_str % footer;
+-
+-    auto choice = QtCommon::Frontend::Warning(tr("Delete add-on(s)?"), caption,
+-                                              QtCommon::Frontend::StandardButton::Yes |
+-                                                  QtCommon::Frontend::StandardButton::No);
+-
+-    if (choice == QtCommon::Frontend::StandardButton::No)
+-        return;
+-
+-    for (const QModelIndex& index : filtered) {
+-        std::filesystem::remove_all(index.data(PATCH_LOCATION).toString().toStdString());
+-    }
+-
+-    QtCommon::Frontend::Information(tr("Successfully deleted"),
+-                                    tr("Successfully deleted all selected mods."));
+-
+-    item_model->removeRows(0, item_model->rowCount());
+-    list_items.clear();
+-    LoadConfiguration();
+-
+-    UISettings::values.is_game_list_reload_pending.exchange(true);
+-}
+-
+-void ConfigurePerGameAddons::showContextMenu(const QPoint& pos) {
+-    const QModelIndex index = tree_view->indexAt(pos);
+-    auto selected = tree_view->selectionModel()->selectedRows();
+-    if (index.isValid() && selected.empty()) {
+-        QModelIndex idx = item_model->index(index.row(), 0);
+-        if (idx.isValid())
+-            selected << idx;
+-    }
+-
+-    if (selected.empty())
+-        return;
+-
+-    QMenu menu(this);
+-
+-    QAction* remove = menu.addAction(tr("&Delete"));
+-    connect(remove, &QAction::triggered, this,
+-            [this, selected]() { AddonDeleteRequested(selected); });
+-
+-    if (selected.length() == 1) {
+-        auto loc = selected.at(0).data(PATCH_LOCATION).toString();
+-        if (QFileInfo::exists(loc)) {
+-            QAction* open = menu.addAction(tr("&Open in File Manager"));
+-            connect(open, &QAction::triggered, this,
+-                    [selected, loc]() { QDesktopServices::openUrl(QUrl::fromLocalFile(loc)); });
+-        }
+-    }
+-
+-    menu.exec(tree_view->viewport()->mapToGlobal(pos));
+-}
+-
+ void ConfigurePerGameAddons::changeEvent(QEvent* event) {
+     if (event->type() == QEvent::LanguageChange) {
+         RetranslateUI();
+@@ -325,13 +175,8 @@ void ConfigurePerGameAddons::LoadConfiguration() {
+                                         patch.source == FileSys::PatchSource::External &&
+                                         patch.numeric_version != 0;
  
- namespace Core {
- class System;
-@@ -37,5 +36,4 @@ private:
-     std::unique_ptr<Ui::ConfigureDebugTab> ui;
+-        const bool is_mod = patch.type == FileSys::PatchType::Mod;
+-
+         if (is_external_update) {
+-            first_item->setData(static_cast<quint32>(patch.numeric_version), NUMERIC_VERSION);
+-        } else if (is_mod) {
+-            // qDebug() << patch.location;
+-            first_item->setData(QString::fromStdString(patch.location), PATCH_LOCATION);
++            first_item->setData(static_cast<quint32>(patch.numeric_version), Qt::UserRole);
+         }
  
-     std::unique_ptr<ConfigureDebug> debug_tab;
--    std::unique_ptr<ConfigureCpuDebug> cpu_debug_tab;
+         bool patch_disabled = false;
+diff --git a/src/yuzu/configuration/configure_per_game_addons.h b/src/yuzu/configuration/configure_per_game_addons.h
+index 9dd3b06928..af2e16422c 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.h
++++ b/src/yuzu/configuration/configure_per_game_addons.h
+@@ -10,7 +10,6 @@
+ #include <vector>
+ 
+ #include <QList>
+-#include <QWidget>
+ 
+ #include "core/file_sys/vfs/vfs_types.h"
+ 
+@@ -32,8 +31,6 @@ class ConfigurePerGameAddons : public QWidget {
+     Q_OBJECT
+ 
+ public:
+-    enum PatchData { NUMERIC_VERSION = Qt::UserRole, PATCH_LOCATION };
+-
+     explicit ConfigurePerGameAddons(Core::System& system_, QWidget* parent = nullptr);
+     ~ConfigurePerGameAddons() override;
+ 
+@@ -44,18 +41,6 @@ public:
+ 
+     void SetTitleId(u64 id);
+ 
+-public slots:
+-    void InstallMods(const QStringList& mods);
+-    void InstallModPath(const QString& path, const QString& fallbackName = {});
+-
+-    void InstallModFolder();
+-    void InstallModZip();
+-
+-    void AddonDeleteRequested(QList<QModelIndex> selected);
+-
+-protected:
+-    void showContextMenu(const QPoint& pos);
+-
+ private:
+     void changeEvent(QEvent* event) override;
+     void RetranslateUI();
+diff --git a/src/yuzu/configuration/configure_per_game_addons.ui b/src/yuzu/configuration/configure_per_game_addons.ui
+index 632f9d422b..f9cf6f2c31 100644
+--- a/src/yuzu/configuration/configure_per_game_addons.ui
++++ b/src/yuzu/configuration/configure_per_game_addons.ui
+@@ -17,21 +17,7 @@
+    <string>Add-Ons</string>
+   </property>
+   <layout class="QGridLayout" name="gridLayout">
+-   <item row="1" column="0">
+-    <widget class="QPushButton" name="zip">
+-     <property name="text">
+-      <string>Import Mod from ZIP</string>
+-     </property>
+-    </widget>
+-   </item>
+-   <item row="1" column="1">
+-    <widget class="QPushButton" name="folder">
+-     <property name="text">
+-      <string>Import Mod from Folder</string>
+-     </property>
+-    </widget>
+-   </item>
+-   <item row="0" column="0" colspan="2">
++   <item row="0" column="0">
+     <widget class="QScrollArea" name="scrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+@@ -42,7 +28,7 @@
+         <x>0</x>
+         <y>0</y>
+         <width>380</width>
+-        <height>249</height>
++        <height>280</height>
+        </rect>
+       </property>
+      </widget>
+diff --git a/src/yuzu/configuration/configure_profile_manager.ui b/src/yuzu/configuration/configure_profile_manager.ui
+index f359ad5286..f9c89f11a0 100644
+--- a/src/yuzu/configuration/configure_profile_manager.ui
++++ b/src/yuzu/configuration/configure_profile_manager.ui
+@@ -7,7 +7,7 @@
+     <x>0</x>
+     <y>0</y>
+     <width>483</width>
+-    <height>483</height>
++    <height>408</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+@@ -26,7 +26,7 @@
+        </property>
+        <layout class="QGridLayout" name="gridLayout_2">
+         <property name="sizeConstraint">
+-         <enum>QLayout::SizeConstraint::SetNoConstraint</enum>
++         <enum>QLayout::SetDefaultConstraint</enum>
+         </property>
+         <item row="0" column="0">
+          <layout class="QHBoxLayout" name="horizontalLayout_2">
+@@ -58,16 +58,13 @@
+              </size>
+             </property>
+             <property name="frameShape">
+-             <enum>QFrame::Shape::NoFrame</enum>
+-            </property>
+-            <property name="frameShadow">
+-             <enum>QFrame::Shadow::Plain</enum>
++             <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="verticalScrollBarPolicy">
+-             <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
++             <enum>Qt::ScrollBarAsNeeded</enum>
+             </property>
+             <property name="horizontalScrollBarPolicy">
+-             <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
++             <enum>Qt::ScrollBarAsNeeded</enum>
+             </property>
+             <property name="interactive">
+              <bool>false</bool>
+@@ -92,13 +89,13 @@
+         <item row="1" column="0">
+          <widget class="QScrollArea" name="scrollArea">
+           <property name="sizePolicy">
+-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
++           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="frameShape">
+-           <enum>QFrame::Shape::StyledPanel</enum>
++           <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="widgetResizable">
+            <bool>false</bool>
+@@ -110,12 +107,15 @@
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+-             <enum>Qt::Orientation::Horizontal</enum>
++             <enum>Qt::Horizontal</enum>
++            </property>
++            <property name="sizeType">
++             <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+-              <height>20</height>
++              <height>40</height>
+              </size>
+             </property>
+            </spacer>
+@@ -132,6 +132,22 @@
+        </layout>
+       </widget>
+      </item>
++     <item>
++      <spacer name="verticalSpacer">
++       <property name="orientation">
++        <enum>Qt::Vertical</enum>
++       </property>
++       <property name="sizeType">
++        <enum>QSizePolicy::Preferred</enum>
++       </property>
++       <property name="sizeHint" stdset="0">
++        <size>
++         <width>0</width>
++         <height>0</height>
++        </size>
++       </property>
++      </spacer>
++     </item>
+      <item>
+       <widget class="QLabel" name="label_disable_info">
+        <property name="text">
+diff --git a/src/yuzu/data_dialog.cpp b/src/yuzu/data_dialog.cpp
+index bbe5d43e05..a73bfebaeb 100644
+--- a/src/yuzu/data_dialog.cpp
++++ b/src/yuzu/data_dialog.cpp
+@@ -23,27 +23,18 @@ DataDialog::DataDialog(QWidget* parent) : QDialog(parent), ui(std::make_unique<U
+ 
+     // TODO: Should we make this a single widget that pulls data from a model?
+ #define WIDGET(label, name)                                                                        \
+-    ui->page->addWidget(new DataWidget(FrontendCommon::DataManager::DataDir::name,                 \
+-                                       QtCommon::StringLookup::DataManager##name##Tooltip,         \
+-                                       QStringLiteral(#name), this));                              \
+-    ui->labels->addItem(label);
++    ui->pages->addTab(new DataWidget(FrontendCommon::DataManager::DataDir::name,                   \
++                                     QtCommon::StringLookup::DataManager##name##Tooltip,           \
++                                     QStringLiteral(#name), this),                                 \
++                      label);
+ 
++    WIDGET(tr("System NAND"), SysNand)
++    WIDGET(tr("User NAND"), UserNand)
+     WIDGET(tr("Shaders"), Shaders)
+-    WIDGET(tr("UserNAND"), UserNand)
+-    WIDGET(tr("SysNAND"), SysNand)
+     WIDGET(tr("Mods"), Mods)
+     WIDGET(tr("Saves"), Saves)
+ 
+ #undef WIDGET
+-
+-    connect(ui->labels, &QListWidget::itemSelectionChanged, this, [this]() {
+-        const auto items = ui->labels->selectedItems();
+-        if (items.isEmpty()) {
+-            return;
+-        }
+-
+-        ui->page->setCurrentIndex(ui->labels->row(items[0]));
+-    });
+ }
+ 
+ DataDialog::~DataDialog() = default;
+@@ -71,25 +62,29 @@ DataWidget::DataWidget(FrontendCommon::DataManager::DataDir data_dir,
+ }
+ 
+ void DataWidget::clear() {
+-    std::string user_id = selectProfile();
+-    QtCommon::Content::ClearDataDir(m_dir, user_id);
++    std::optional<std::string> user_id = selectProfile();
++    if (!user_id) return;
++    QtCommon::Content::ClearDataDir(m_dir, user_id.value());
+     scan();
+ }
+ 
+ void DataWidget::open() {
+-    std::string user_id = selectProfile();
++    std::optional<std::string> user_id = selectProfile();
++    if (!user_id) return;
+     QDesktopServices::openUrl(QUrl::fromLocalFile(
+-        QString::fromStdString(FrontendCommon::DataManager::GetDataDirString(m_dir, user_id))));
++        QString::fromStdString(FrontendCommon::DataManager::GetDataDirString(m_dir, user_id.value()))));
+ }
+ 
+ void DataWidget::upload() {
+-    std::string user_id = selectProfile();
+-    QtCommon::Content::ExportDataDir(m_dir, user_id, m_exportName);
++    std::optional<std::string> user_id = selectProfile();
++    if (!user_id) return;
++    QtCommon::Content::ExportDataDir(m_dir, user_id.value(), m_exportName);
+ }
+ 
+ void DataWidget::download() {
+-    std::string user_id = selectProfile();
+-    QtCommon::Content::ImportDataDir(m_dir, user_id, std::bind(&DataWidget::scan, this));
++    std::optional<std::string> user_id = selectProfile();
++    if (!user_id) return;
++    QtCommon::Content::ImportDataDir(m_dir, user_id.value(), std::bind(&DataWidget::scan, this));
+ }
+ 
+ void DataWidget::scan() {
+@@ -108,10 +103,11 @@ void DataWidget::scan() {
+         QtConcurrent::run([this]() { return FrontendCommon::DataManager::DataDirSize(m_dir); }));
+ }
+ 
+-std::string DataWidget::selectProfile() {
++std::optional<std::string> DataWidget::selectProfile() {
+     std::string user_id{};
+     if (m_dir == FrontendCommon::DataManager::DataDir::Saves) {
+         user_id = GetProfileIDString();
++        if (user_id.empty()) return std::nullopt;
+     }
+ 
+     return user_id;
+diff --git a/src/yuzu/data_dialog.h b/src/yuzu/data_dialog.h
+index 7f988f6047..2915f00848 100644
+--- a/src/yuzu/data_dialog.h
++++ b/src/yuzu/data_dialog.h
+@@ -45,7 +45,7 @@ private:
+     FrontendCommon::DataManager::DataDir m_dir;
+     const QString m_exportName;
+ 
+-    std::string selectProfile();
++    std::optional<std::string> selectProfile();
  };
+ 
+ #endif // DATA_DIALOG_H
+diff --git a/src/yuzu/data_dialog.ui b/src/yuzu/data_dialog.ui
+index 02e674d856..1e33530774 100644
+--- a/src/yuzu/data_dialog.ui
++++ b/src/yuzu/data_dialog.ui
+@@ -27,31 +27,9 @@
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+-    <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1">
++    <layout class="QHBoxLayout" name="horizontalLayout" stretch="0">
+      <item>
+-      <widget class="QListWidget" name="labels">
+-       <property name="sizePolicy">
+-        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+-         <horstretch>0</horstretch>
+-         <verstretch>0</verstretch>
+-        </sizepolicy>
+-       </property>
+-      </widget>
+-     </item>
+-     <item>
+-      <widget class="QStackedWidget" name="page">
+-       <property name="sizePolicy">
+-        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+-         <horstretch>0</horstretch>
+-         <verstretch>0</verstretch>
+-        </sizepolicy>
+-       </property>
+-       <property name="minimumSize">
+-        <size>
+-         <width>275</width>
+-         <height>200</height>
+-        </size>
+-       </property>
++      <widget class="QTabWidget" name="pages">
+        <property name="currentIndex">
+         <number>-1</number>
+        </property>
 diff --git a/src/yuzu/main.cpp b/src/yuzu/main.cpp
 index f8528d9671..270b2e1d6a 100644
 --- a/src/yuzu/main.cpp
@@ -3769,10 +6454,18 @@ index f8528d9671..270b2e1d6a 100644
      // If you start a bundle (binary) on OSX without the Terminal, the working directory is "/".
      // But since we require the working directory to be the executable path for the location of
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 2e7cef0953..010c1c997d 100644
+index 2e7cef0953..44474c2cfc 100644
 --- a/src/yuzu/main_window.cpp
 +++ b/src/yuzu/main_window.cpp
-@@ -1403,23 +1403,22 @@ void MainWindow::InitializeHotkeys() {
+@@ -88,7 +88,6 @@
+ #include "qt_common/util/content.h"
+ #include "qt_common/util/fs.h"
+ #include "qt_common/util/meta.h"
+-#include "qt_common/util/mod.h"
+ #include "qt_common/util/path.h"
+ 
+ // These are wrappers to avoid the calls to CreateDirectory and CreateFile because of the Windows
+@@ -1403,23 +1402,22 @@ void MainWindow::InitializeHotkeys() {
      LinkActionShortcut(ui->action_Load_File, QStringLiteral("Load File"));
      LinkActionShortcut(ui->action_Load_Amiibo, QStringLiteral("Load/Remove Amiibo"));
      LinkActionShortcut(ui->action_Exit, QStringLiteral("Exit Eden"));
@@ -3811,7 +6504,7 @@ index 2e7cef0953..010c1c997d 100644
      LinkActionShortcut(ui->action_Configure, QStringLiteral("Configure"));
      LinkActionShortcut(ui->action_Configure_Current_Game, QStringLiteral("Configure Current Game"));
  
-@@ -1436,7 +1435,7 @@ void MainWindow::InitializeHotkeys() {
+@@ -1436,7 +1434,7 @@ void MainWindow::InitializeHotkeys() {
                  Qt::QueuedConnection);
      };
  
@@ -3820,7 +6513,7 @@ index 2e7cef0953..010c1c997d 100644
          if (emulation_running && ui->action_Fullscreen->isChecked()) {
              ui->action_Fullscreen->setChecked(false);
              ToggleFullscreen();
-@@ -1445,31 +1444,29 @@ void MainWindow::InitializeHotkeys() {
+@@ -1445,31 +1443,29 @@ void MainWindow::InitializeHotkeys() {
      connect_shortcut(QStringLiteral("Change Adapting Filter"), &MainWindow::OnToggleAdaptingFilter);
      connect_shortcut(QStringLiteral("Change Docked Mode"), &MainWindow::OnToggleDockedMode);
      connect_shortcut(QStringLiteral("Change GPU Mode"), &MainWindow::OnToggleGpuAccuracy);
@@ -3866,7 +6559,7 @@ index 2e7cef0953..010c1c997d 100644
          Settings::values.mouse_panning = !Settings::values.mouse_panning;
          if (Settings::values.mouse_panning) {
              render_window->installEventFilter(render_window);
-@@ -2137,7 +2134,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
+@@ -2137,7 +2133,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
      status_bar_update_timer.start(500);
      renderer_status_button->setDisabled(true);
      refresh_button->setDisabled(true);
@@ -3875,7 +6568,7 @@ index 2e7cef0953..010c1c997d 100644
  
      if (UISettings::values.hide_mouse || Settings::values.mouse_panning) {
          render_window->installEventFilter(render_window);
-@@ -2203,8 +2200,8 @@ bool MainWindow::OnShutdownBegin() {
+@@ -2203,8 +2199,8 @@ bool MainWindow::OnShutdownBegin() {
      AllowOSSleep();
  
      // Disable unlimited frame rate and turbo/slow modes
@@ -3885,7 +6578,7 @@ index 2e7cef0953..010c1c997d 100644
  
      if (QtCommon::system->IsShuttingDown()) {
          return false;
-@@ -3727,9 +3724,6 @@ void MainWindow::OnToggleDockedMode() {
+@@ -3727,9 +3723,6 @@ void MainWindow::OnToggleDockedMode() {
  void MainWindow::OnToggleGpuAccuracy() {
      switch (Settings::values.gpu_accuracy.GetValue()) {
      case Settings::GpuAccuracy::Low:
@@ -3895,7 +6588,24 @@ index 2e7cef0953..010c1c997d 100644
          Settings::values.gpu_accuracy.SetValue(Settings::GpuAccuracy::High);
          break;
      case Settings::GpuAccuracy::High:
-@@ -4343,27 +4337,23 @@ void MainWindow::UpdateStatusBar() {
+@@ -3828,7 +3821,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+     Settings::SetConfiguringGlobal(false);
+     ConfigurePerGame dialog(this, title_id, file_name, vk_device_records, *QtCommon::system);
+     dialog.LoadFromFile(v_file);
+-
+     const auto result = dialog.exec();
+ 
+     if (result != QDialog::Accepted && !UISettings::values.configuration_applied) {
+@@ -3840,7 +3832,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+ 
+     const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
+     if (reload) {
+-        OnGameListRefresh();
++        game_list->PopulateAsync(UISettings::values.game_dirs);
+     }
+ 
+     // Do not cause the global config to write local settings into the config file
+@@ -4343,27 +4335,23 @@ void MainWindow::UpdateStatusBar() {
  
      const auto res_info = Settings::values.resolution_info;
      const auto res_scale = res_info.up_factor;
@@ -3932,7 +6642,7 @@ index 2e7cef0953..010c1c997d 100644
      game_fps_label->setVisible(true);
      emu_frametime_label->setVisible(true);
      firmware_label->setVisible(false);
-@@ -4571,18 +4561,15 @@ void MainWindow::SetFirmwareVersion() {
+@@ -4571,18 +4559,15 @@ void MainWindow::SetFirmwareVersion() {
      firmware_label->setToolTip(QString::fromStdString(display_title));
  }
  

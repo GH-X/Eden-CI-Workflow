@@ -1,0 +1,910 @@
+diff --git a/src/shader_recompiler/backend/glasm/emit_glasm_instructions.h b/src/shader_recompiler/backend/glasm/emit_glasm_instructions.h
+index 6572db86dc..51db349f8c 100644
+--- a/src/shader_recompiler/backend/glasm/emit_glasm_instructions.h
++++ b/src/shader_recompiler/backend/glasm/emit_glasm_instructions.h
+@@ -665,6 +665,8 @@ void EmitShuffleDown(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU3
+                      const IR::Value& clamp, const IR::Value& segmentation_mask);
+ void EmitShuffleButterfly(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU32 index,
+                           const IR::Value& clamp, const IR::Value& segmentation_mask);
++void EmitQuadBroadcast(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU32 lane);
++void EmitQuadSwap(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU32 direction);
+ void EmitFSwizzleAdd(EmitContext& ctx, IR::Inst& inst, ScalarF32 op_a, ScalarF32 op_b,
+                      ScalarU32 swizzle);
+ void EmitDPdxFine(EmitContext& ctx, IR::Inst& inst, ScalarF32 op_a);
+diff --git a/src/shader_recompiler/backend/glasm/emit_glasm_warp.cpp b/src/shader_recompiler/backend/glasm/emit_glasm_warp.cpp
+index fb6a597d4e..e29128ffb0 100644
+--- a/src/shader_recompiler/backend/glasm/emit_glasm_warp.cpp
++++ b/src/shader_recompiler/backend/glasm/emit_glasm_warp.cpp
+@@ -97,6 +97,24 @@ void EmitShuffleButterfly(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, Sca
+     Shuffle(ctx, inst, value, index, clamp, segmentation_mask, "XOR");
+ }
+ 
++void EmitQuadBroadcast(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU32 lane) {
++    const Register ret{ctx.reg_alloc.Define(inst)};
++    ctx.Add("AND.U RC.x,{}.threadid,~3;"
++            "AND.U RC.y,{},3;"
++            "OR.U RC.x,RC.x,RC.y;"
++            "SHFIDX.U {},{},RC.x,0x1C03;"
++            "MOV.U {}.x,{}.y;",
++            ctx.stage_name, lane, ret, value, ret, ret);
++}
++
++void EmitQuadSwap(EmitContext& ctx, IR::Inst& inst, ScalarU32 value, ScalarU32 direction) {
++    const Register ret{ctx.reg_alloc.Define(inst)};
++    ctx.Add("ADD.U RC.x,{},1;"
++            "SHFXOR.U {},{},RC.x,0x1C03;"
++            "MOV.U {}.x,{}.y;",
++            direction, ret, value, ret, ret);
++}
++
+ void EmitFSwizzleAdd(EmitContext& ctx, IR::Inst& inst, ScalarF32 op_a, ScalarF32 op_b,
+                      ScalarU32 swizzle) {
+     const auto ret{ctx.reg_alloc.Define(inst)};
+diff --git a/src/shader_recompiler/backend/glsl/emit_glsl_instructions.h b/src/shader_recompiler/backend/glsl/emit_glsl_instructions.h
+index d508b84cec..433e626228 100644
+--- a/src/shader_recompiler/backend/glsl/emit_glsl_instructions.h
++++ b/src/shader_recompiler/backend/glsl/emit_glsl_instructions.h
+@@ -743,6 +743,10 @@ void EmitShuffleDown(EmitContext& ctx, IR::Inst& inst, std::string_view value,
+ void EmitShuffleButterfly(EmitContext& ctx, IR::Inst& inst, std::string_view value,
+                           std::string_view index, std::string_view clamp,
+                           std::string_view segmentation_mask);
++void EmitQuadBroadcast(EmitContext& ctx, IR::Inst& inst, std::string_view value,
++                       std::string_view lane);
++void EmitQuadSwap(EmitContext& ctx, IR::Inst& inst, std::string_view value,
++                  std::string_view direction);
+ void EmitFSwizzleAdd(EmitContext& ctx, IR::Inst& inst, std::string_view op_a, std::string_view op_b,
+                      std::string_view swizzle);
+ void EmitDPdxFine(EmitContext& ctx, IR::Inst& inst, std::string_view op_a);
+diff --git a/src/shader_recompiler/backend/glsl/emit_glsl_warp.cpp b/src/shader_recompiler/backend/glsl/emit_glsl_warp.cpp
+index f9be5de1c0..aacb071f5d 100644
+--- a/src/shader_recompiler/backend/glsl/emit_glsl_warp.cpp
++++ b/src/shader_recompiler/backend/glsl/emit_glsl_warp.cpp
+@@ -200,6 +200,18 @@ void EmitShuffleButterfly(EmitContext& ctx, IR::Inst& inst, std::string_view val
+     ctx.AddU32("{}=shfl_in_bounds?shfl_result:{};", inst, value);
+ }
+ 
++void EmitQuadBroadcast(EmitContext& ctx, IR::Inst& inst, std::string_view value,
++                       std::string_view lane) {
++    const auto src_thread_id{fmt::format("(({}&~3)|({}& 3))", THREAD_ID, lane)};
++    ctx.AddU32("{}=readInvocationARB({},{});", inst, value, src_thread_id);
++}
++
++void EmitQuadSwap(EmitContext& ctx, IR::Inst& inst, std::string_view value,
++                  std::string_view direction) {
++    const auto src_thread_id{fmt::format("({}^({}+1))", THREAD_ID, direction)};
++    ctx.AddU32("{}=readInvocationARB({},{});", inst, value, src_thread_id);
++}
++
+ void EmitFSwizzleAdd(EmitContext& ctx, IR::Inst& inst, std::string_view op_a, std::string_view op_b,
+                      std::string_view swizzle) {
+     const auto mask{fmt::format("({}>>((gl_SubGroupInvocationARB&3)<<1))&3", swizzle)};
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv.cpp b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
+index 313a1deb30..148bd44721 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv.cpp
+@@ -331,6 +331,11 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
+         if (ctx.runtime_info.force_early_z) {
+             ctx.AddExecutionMode(main, spv::ExecutionMode::EarlyFragmentTests);
+         }
++        if (ctx.profile.support_shader_quad_control && program.info.uses_quad_shuffles) {
++            ctx.AddExtension("SPV_KHR_quad_control");
++            ctx.AddCapability(spv::Capability::QuadControlKHR);
++            ctx.AddExecutionMode(main, spv::ExecutionMode::RequireFullQuadsKHR);
++        }
+         break;
+     default:
+         throw NotImplementedException("Stage {}", program.stage);
+@@ -449,6 +454,12 @@ void SetupCapabilities(const Profile& profile, const Info& info, EmitContext& ct
+             ctx.AddCapability(spv::Capability::GroupNonUniformVote);
+         }
+     }
++    if (info.uses_quad_shuffles) {
++        if (profile.support_quad_shuffles) {
++            ctx.AddCapability(spv::Capability::GroupNonUniformQuad);
++        }
++        ctx.AddCapability(spv::Capability::GroupNonUniformShuffle);
++    }
+     if (info.uses_int64_bit_atomics && profile.support_int64_atomics) {
+         ctx.AddCapability(spv::Capability::Int64Atomics);
+     }
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp b/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
+index c2511942d9..62a82dce9d 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
+@@ -14,6 +14,38 @@
+ 
+ namespace Shader::Backend::SPIRV {
+ namespace {
++class DescriptorIndex {
++public:
++    explicit DescriptorIndex(EmitContext& ctx, const IR::Value& index)
++        : id{index.IsImmediate() ? ctx.Const(index.U32()) : ctx.Def(index)},
++          is_non_uniform{ctx.profile.support_sampled_image_array_nonuniform_indexing &&
++                         !index.IsImmediate()} {
++        if (!is_non_uniform) {
++            return;
++        }
++        if (ctx.profile.supported_spirv < 0x00010400) {
++            ctx.AddExtension("SPV_EXT_descriptor_indexing");
++        }
++        ctx.AddCapability(spv::Capability::ShaderNonUniform);
++        ctx.AddCapability(spv::Capability::SampledImageArrayNonUniformIndexing);
++        Decorate(ctx, id);
++    }
++
++    Id Value() const {
++        return id;
++    }
++
++    void Decorate(EmitContext& ctx, Id object) const {
++        if (is_non_uniform) {
++            ctx.Decorate(object, spv::Decoration::NonUniform);
++        }
++    }
++
++private:
++    Id id;
++    bool is_non_uniform;
++};
++
+ class ImageOperands {
+ public:
+     [[maybe_unused]] static constexpr bool ImageSampleOffsetAllowed = false;
+@@ -189,8 +221,12 @@ private:
+ Id Texture(EmitContext& ctx, IR::TextureInstInfo info, [[maybe_unused]] const IR::Value& index) {
+     const TextureDefinition& def{ctx.textures.at(info.descriptor_index)};
+     if (def.count > 1) {
+-        const Id pointer{ctx.OpAccessChain(def.pointer_type, def.id, ctx.Def(index))};
+-        return ctx.OpLoad(def.sampled_type, pointer);
++        const DescriptorIndex idx{ctx, index};
++        const Id pointer{ctx.OpAccessChain(def.pointer_type, def.id, idx.Value())};
++        idx.Decorate(ctx, pointer);
++        const Id object{ctx.OpLoad(def.sampled_type, pointer)};
++        idx.Decorate(ctx, object);
++        return object;
+     } else {
+         return ctx.OpLoad(def.sampled_type, def.id);
+     }
+@@ -208,9 +244,14 @@ Id TextureImage(EmitContext& ctx, IR::TextureInstInfo info, const IR::Value& ind
+     } else {
+         const TextureDefinition& def{ctx.textures.at(info.descriptor_index)};
+         if (def.count > 1) {
+-            const Id idx{index.IsImmediate() ? ctx.Const(index.U32()) : ctx.Def(index)};
+-            const Id ptr{ctx.OpAccessChain(def.pointer_type, def.id, idx)};
+-            return ctx.OpImage(def.image_type, ctx.OpLoad(def.sampled_type, ptr));
++            const DescriptorIndex idx{ctx, index};
++            const Id ptr{ctx.OpAccessChain(def.pointer_type, def.id, idx.Value())};
++            idx.Decorate(ctx, ptr);
++            const Id object{ctx.OpLoad(def.sampled_type, ptr)};
++            idx.Decorate(ctx, object);
++            const Id image{ctx.OpImage(def.image_type, object)};
++            idx.Decorate(ctx, image);
++            return image;
+         }
+         return ctx.OpImage(def.image_type, ctx.OpLoad(def.sampled_type, def.id));
+     }
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv_instructions.h b/src/shader_recompiler/backend/spirv/emit_spirv_instructions.h
+index 171977c85c..de5b7dd8bf 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv_instructions.h
++++ b/src/shader_recompiler/backend/spirv/emit_spirv_instructions.h
+@@ -622,6 +622,8 @@ Id EmitShuffleDown(EmitContext& ctx, IR::Inst* inst, Id value, Id index, Id clam
+                    Id segmentation_mask);
+ Id EmitShuffleButterfly(EmitContext& ctx, IR::Inst* inst, Id value, Id index, Id clamp,
+                         Id segmentation_mask);
++Id EmitQuadBroadcast(EmitContext& ctx, Id value, Id lane);
++Id EmitQuadSwap(EmitContext& ctx, Id value, Id direction);
+ Id EmitFSwizzleAdd(EmitContext& ctx, Id op_a, Id op_b, Id swizzle);
+ Id EmitDPdxFine(EmitContext& ctx, Id op_a);
+ Id EmitDPdyFine(EmitContext& ctx, Id op_a);
+diff --git a/src/shader_recompiler/backend/spirv/emit_spirv_warp.cpp b/src/shader_recompiler/backend/spirv/emit_spirv_warp.cpp
+index 77ff8c5731..3fbf337d8d 100644
+--- a/src/shader_recompiler/backend/spirv/emit_spirv_warp.cpp
++++ b/src/shader_recompiler/backend/spirv/emit_spirv_warp.cpp
+@@ -220,6 +220,21 @@ Id EmitShuffleButterfly(EmitContext& ctx, IR::Inst* inst, Id value, Id index, Id
+     return SelectValue(ctx, in_range, value, src_thread_id);
+ }
+ 
++Id EmitQuadBroadcast(EmitContext& ctx, Id value, Id lane) {
++    if (ctx.profile.support_quad_shuffles) {
++        return ctx.OpGroupNonUniformQuadBroadcast(ctx.U32[1], SubgroupScope(ctx), value, lane);
++    }
++    const Id base{ctx.OpBitwiseAnd(ctx.U32[1], GetThreadId(ctx), ctx.Const(~3u))};
++    const Id local_lane{ctx.OpBitwiseAnd(ctx.U32[1], lane, ctx.Const(3u))};
++    const Id src_thread_id{ctx.OpBitwiseOr(ctx.U32[1], base, local_lane)};
++    return ctx.OpGroupNonUniformShuffle(ctx.U32[1], SubgroupScope(ctx), value, src_thread_id);
++}
++
++Id EmitQuadSwap(EmitContext& ctx, Id value, Id direction) {
++    const Id xor_mask{ctx.OpIAdd(ctx.U32[1], direction, ctx.Const(1u))};
++    return ctx.OpGroupNonUniformShuffleXor(ctx.U32[1], SubgroupScope(ctx), value, xor_mask);
++}
++
+ Id EmitFSwizzleAdd(EmitContext& ctx, Id op_a, Id op_b, Id swizzle) {
+     const Id three{ctx.Const(3U)};
+     Id mask{ctx.OpLoad(ctx.U32[1], ctx.subgroup_local_invocation_id)};
+diff --git a/src/shader_recompiler/frontend/ir/ir_emitter.cpp b/src/shader_recompiler/frontend/ir/ir_emitter.cpp
+index 171161ffd1..89ff2a6cac 100644
+--- a/src/shader_recompiler/frontend/ir/ir_emitter.cpp
++++ b/src/shader_recompiler/frontend/ir/ir_emitter.cpp
+@@ -2100,6 +2100,14 @@ U32 IREmitter::ShuffleButterfly(const IR::U32& value, const IR::U32& index, cons
+     return Inst<U32>(Opcode::ShuffleButterfly, value, index, clamp, seg_mask);
+ }
+ 
++U32 IREmitter::QuadBroadcast(const IR::U32& value, const IR::U32& lane) {
++    return Inst<U32>(Opcode::QuadBroadcast, value, lane);
++}
++
++U32 IREmitter::QuadSwap(const IR::U32& value, const IR::U32& direction) {
++    return Inst<U32>(Opcode::QuadSwap, value, direction);
++}
++
+ F32 IREmitter::FSwizzleAdd(const F32& a, const F32& b, const U32& swizzle, FpControl control) {
+     return Inst<F32>(Opcode::FSwizzleAdd, Flags{control}, a, b, swizzle);
+ }
+diff --git a/src/shader_recompiler/frontend/ir/ir_emitter.h b/src/shader_recompiler/frontend/ir/ir_emitter.h
+index 725eac3951..c0927a38f3 100644
+--- a/src/shader_recompiler/frontend/ir/ir_emitter.h
++++ b/src/shader_recompiler/frontend/ir/ir_emitter.h
+@@ -394,6 +394,8 @@ public:
+                                   const IR::U32& seg_mask);
+     [[nodiscard]] U32 ShuffleButterfly(const IR::U32& value, const IR::U32& index,
+                                        const IR::U32& clamp, const IR::U32& seg_mask);
++    [[nodiscard]] U32 QuadBroadcast(const IR::U32& value, const IR::U32& lane);
++    [[nodiscard]] U32 QuadSwap(const IR::U32& value, const IR::U32& direction);
+     [[nodiscard]] F32 FSwizzleAdd(const F32& a, const F32& b, const U32& swizzle,
+                                   FpControl control = {});
+ 
+diff --git a/src/shader_recompiler/frontend/ir/opcodes.cpp b/src/shader_recompiler/frontend/ir/opcodes.cpp
+index 9e4d9e65a8..982f7c01bd 100644
+--- a/src/shader_recompiler/frontend/ir/opcodes.cpp
++++ b/src/shader_recompiler/frontend/ir/opcodes.cpp
+@@ -5,6 +5,27 @@
+ 
+ namespace Shader::IR {
+ 
++namespace Detail {
++
++OpcodeMeta META_TABLE[534] = {
++#define OPCODE(name_token, type_token, ...)                                                        \
++    {                                                                                              \
++        .name{#name_token},                                                                        \
++        .type = type_token,                                                                        \
++        .arg_types{__VA_ARGS__},                                                                   \
++    },
++#include "opcodes.inc"
++#undef OPCODE
++};
++
++u8 NUM_ARGS[534] = {
++#define OPCODE(name_token, type_token, ...) u8(CalculateNumArgsOf(Opcode::name_token)),
++#include "opcodes.inc"
++#undef OPCODE
++};
++
++}
++
+ std::string_view NameOf(Opcode op) {
+     return Detail::META_TABLE[static_cast<size_t>(op)].name;
+ }
+diff --git a/src/shader_recompiler/frontend/ir/opcodes.h b/src/shader_recompiler/frontend/ir/opcodes.h
+index 3d6a3539bb..a7011712dc 100644
+--- a/src/shader_recompiler/frontend/ir/opcodes.h
++++ b/src/shader_recompiler/frontend/ir/opcodes.h
+@@ -30,69 +30,54 @@ struct OpcodeMeta {
+ };
+ 
+ // using enum Type;
+-constexpr Type Void{Type::Void};
+-constexpr Type Opaque{Type::Opaque};
+-constexpr Type Reg{Type::Reg};
+-constexpr Type Pred{Type::Pred};
+-constexpr Type Attribute{Type::Attribute};
+-constexpr Type Patch{Type::Patch};
+-constexpr Type U1{Type::U1};
+-constexpr Type U8{Type::U8};
+-constexpr Type U16{Type::U16};
+-constexpr Type U32{Type::U32};
+-constexpr Type U64{Type::U64};
+-constexpr Type F16{Type::F16};
+-constexpr Type F32{Type::F32};
+-constexpr Type F64{Type::F64};
+-constexpr Type U32x2{Type::U32x2};
+-constexpr Type U32x3{Type::U32x3};
+-constexpr Type U32x4{Type::U32x4};
+-constexpr Type F16x2{Type::F16x2};
+-constexpr Type F16x3{Type::F16x3};
+-constexpr Type F16x4{Type::F16x4};
+-constexpr Type F32x2{Type::F32x2};
+-constexpr Type F32x3{Type::F32x3};
+-constexpr Type F32x4{Type::F32x4};
+-constexpr Type F64x2{Type::F64x2};
+-constexpr Type F64x3{Type::F64x3};
+-constexpr Type F64x4{Type::F64x4};
+-
+-constexpr OpcodeMeta META_TABLE[]{
+-#define OPCODE(name_token, type_token, ...)                                                        \
+-    {                                                                                              \
+-        .name{#name_token},                                                                        \
+-        .type = type_token,                                                                        \
+-        .arg_types{__VA_ARGS__},                                                                   \
+-    },
+-#include "opcodes.inc"
+-#undef OPCODE
+-};
+-constexpr size_t CalculateNumArgsOf(Opcode op) {
+-    const auto& arg_types{META_TABLE[static_cast<size_t>(op)].arg_types};
+-    return static_cast<size_t>(
+-        std::distance(arg_types.begin(), std::ranges::find(arg_types, Type::Void)));
++static constexpr Type Void{Type::Void};
++static constexpr Type Opaque{Type::Opaque};
++static constexpr Type Reg{Type::Reg};
++static constexpr Type Pred{Type::Pred};
++static constexpr Type Attribute{Type::Attribute};
++static constexpr Type Patch{Type::Patch};
++static constexpr Type U1{Type::U1};
++static constexpr Type U8{Type::U8};
++static constexpr Type U16{Type::U16};
++static constexpr Type U32{Type::U32};
++static constexpr Type U64{Type::U64};
++static constexpr Type F16{Type::F16};
++static constexpr Type F32{Type::F32};
++static constexpr Type F64{Type::F64};
++static constexpr Type U32x2{Type::U32x2};
++static constexpr Type U32x3{Type::U32x3};
++static constexpr Type U32x4{Type::U32x4};
++static constexpr Type F16x2{Type::F16x2};
++static constexpr Type F16x3{Type::F16x3};
++static constexpr Type F16x4{Type::F16x4};
++static constexpr Type F32x2{Type::F32x2};
++static constexpr Type F32x3{Type::F32x3};
++static constexpr Type F32x4{Type::F32x4};
++static constexpr Type F64x2{Type::F64x2};
++static constexpr Type F64x3{Type::F64x3};
++static constexpr Type F64x4{Type::F64x4};
++
++extern OpcodeMeta META_TABLE[534];
++constexpr size_t CalculateNumArgsOf(Opcode op) noexcept {
++    const auto& arg_types = META_TABLE[size_t(op)].arg_types;
++    return size_t(std::distance(arg_types.begin(), std::ranges::find(arg_types, Type::Void)));
+ }
+-
+-constexpr u8 NUM_ARGS[]{
+-#define OPCODE(name_token, type_token, ...) static_cast<u8>(CalculateNumArgsOf(Opcode::name_token)),
+-#include "opcodes.inc"
+-#undef OPCODE
+-};
++extern u8 NUM_ARGS[534];
+ } // namespace Detail
+ 
+ /// Get return type of an opcode
+ [[nodiscard]] inline Type TypeOf(Opcode op) noexcept {
+-    return Detail::META_TABLE[static_cast<size_t>(op)].type;
++    return Detail::META_TABLE[size_t(op)].type;
+ }
+ 
+ /// Get the number of arguments an opcode accepts
+ [[nodiscard]] inline size_t NumArgsOf(Opcode op) noexcept {
+-    return static_cast<size_t>(Detail::NUM_ARGS[static_cast<size_t>(op)]);
++    return size_t(Detail::NUM_ARGS[size_t(op)]);
+ }
+ 
+ /// Get the required type of an argument of an opcode
+ [[nodiscard]] inline Type ArgTypeOf(Opcode op, size_t arg_index) noexcept {
+-    return Detail::META_TABLE[static_cast<size_t>(op)].arg_types[arg_index];
++    return Detail::META_TABLE[size_t(op)].arg_types[arg_index];
+ }
+ 
+ /// Get the name of an opcode
+diff --git a/src/shader_recompiler/frontend/ir/opcodes.inc b/src/shader_recompiler/frontend/ir/opcodes.inc
+index 960009d89e..0e5dc97eaf 100644
+--- a/src/shader_recompiler/frontend/ir/opcodes.inc
++++ b/src/shader_recompiler/frontend/ir/opcodes.inc
+@@ -579,6 +579,8 @@ OPCODE(ShuffleIndex,                                        U32,            U32,
+ OPCODE(ShuffleUp,                                           U32,            U32,            U32,            U32,            U32,                            )
+ OPCODE(ShuffleDown,                                         U32,            U32,            U32,            U32,            U32,                            )
+ OPCODE(ShuffleButterfly,                                    U32,            U32,            U32,            U32,            U32,                            )
++OPCODE(QuadBroadcast,                                       U32,            U32,            U32,                                                                    )
++OPCODE(QuadSwap,                                            U32,            U32,            U32,                                                                    )
+ OPCODE(FSwizzleAdd,                                         F32,            F32,            F32,            U32,                                            )
+ OPCODE(DPdxFine,                                            F32,            F32,                                                                            )
+ OPCODE(DPdyFine,                                            F32,            F32,                                                                            )
+diff --git a/src/shader_recompiler/frontend/maxwell/translate/impl/warp_shuffle.cpp b/src/shader_recompiler/frontend/maxwell/translate/impl/warp_shuffle.cpp
+index 972eec8276..6d343f4a3d 100644
+--- a/src/shader_recompiler/frontend/maxwell/translate/impl/warp_shuffle.cpp
++++ b/src/shader_recompiler/frontend/maxwell/translate/impl/warp_shuffle.cpp
+@@ -36,7 +36,10 @@ enum class ShuffleMode : u64 {
+     }
+ }
+ 
+-void Shuffle(TranslatorVisitor& v, u64 insn, const IR::U32& index, const IR::U32& mask) {
++constexpr u32 QUAD_MASK = (28u << 8) | 3u;
++
++void Shuffle(TranslatorVisitor& v, u64 insn, const IR::U32& index, const IR::U32& mask,
++             bool index_is_imm, u32 index_imm, bool mask_is_imm, u32 mask_imm) {
+     union {
+         u64 insn;
+         BitField<0, 8, IR::Reg> dest_reg;
+@@ -45,6 +48,21 @@ void Shuffle(TranslatorVisitor& v, u64 insn, const IR::U32& index, const IR::U32
+         BitField<48, 3, IR::Pred> pred;
+     } const shfl{insn};
+ 
++    const bool is_quad_candidate{mask_is_imm && mask_imm == QUAD_MASK && index_is_imm &&
++                                  v.env.ShaderStage() == Stage::Fragment};
++    if (is_quad_candidate) {
++        if (shfl.mode == ShuffleMode::IDX && index_imm <= 3) {
++            v.X(shfl.dest_reg, v.ir.QuadBroadcast(v.X(shfl.src_reg), v.ir.Imm32(index_imm)));
++            v.ir.SetPred(shfl.pred, v.ir.Imm1(true));
++            return;
++        }
++        if (shfl.mode == ShuffleMode::BFLY && index_imm >= 1 && index_imm <= 3) {
++            v.X(shfl.dest_reg, v.ir.QuadSwap(v.X(shfl.src_reg), v.ir.Imm32(index_imm - 1)));
++            v.ir.SetPred(shfl.pred, v.ir.Imm1(true));
++            return;
++        }
++    }
++
+     const IR::U32 result{ShuffleOperation(v.ir, v.X(shfl.src_reg), index, mask, shfl.mode)};
+     v.ir.SetPred(shfl.pred, v.ir.GetInBoundsFromOp(result));
+     v.X(shfl.dest_reg, result);
+@@ -59,11 +77,14 @@ void TranslatorVisitor::SHFL(u64 insn) {
+         BitField<29, 1, u64> src_b_flag;
+         BitField<34, 13, u64> src_b_imm;
+     } const flags{insn};
+-    const IR::U32 src_a{flags.src_a_flag != 0 ? ir.Imm32(static_cast<u32>(flags.src_a_imm))
+-                                              : GetReg20(insn)};
+-    const IR::U32 src_b{flags.src_b_flag != 0 ? ir.Imm32(static_cast<u32>(flags.src_b_imm))
+-                                              : GetReg39(insn)};
+-    Shuffle(*this, insn, src_a, src_b);
++    const bool index_is_imm{flags.src_a_flag != 0};
++    const bool mask_is_imm{flags.src_b_flag != 0};
++    const IR::U32 src_a{index_is_imm ? ir.Imm32(static_cast<u32>(flags.src_a_imm))
++                                     : GetReg20(insn)};
++    const IR::U32 src_b{mask_is_imm ? ir.Imm32(static_cast<u32>(flags.src_b_imm))
++                                    : GetReg39(insn)};
++    Shuffle(*this, insn, src_a, src_b, index_is_imm, static_cast<u32>(flags.src_a_imm),
++            mask_is_imm, static_cast<u32>(flags.src_b_imm));
+ }
+ 
+ } // namespace Shader::Maxwell
+diff --git a/src/shader_recompiler/host_translate_info.h b/src/shader_recompiler/host_translate_info.h
+index 1b53404fcc..96e234c977 100644
+--- a/src/shader_recompiler/host_translate_info.h
++++ b/src/shader_recompiler/host_translate_info.h
+@@ -17,6 +17,9 @@ struct HostTranslateInfo {
+     bool support_snorm_render_buffer{};  ///< True when the device supports SNORM render buffers
+     bool support_viewport_index_layer{}; ///< True when the device supports gl_Layer in VS
+     u32 min_ssbo_alignment{};            ///< Minimum alignment supported by the device for SSBOs
++    u32 max_per_stage_descriptor_sampled_images{1024}; ///< maximum sampled descriptors per stage
++    u32 max_per_stage_resources{4096};                 ///< maximum resources per stage
++    u32 max_descriptor_set_sampled_images{1024};        ///< maximum sampled descriptors per set
+     bool support_geometry_shader_passthrough{}; ///< True when the device supports geometry
+                                                 ///< passthrough shaders
+     bool support_conditional_barrier{}; ///< True when the device supports barriers in conditional
+diff --git a/src/shader_recompiler/ir_opt/collect_shader_info_pass.cpp b/src/shader_recompiler/ir_opt/collect_shader_info_pass.cpp
+index 2bfa3227a8..8475f37bb8 100644
+--- a/src/shader_recompiler/ir_opt/collect_shader_info_pass.cpp
++++ b/src/shader_recompiler/ir_opt/collect_shader_info_pass.cpp
+@@ -498,6 +498,10 @@ void VisitUsages(Info& info, IR::Inst& inst) {
+     case IR::Opcode::ShuffleButterfly:
+         info.uses_subgroup_shuffles = true;
+         break;
++    case IR::Opcode::QuadBroadcast:
++    case IR::Opcode::QuadSwap:
++        info.uses_quad_shuffles = true;
++        break;
+     case IR::Opcode::GetCbufU8:
+     case IR::Opcode::GetCbufS8:
+     case IR::Opcode::GetCbufU16:
+diff --git a/src/shader_recompiler/ir_opt/texture_pass.cpp b/src/shader_recompiler/ir_opt/texture_pass.cpp
+index 20b8591072..55b6f7213c 100644
+--- a/src/shader_recompiler/ir_opt/texture_pass.cpp
++++ b/src/shader_recompiler/ir_opt/texture_pass.cpp
+@@ -32,6 +32,71 @@ using TextureInstVector = boost::container::small_vector<TextureInst, 24>;
+ 
+ constexpr u32 DESCRIPTOR_SIZE = 8;
+ constexpr u32 DESCRIPTOR_SIZE_SHIFT = static_cast<u32>(std::countr_zero(DESCRIPTOR_SIZE));
++constexpr u32 DYNAMIC_DESCRIPTOR_CBUF_BYTES = 16 * 1024;
++constexpr u32 MAX_DYNAMIC_DESCRIPTOR_COUNT = 1024;
++
++u32 DynamicDescriptorSizeShift(const IR::U32& dynamic_offset) {
++    const IR::Inst* const inst{dynamic_offset.InstRecursive()};
++    if (!inst || inst->GetOpcode() != IR::Opcode::ShiftLeftLogical32) {
++        return DESCRIPTOR_SIZE_SHIFT;
++    }
++    const IR::Value shift{inst->Arg(1)};
++    if (!shift.IsImmediate()) {
++        return DESCRIPTOR_SIZE_SHIFT;
++    }
++    const u32 size_shift{shift.U32()};
++    return size_shift >= DESCRIPTOR_SIZE_SHIFT && size_shift < 31 ? size_shift
++                                                                  : DESCRIPTOR_SIZE_SHIFT;
++}
++
++u32 DynamicDescriptorCount(u32 base_offset, u32 size_shift) {
++    if (size_shift >= 31 || base_offset >= DYNAMIC_DESCRIPTOR_CBUF_BYTES) {
++        return 1;
++    }
++    const u32 stride{1U << size_shift};
++    const u32 available{DYNAMIC_DESCRIPTOR_CBUF_BYTES - base_offset};
++    if (available < DESCRIPTOR_SIZE) {
++        return 1;
++    }
++    const u32 available_count{1U + (available - DESCRIPTOR_SIZE) / stride};
++    return std::min(MAX_DYNAMIC_DESCRIPTOR_COUNT, available_count);
++}
++
++u32 SaturatingSub(u32 lhs, u32 rhs) {
++    return lhs > rhs ? lhs - rhs : 0;
++}
++
++template <typename Descriptors>
++u32 StaticDescriptorCount(const Descriptors& descriptors) {
++    u32 count{};
++    for (const auto& desc : descriptors) {
++        if (desc.count <= 1) {
++            count += desc.count;
++        }
++    }
++    return count;
++}
++
++u32 DynamicSampledTextureCap(const Info& info, const HostTranslateInfo& host_info,
++                             u32 dynamic_arrays) {
++    if (dynamic_arrays == 0) {
++        return MAX_DYNAMIC_DESCRIPTOR_COUNT;
++    }
++    const u32 sampled_static_count{StaticDescriptorCount(info.texture_buffer_descriptors) +
++                                   StaticDescriptorCount(info.texture_descriptors)};
++    const u32 resource_static_count{
++        NumDescriptors(info.constant_buffer_descriptors) +
++        NumDescriptors(info.storage_buffers_descriptors) + sampled_static_count +
++        NumDescriptors(info.image_buffer_descriptors) + NumDescriptors(info.image_descriptors)};
++    const u32 sampled_limit{std::min(host_info.max_per_stage_descriptor_sampled_images,
++                                     host_info.max_descriptor_set_sampled_images)};
++    const u32 sampled_budget{SaturatingSub(sampled_limit, sampled_static_count)};
++    const u32 resource_budget{SaturatingSub(host_info.max_per_stage_resources,
++                                            resource_static_count)};
++    const u32 sampled_cap{sampled_budget / dynamic_arrays};
++    const u32 resource_cap{resource_budget / dynamic_arrays};
++    return std::max(1U, std::min({MAX_DYNAMIC_DESCRIPTOR_COUNT, sampled_cap, resource_cap}));
++}
+ 
+ IR::Opcode IndexedInstruction(const IR::Inst& inst) {
+     switch (inst.GetOpcode()) {
+@@ -109,6 +174,39 @@ IR::Opcode IndexedInstruction(const IR::Inst& inst) {
+     }
+ }
+ 
++bool IsStorageImageOpcode(IR::Opcode opcode) {
++    switch (opcode) {
++    case IR::Opcode::ImageRead:
++    case IR::Opcode::ImageAtomicIAdd32:
++    case IR::Opcode::ImageAtomicSMin32:
++    case IR::Opcode::ImageAtomicUMin32:
++    case IR::Opcode::ImageAtomicSMax32:
++    case IR::Opcode::ImageAtomicUMax32:
++    case IR::Opcode::ImageAtomicInc32:
++    case IR::Opcode::ImageAtomicDec32:
++    case IR::Opcode::ImageAtomicAnd32:
++    case IR::Opcode::ImageAtomicOr32:
++    case IR::Opcode::ImageAtomicXor32:
++    case IR::Opcode::ImageAtomicExchange32:
++    case IR::Opcode::ImageWrite:
++        return true;
++    default:
++        return false;
++    }
++}
++
++u32 DynamicSampledTextureArrayCount(const TextureInstVector& to_replace) {
++    u32 count{};
++    for (const TextureInst& inst : to_replace) {
++        const auto flags{inst.inst->Flags<IR::TextureInstInfo>()};
++        if (inst.cbuf.count > 1 && !IsStorageImageOpcode(IndexedInstruction(*inst.inst)) &&
++            flags.type != TextureType::Buffer) {
++            ++count;
++        }
++    }
++    return count;
++}
++
+ bool IsBindless(const IR::Inst& inst) {
+     switch (inst.GetOpcode()) {
+     case IR::Opcode::BindlessImageSampleImplicitLod:
+@@ -354,6 +452,7 @@ std::optional<ConstBufferAddr> TryGetConstBuffer(const IR::Inst* inst, Environme
+     } else {
+         return std::nullopt;
+     }
++    const u32 size_shift{DynamicDescriptorSizeShift(dynamic_offset)};
+     return ConstBufferAddr{
+         .index = index.U32(),
+         .offset = base_offset,
+@@ -362,7 +461,7 @@ std::optional<ConstBufferAddr> TryGetConstBuffer(const IR::Inst* inst, Environme
+         .secondary_offset = 0,
+         .secondary_shift_left = 0,
+         .dynamic_offset = dynamic_offset,
+-        .count = 8,
++        .count = DynamicDescriptorCount(base_offset, size_shift),
+         .has_secondary = false,
+     };
+ }
+@@ -589,6 +688,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+         program.info.texture_descriptors,
+         program.info.image_descriptors,
+     };
++    const u32 sampled_dynamic_cap{
++        DynamicSampledTextureCap(program.info, host_info, DynamicSampledTextureArrayCount(to_replace))};
+     for (TextureInst& texture_inst : to_replace) {
+         // TODO: Handle arrays
+         IR::Inst* const inst{texture_inst.inst};
+@@ -632,6 +733,9 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+             break;
+         }
+         u32 index;
++        const u32 size_shift{cbuf.count > 1 ? DynamicDescriptorSizeShift(cbuf.dynamic_offset)
++                                            : DESCRIPTOR_SIZE_SHIFT};
++        u32 count{cbuf.count};
+         switch (inst->GetOpcode()) {
+         case IR::Opcode::ImageRead:
+         case IR::Opcode::ImageAtomicIAdd32:
+@@ -660,8 +764,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .is_integer = is_integer,
+                     .cbuf_index = cbuf.index,
+                     .cbuf_offset = cbuf.offset,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             } else {
+                 index = descriptors.Add(ImageDescriptor{
+@@ -672,8 +776,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .is_integer = is_integer,
+                     .cbuf_index = cbuf.index,
+                     .cbuf_offset = cbuf.offset,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             }
+             break;
+@@ -688,10 +792,11 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .secondary_cbuf_index = cbuf.secondary_index,
+                     .secondary_cbuf_offset = cbuf.secondary_offset,
+                     .secondary_shift_left = cbuf.secondary_shift_left,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             } else {
++                count = std::min(count, sampled_dynamic_cap);
+                 index = descriptors.Add(TextureDescriptor{
+                     .type = flags.type,
+                     .is_depth = flags.is_depth != 0,
+@@ -703,8 +808,8 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+                     .secondary_cbuf_index = cbuf.secondary_index,
+                     .secondary_cbuf_offset = cbuf.secondary_offset,
+                     .secondary_shift_left = cbuf.secondary_shift_left,
+-                    .count = cbuf.count,
+-                    .size_shift = DESCRIPTOR_SIZE_SHIFT,
++                    .count = count,
++                    .size_shift = size_shift,
+                 });
+             }
+             break;
+@@ -712,12 +817,12 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
+         flags.descriptor_index.Assign(index);
+         inst->SetFlags(flags);
+ 
+-        if (cbuf.count > 1) {
++        if (count > 1) {
+             const auto insert_point{IR::Block::InstructionList::s_iterator_to(*inst)};
+             IR::IREmitter ir{*texture_inst.block, insert_point};
+-            const IR::U32 shift{ir.Imm32(DESCRIPTOR_SIZE_SHIFT)};
++            const IR::U32 shift{ir.Imm32(size_shift)};
+             inst->SetArg(0, ir.UMin(ir.ShiftRightLogical(cbuf.dynamic_offset, shift),
+-                        ir.Imm32(DESCRIPTOR_SIZE - 1)));
++                        ir.Imm32(count - 1)));
+         } else {
+             inst->SetArg(0, IR::Value{});
+         }
+diff --git a/src/shader_recompiler/profile.h b/src/shader_recompiler/profile.h
+index 90e46bb1ba..3e7aa05c47 100644
+--- a/src/shader_recompiler/profile.h
++++ b/src/shader_recompiler/profile.h
+@@ -26,6 +26,8 @@ struct Profile {
+     bool support_fp32_signed_zero_nan_preserve{};
+     bool support_fp64_signed_zero_nan_preserve{};
+     bool support_explicit_workgroup_layout{};
++    bool support_shader_quad_control{};
++    bool support_quad_shuffles{};
+     bool support_vote{};
+     bool support_viewport_index_layer_non_geometry{};
+     bool support_viewport_mask{};
+@@ -45,6 +47,7 @@ struct Profile {
+     bool support_scaled_attributes{};
+     bool support_multi_viewport{};
+     bool support_geometry_streams{};
++    bool support_sampled_image_array_nonuniform_indexing{};
+ 
+     bool warp_size_potentially_larger_than_guest{};
+ 
+diff --git a/src/shader_recompiler/shader_info.h b/src/shader_recompiler/shader_info.h
+index dfacc06802..8ce403611a 100644
+--- a/src/shader_recompiler/shader_info.h
++++ b/src/shader_recompiler/shader_info.h
+@@ -251,6 +251,7 @@ struct Info {
+     bool uses_is_helper_invocation{};
+     bool uses_subgroup_invocation_id{};
+     bool uses_subgroup_shuffles{};
++    bool uses_quad_shuffles{};
+     std::array<bool, 30> uses_patches{};
+ 
+     std::array<Interpolation, 32> interpolation{};
+diff --git a/src/video_core/renderer_vulkan/pipeline_helper.h b/src/video_core/renderer_vulkan/pipeline_helper.h
+index e88b27b273..451a02c7e6 100644
+--- a/src/video_core/renderer_vulkan/pipeline_helper.h
++++ b/src/video_core/renderer_vulkan/pipeline_helper.h
+@@ -189,6 +189,7 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+     views += num_texture_buffers;
+     views += num_image_buffers;
+     for (const auto& desc : info.texture_descriptors) {
++        bool is_rescaled{};
+         for (u32 index = 0; index < desc.count; ++index) {
+             const VideoCommon::ImageViewId image_view_id{(views++)->id};
+             const VideoCommon::SamplerId sampler_id{*(samplers++)};
+@@ -200,10 +201,13 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+             const VkSampler vk_sampler{use_fallback_sampler ? sampler.HandleWithDefaultAnisotropy()
+                                                             : sampler.Handle()};
+             guest_descriptor_queue.AddSampledImage(vk_image_view, vk_sampler);
+-            rescaling.PushTexture(texture_cache.IsRescaling(image_view));
++            const bool element_rescaled{texture_cache.IsRescaling(image_view)};
++            is_rescaled |= element_rescaled;
+         }
++        rescaling.PushTexture(is_rescaled);
+     }
+     for (const auto& desc : info.image_descriptors) {
++        bool is_rescaled{};
+         for (u32 index = 0; index < desc.count; ++index) {
+             ImageView& image_view{texture_cache.GetImageView((views++)->id)};
+             if (desc.is_written) {
+@@ -211,8 +215,10 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
+             }
+             const VkImageView vk_image_view{image_view.StorageView(desc.type, desc.format)};
+             guest_descriptor_queue.AddImage(vk_image_view);
+-            rescaling.PushImage(texture_cache.IsRescaling(image_view));
++            const bool element_rescaled{texture_cache.IsRescaling(image_view)};
++            is_rescaled |= element_rescaled;
+         }
++        rescaling.PushImage(is_rescaled);
+     }
+ }
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+index 1a62324c95..490dd7acfe 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+@@ -127,9 +127,8 @@ void ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
+ 
+     texture_cache.SynchronizeComputeDescriptors();
+ 
+-    static constexpr size_t max_elements = 64;
+-    boost::container::static_vector<VideoCommon::ImageViewInOut, max_elements> views;
+-    boost::container::static_vector<VideoCommon::SamplerId, max_elements> samplers;
++    boost::container::small_vector<VideoCommon::ImageViewInOut, 64> views;
++    boost::container::small_vector<VideoCommon::SamplerId, 64> samplers;
+ 
+     const auto& qmd{kepler_compute.launch_description};
+     const auto& cbufs{qmd.const_buffer_config};
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 5f86506961..b7bb341d54 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -399,6 +399,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+         .support_fp64_signed_zero_nan_preserve =
+             float_control.shaderSignedZeroInfNanPreserveFloat64 != VK_FALSE,
+         .support_explicit_workgroup_layout = device.IsKhrWorkgroupMemoryExplicitLayoutSupported(),
++        .support_shader_quad_control = device.IsKhrShaderQuadControlSupported(),
++        .support_quad_shuffles = device.IsSubgroupFeatureSupported(VK_SUBGROUP_FEATURE_QUAD_BIT),
+         .support_vote = device.IsSubgroupFeatureSupported(VK_SUBGROUP_FEATURE_VOTE_BIT),
+         .support_viewport_index_layer_non_geometry =
+             device.IsExtShaderViewportIndexLayerSupported(),
+@@ -413,6 +415,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+         .support_scaled_attributes = !device.MustEmulateScaledFormats(),
+         .support_multi_viewport = device.SupportsMultiViewport(),
+         .support_geometry_streams = device.AreTransformFeedbackGeometryStreamsSupported(),
++        .support_sampled_image_array_nonuniform_indexing =
++            device.IsSampledImageArrayNonUniformIndexingSupported(),
+ 
+         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
+ 
+@@ -448,6 +452,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
+         .support_snorm_render_buffer = true,
+         .support_viewport_index_layer = device.IsExtShaderViewportIndexLayerSupported(),
+         .min_ssbo_alignment = static_cast<u32>(device.GetStorageBufferAlignment()),
++        .max_per_stage_descriptor_sampled_images = device.GetMaxPerStageDescriptorSampledImages(),
++        .max_per_stage_resources = device.GetMaxPerStageResources(),
++        .max_descriptor_set_sampled_images = device.GetMaxDescriptorSetSampledImages(),
+         .support_geometry_shader_passthrough = device.IsNvGeometryShaderPassthroughSupported(),
+         .support_conditional_barrier = device.SupportsConditionalBarriers(),
+     };
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index 5075a79bcd..b545b53c42 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -1313,6 +1313,11 @@ void Device::RemoveUnsuitableExtensions() {
+                                VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
+     }
+ 
++    // VK_KHR_shader_quad_control
++    extensions.shader_quad_control = features.shader_quad_control.shaderQuadControl;
++    RemoveExtensionFeatureIfUnsuitable(extensions.shader_quad_control, features.shader_quad_control,
++                                       VK_KHR_SHADER_QUAD_CONTROL_EXTENSION_NAME);
++
+     // VK_KHR_workgroup_memory_explicit_layout
+     extensions.workgroup_memory_explicit_layout =
+         features.features.shaderInt16 &&
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index ad9d53ce16..9b077cde9a 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -33,6 +33,7 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE(KHR, VariablePointer, VARIABLE_POINTERS, variable_pointer)
+ 
+ #define FOR_EACH_VK_FEATURE_1_2(FEATURE)                                                           \
++    FEATURE(EXT, DescriptorIndexing, DESCRIPTOR_INDEXING, descriptor_indexing)                     \
+     FEATURE(EXT, HostQueryReset, HOST_QUERY_RESET, host_query_reset)                               \
+     FEATURE(KHR, 8BitStorage, 8BIT_STORAGE, bit8_storage)                                          \
+     FEATURE(KHR, TimelineSemaphore, TIMELINE_SEMAPHORE, timeline_semaphore)
+@@ -67,6 +68,7 @@ VK_DEFINE_HANDLE(VmaAllocator)
+     FEATURE(KHR, Maintenance6, MAINTENANCE_6, maintenance6)                                        \
+     FEATURE(KHR, PipelineExecutableProperties, PIPELINE_EXECUTABLE_PROPERTIES,                     \
+             pipeline_executable_properties)                                                        \
++    FEATURE(KHR, ShaderQuadControl, SHADER_QUAD_CONTROL, shader_quad_control)                      \
+     FEATURE(KHR, WorkgroupMemoryExplicitLayout, WORKGROUP_MEMORY_EXPLICIT_LAYOUT,                  \
+             workgroup_memory_explicit_layout)                                                      \
+     FEATURE(KHR, UnifiedImageLayouts, UNIFIED_IMAGE_LAYOUTS, unified_image_layouts)
+@@ -339,6 +341,18 @@ public:
+         return properties.properties.limits.maxDescriptorSetUniformBuffersDynamic;
+     }
+ 
++    u32 GetMaxPerStageDescriptorSampledImages() const {
++        return properties.properties.limits.maxPerStageDescriptorSampledImages;
++    }
++
++    u32 GetMaxPerStageResources() const {
++        return properties.properties.limits.maxPerStageResources;
++    }
++
++    u32 GetMaxDescriptorSetSampledImages() const {
++        return properties.properties.limits.maxDescriptorSetSampledImages;
++    }
++
+     /// Returns float control properties of the device.
+     const VkPhysicalDeviceFloatControlsPropertiesKHR& FloatControlProperties() const {
+         return properties.float_controls;
+@@ -359,6 +373,10 @@ public:
+         return GetDriverID() != VK_DRIVER_ID_QUALCOMM_PROPRIETARY;
+     }
+ 
++    bool IsSampledImageArrayNonUniformIndexingSupported() const {
++        return features.descriptor_indexing.shaderSampledImageArrayNonUniformIndexing;
++    }
++
+     /// Returns true if the device supports float64 natively.
+     bool IsFloat64Supported() const {
+         return features.features.shaderFloat64;
+@@ -474,6 +492,11 @@ public:
+         return extensions.workgroup_memory_explicit_layout;
+     }
+ 
++    /// Returns true if the device supports VK_KHR_shader_quad_control.
++    bool IsKhrShaderQuadControlSupported() const {
++        return extensions.shader_quad_control && features.shader_quad_control.shaderQuadControl;
++    }
++
+     /// Returns true if the device supports VK_KHR_image_format_list.
+     bool IsKhrImageFormatListSupported() const {
+         return extensions.image_format_list || instance_version >= VK_API_VERSION_1_2;
