@@ -215,7 +215,7 @@ index bc46b61bb4..56b0f648fa 100644
  
  bool IsOpenGL() {
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 6b60d633a5..c6edf2a37f 100644
+index 6b60d633a5..f3d3e0e45e 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -77,7 +77,6 @@ SWITCHABLE(NvdecEmulation, false);
@@ -623,7 +623,7 @@ index 6b60d633a5..c6edf2a37f 100644
      SwitchableSetting<u32, true> frame_gen_queue_target{linkage,
                                                          1,
                                                          0,
-@@ -468,41 +459,41 @@ struct Values {
+@@ -468,41 +459,40 @@ struct Values {
                                                          true,
                                                          false,
                                                          &frame_gen};
@@ -635,6 +635,21 @@ index 6b60d633a5..c6edf2a37f 100644
                                                  Category::Renderer};
 +    // ) Frame generation
 +    // post-processing shaders (
++    SwitchableSetting<bool> post_shader_enabled{linkage,
++                                                true,
++                                                "post_shader_enabled",
++                                                Category::Renderer,
++                                                Specialization::Paired,
++                                                true,
++                                                true};
++    SwitchableSetting<std::string> post_shader_preset{linkage,
++                                                      std::string(),
++                                                      "post_shader_preset",
++                                                      Category::Renderer,
++                                                      Specialization::Default,
++                                                      true,
++                                                      true,
++                                                      &post_shader_enabled};
 +    SwitchableSetting<std::string> post_shader_chain{linkage,
 +                                                     std::string(),
 +                                                     "post_shader_chain",
@@ -642,6 +657,10 @@ index 6b60d633a5..c6edf2a37f 100644
 +                                                     Specialization::Default,
 +                                                     true,
 +                                                     true};
++    // ) post-processing shaders
++    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
++    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
  
 -    SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage,
 -#ifdef __ANDROID__
@@ -663,37 +682,19 @@ index 6b60d633a5..c6edf2a37f 100644
 -                                                            Specialization::Default,
 -                                                            true,
 -                                                            true};
-+    SwitchableSetting<std::string> post_shader_preset{linkage,
-+                                                      std::string(),
-+                                                      "post_shader_preset",
-+                                                      Category::Renderer,
-+                                                      Specialization::Default,
-+                                                      true,
-+                                                      true};
- 
+-
 -    SwitchableSetting<u8, false> bg_red{
 -                                        linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
 -    SwitchableSetting<u8, false> bg_green{
 -                                          linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
 -    SwitchableSetting<u8, false> bg_blue{
 -                                         linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
-+    SwitchableSetting<bool> post_shader_enabled{linkage,
-+                                                true,
-+                                                "post_shader_enabled",
-+                                                Category::Renderer,
-+                                                Specialization::Default,
-+                                                true,
-+                                                true};
-+    // ) post-processing shaders
-+    SwitchableSetting<u8, false> bg_red{linkage, 0, "bg_red", Category::Renderer, Specialization::Default, true, true};
-+    SwitchableSetting<u8, false> bg_green{linkage, 0, "bg_green", Category::Renderer, Specialization::Default, true, true};
-+    SwitchableSetting<u8, false> bg_blue{linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
- 
+-
 +    // Renderer (Advanced)
      SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
  #ifdef __ANDROID__
                                                        GpuAccuracy::Low,
-@@ -518,46 +509,37 @@ struct Values {
+@@ -518,46 +508,37 @@ struct Values {
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::High};
  
      SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
@@ -751,7 +752,7 @@ index 6b60d633a5..c6edf2a37f 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -566,36 +548,30 @@ struct Values {
+@@ -566,36 +547,30 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -803,7 +804,7 @@ index 6b60d633a5..c6edf2a37f 100644
      SwitchableSetting<bool> use_reactive_flushing{linkage,
  #ifdef __ANDROID__
                                                    false,
-@@ -605,8 +581,8 @@ struct Values {
+@@ -605,8 +580,8 @@ struct Values {
                                                    "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
@@ -814,7 +815,7 @@ index 6b60d633a5..c6edf2a37f 100644
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
                                                    false,
-@@ -616,6 +592,16 @@ struct Values {
+@@ -616,6 +591,16 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -831,7 +832,7 @@ index 6b60d633a5..c6edf2a37f 100644
  #ifdef __ANDROID__
      SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
                                                   false,
-@@ -626,14 +612,9 @@ struct Values {
+@@ -626,14 +611,9 @@ struct Values {
                                                   true};
  #endif
  
@@ -849,7 +850,7 @@ index 6b60d633a5..c6edf2a37f 100644
  
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
-@@ -642,65 +623,55 @@ struct Values {
+@@ -642,65 +622,55 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -937,7 +938,7 @@ index 6b60d633a5..c6edf2a37f 100644
      SwitchableSetting<u32, true> sample_shading{linkage,
                                                  0,
                                                  0,
-@@ -709,13 +680,23 @@ struct Values {
+@@ -709,13 +679,23 @@ struct Values {
                                                  Category::RendererExtensions,
                                                  Specialization::Scalar};
  
@@ -962,7 +963,7 @@ index 6b60d633a5..c6edf2a37f 100644
  
      Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
      Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
-@@ -737,51 +718,6 @@ struct Values {
+@@ -737,51 +717,6 @@ struct Values {
                                                           true,
                                                           true};
  
@@ -1014,7 +1015,7 @@ index 6b60d633a5..c6edf2a37f 100644
      // Controls
      InputSetting<std::array<PlayerInput, 10>> players;
      Setting<bool> disable_wgi_xinput{
-@@ -911,6 +847,17 @@ struct Values {
+@@ -911,6 +846,17 @@ struct Values {
                                           Category::Debugging};
      Setting<bool> perform_vulkan_check{linkage, true, "perform_vulkan_check", Category::Debugging};
      Setting<bool> disable_web_applet{linkage, true, "disable_web_applet", Category::Debugging};
@@ -1032,7 +1033,7 @@ index 6b60d633a5..c6edf2a37f 100644
  
      // GPU Logging
      Setting<GpuLogLevel> gpu_log_level{linkage, GpuLogLevel::Off, "gpu_log_level",
-@@ -923,16 +870,6 @@ struct Values {
+@@ -923,16 +869,6 @@ struct Values {
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
  
@@ -1049,7 +1050,7 @@ index 6b60d633a5..c6edf2a37f 100644
      // Miscellaneous
      Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
      Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
-@@ -976,13 +913,10 @@ bool GetDebugKnobAt(u8 i);
+@@ -976,13 +912,10 @@ bool GetDebugKnobAt(u8 i);
  void UpdateGPUAccuracy();
  bool IsGPULevelHigh();
  
@@ -1065,7 +1066,7 @@ index 6b60d633a5..c6edf2a37f 100644
  
  bool IsFastmemEnabled();
  void SetNceEnabled(bool is_64bit);
-@@ -995,14 +929,18 @@ bool IsOpenGL();
+@@ -995,14 +928,18 @@ bool IsOpenGL();
  
  bool IsDockedMode();
  
