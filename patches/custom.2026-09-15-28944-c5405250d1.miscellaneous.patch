@@ -6396,10 +6396,10 @@ index e34f8f8d94..208965698e 100644
  #elif defined(__unix__) || defined(__APPLE__)
      // Set the max open file limit to 8192, or the hard limit.
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 95b91a4f38..fcf5d46d3e 100644
+index 1d579239a1..d9aa2585f3 100644
 --- a/src/yuzu/main_window.cpp
 +++ b/src/yuzu/main_window.cpp
-@@ -95,7 +95,6 @@
+@@ -96,7 +96,6 @@
  #include "qt_common/util/content.h"
  #include "qt_common/util/fs.h"
  #include "qt_common/util/meta.h"
@@ -6407,7 +6407,67 @@ index 95b91a4f38..fcf5d46d3e 100644
  #include "qt_common/util/path.h"
  
  #include "qt_common/render/emu_thread.h"
-@@ -1295,23 +1294,22 @@ void MainWindow::InitializeHotkeys() {
+@@ -1126,6 +1125,29 @@ void MainWindow::InitializeWidgets() {
+     statusBar()->insertPermanentWidget(0, post_shader_status_button);
+ #endif
+ 
++    // Setup Filter button
++    filter_status_button = new QPushButton();
++    filter_status_button->setObjectName(QStringLiteral("TogglableStatusBarButton"));
++    filter_status_button->setFocusPolicy(Qt::NoFocus);
++    connect(filter_status_button, &QPushButton::clicked, this, &MainWindow::OnToggleAdaptingFilter);
++    UpdateFilterText();
++    filter_status_button->setCheckable(true);
++    filter_status_button->setChecked(true);
++    filter_status_button->setContextMenuPolicy(Qt::CustomContextMenu);
++    connect(filter_status_button, &QPushButton::customContextMenuRequested,
++            [this](const QPoint& menu_location) {
++                QMenu context_menu;
++                for (auto const& filter_text_pair : ConfigurationShared::scaling_filter_texts_map) {
++                    context_menu.addAction(filter_text_pair.second, [this, filter_text_pair] {
++                        Settings::values.scaling_filter.SetValue(filter_text_pair.first);
++                        UpdateFilterText();
++                    });
++                }
++                context_menu.exec(filter_status_button->mapToGlobal(menu_location));
++                filter_status_button->repaint();
++            });
++    statusBar()->insertPermanentWidget(0, filter_status_button);
++
+     // setup AA button
+     aa_status_button = new QPushButton();
+     aa_status_button->setObjectName(QStringLiteral("TogglableStatusBarButton"));
+@@ -1157,29 +1179,6 @@ void MainWindow::InitializeWidgets() {
+             });
+     statusBar()->insertPermanentWidget(0, aa_status_button);
+ 
+-    // Setup Filter button
+-    filter_status_button = new QPushButton();
+-    filter_status_button->setObjectName(QStringLiteral("TogglableStatusBarButton"));
+-    filter_status_button->setFocusPolicy(Qt::NoFocus);
+-    connect(filter_status_button, &QPushButton::clicked, this, &MainWindow::OnToggleAdaptingFilter);
+-    UpdateFilterText();
+-    filter_status_button->setCheckable(true);
+-    filter_status_button->setChecked(true);
+-    filter_status_button->setContextMenuPolicy(Qt::CustomContextMenu);
+-    connect(filter_status_button, &QPushButton::customContextMenuRequested,
+-            [this](const QPoint& menu_location) {
+-                QMenu context_menu;
+-                for (auto const& filter_text_pair : ConfigurationShared::scaling_filter_texts_map) {
+-                    context_menu.addAction(filter_text_pair.second, [this, filter_text_pair] {
+-                        Settings::values.scaling_filter.SetValue(filter_text_pair.first);
+-                        UpdateFilterText();
+-                    });
+-                }
+-                context_menu.exec(filter_status_button->mapToGlobal(menu_location));
+-                filter_status_button->repaint();
+-            });
+-    statusBar()->insertPermanentWidget(0, filter_status_button);
+-
+     // Setup Dock button
+     dock_status_button = new QPushButton();
+     dock_status_button->setObjectName(QStringLiteral("DockingStatusBarButton"));
+@@ -1331,23 +1330,22 @@ void MainWindow::InitializeHotkeys() {
      LinkActionShortcut(ui->action_Load_File, QStringLiteral("Load File"));
      LinkActionShortcut(ui->action_Load_Amiibo, QStringLiteral("Load/Remove Amiibo"));
      LinkActionShortcut(ui->action_Exit, QStringLiteral("Exit Eden"));
@@ -6446,7 +6506,7 @@ index 95b91a4f38..fcf5d46d3e 100644
      LinkActionShortcut(ui->action_Configure, QStringLiteral("Configure"));
      LinkActionShortcut(ui->action_Configure_Current_Game, QStringLiteral("Configure Current Game"));
  
-@@ -1328,7 +1326,7 @@ void MainWindow::InitializeHotkeys() {
+@@ -1364,7 +1362,7 @@ void MainWindow::InitializeHotkeys() {
                  Qt::QueuedConnection);
      };
  
@@ -6455,7 +6515,7 @@ index 95b91a4f38..fcf5d46d3e 100644
          if (emulation_running && ui->action_Fullscreen->isChecked()) {
              ui->action_Fullscreen->setChecked(false);
              ToggleFullscreen();
-@@ -1337,31 +1335,29 @@ void MainWindow::InitializeHotkeys() {
+@@ -1373,31 +1371,29 @@ void MainWindow::InitializeHotkeys() {
      connect_shortcut(QStringLiteral("Change Adapting Filter"), &MainWindow::OnToggleAdaptingFilter);
      connect_shortcut(QStringLiteral("Change Docked Mode"), &MainWindow::OnToggleDockedMode);
      connect_shortcut(QStringLiteral("Change GPU Mode"), &MainWindow::OnToggleGpuAccuracy);
@@ -6501,7 +6561,7 @@ index 95b91a4f38..fcf5d46d3e 100644
          Settings::values.mouse_panning = !Settings::values.mouse_panning;
          if (Settings::values.mouse_panning) {
              render_window->installEventFilter(render_window);
-@@ -2017,7 +2013,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
+@@ -2053,7 +2049,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
      status_bar_update_timer.start(500);
      renderer_status_button->setDisabled(true);
      refresh_button->setDisabled(true);
@@ -6510,7 +6570,7 @@ index 95b91a4f38..fcf5d46d3e 100644
  
      if (UISettings::values.hide_mouse || Settings::values.mouse_panning) {
          render_window->installEventFilter(render_window);
-@@ -2083,8 +2079,8 @@ bool MainWindow::OnShutdownBegin() {
+@@ -2119,8 +2115,8 @@ bool MainWindow::OnShutdownBegin() {
      AllowOSSleep();
  
      // Disable unlimited frame rate and turbo/slow modes
@@ -6520,7 +6580,7 @@ index 95b91a4f38..fcf5d46d3e 100644
  
      if (QtCommon::system->IsShuttingDown()) {
          return false;
-@@ -3710,7 +3706,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+@@ -3746,7 +3742,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
      Settings::SetConfiguringGlobal(false);
      ConfigurePerGame dialog(this, title_id, file_name, vk_device_records, *QtCommon::system);
      dialog.LoadFromFile(v_file);
@@ -6528,7 +6588,7 @@ index 95b91a4f38..fcf5d46d3e 100644
      const auto result = dialog.exec();
  
      if (result != QDialog::Accepted && !UISettings::values.configuration_applied) {
-@@ -3722,7 +3717,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
+@@ -3758,7 +3753,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
  
      const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
      if (reload) {
@@ -6537,7 +6597,7 @@ index 95b91a4f38..fcf5d46d3e 100644
      }
  
      // Do not cause the global config to write local settings into the config file
-@@ -4200,27 +4195,23 @@ void MainWindow::UpdateStatusBar() {
+@@ -4237,27 +4232,23 @@ void MainWindow::UpdateStatusBar() {
  
      const auto res_info = Settings::values.resolution_info;
      const auto res_scale = res_info.up_factor;
@@ -6574,7 +6634,7 @@ index 95b91a4f38..fcf5d46d3e 100644
      game_fps_label->setVisible(true);
      emu_frametime_label->setVisible(true);
      firmware_label->setVisible(false);
-@@ -4257,9 +4248,7 @@ void MainWindow::UpdateFilterText() {
+@@ -4294,28 +4285,26 @@ void MainWindow::UpdateFilterText() {
  void MainWindow::UpdateAAText() {
      const auto aa_mode = Settings::values.anti_aliasing.GetValue();
      const auto aa_text = ConfigurationShared::anti_aliasing_texts_map.find(aa_mode)->second;
@@ -6584,8 +6644,46 @@ index 95b91a4f38..fcf5d46d3e 100644
 +    aa_status_button->setText(aa_text.toUpper());
  }
  
- void MainWindow::UpdateVolumeUI() {
-@@ -4425,18 +4414,15 @@ void MainWindow::SetFirmwareVersion() {
+ #ifdef HAS_RESHADE
+ void MainWindow::UpdatePostShaderText() {
+     const bool enabled = Settings::values.post_shader_enabled.GetValue();
++    const std::string preset = VideoCore::GetActiveFxPreset();
+     post_shader_status_button->setChecked(enabled);
+ 
+     if (!enabled) {
+-        post_shader_status_button->setText(tr("NO FX"));
+-        return;
+-    }
+-
+-    const std::string preset = VideoCore::GetActiveFxPreset();
+-    if (preset.empty()) {
+-        post_shader_status_button->setText(tr("FX"));
+-        return;
++        m_postSuffix = tr("OFF");
++    } else if (preset.empty()) {
++        m_postSuffix = tr("ON");
++    } else {
++        m_postSuffix = QString::fromStdString(preset).toUpper();
+     }
+ 
+-    post_shader_status_button->setText(QString::fromStdString(preset).toUpper());
++    QString postText = tr("FX: ");
++    postText = postText % QStringLiteral("%1").arg(m_postSuffix);
++    post_shader_status_button->setText(postText);
+ }
+ #endif
+ 
+@@ -4337,8 +4326,8 @@ void MainWindow::UpdateStatusButtons() {
+     UpdateAPIText();
+     UpdateGPUAccuracyButton();
+     UpdateDockedButton();
+-    UpdateFilterText();
+     UpdateAAText();
++    UpdateFilterText();
+     UpdateVolumeUI();
+ }
+ 
+@@ -4482,18 +4471,15 @@ void MainWindow::SetFirmwareVersion() {
      firmware_label->setToolTip(QString::fromStdString(display_title));
  }
  
@@ -6613,10 +6711,10 @@ index 95b91a4f38..fcf5d46d3e 100644
  }
  
 diff --git a/src/yuzu/main_window.h b/src/yuzu/main_window.h
-index 2e92df135d..5f8a5d7c09 100644
+index 8aedeec721..e3f90262a6 100644
 --- a/src/yuzu/main_window.h
 +++ b/src/yuzu/main_window.h
-@@ -461,7 +461,7 @@ private:
+@@ -462,7 +462,7 @@ private:
      void OpenPerGameConfiguration(u64 title_id, const std::string& file_name);
      bool CheckFirmwarePresence();
      void SetFirmwareVersion();
@@ -6625,7 +6723,7 @@ index 2e92df135d..5f8a5d7c09 100644
      /**
       * Open (or not) the right confirm dialog based on current setting and game exit lock
       * @returns true if the player confirmed or the settings do no require it
-@@ -529,8 +529,8 @@ private:
+@@ -531,8 +531,12 @@ private:
      QSlider* volume_slider = nullptr;
      QTimer status_bar_update_timer;
  
@@ -6633,6 +6731,10 @@ index 2e92df135d..5f8a5d7c09 100644
 -    QString m_fpsSuffix{};
 +    // Stores what suffix to add to the Speed counter, e.g. Unlocked.
 +    QString m_speedSuffix{};
++
++#ifdef HAS_RESHADE
++    QString m_postSuffix{};
++#endif
  
      UserDataMigrator user_data_migrator;
      std::unique_ptr<QtConfig> config;
