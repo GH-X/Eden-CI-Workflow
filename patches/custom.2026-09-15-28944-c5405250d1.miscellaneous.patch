@@ -1,3 +1,12 @@
+diff --git a/dist/post_presets/Clear.fxp b/dist/post_presets/Clear.fxp
+new file mode 100644
+index 0000000000..ce1cf7ef1e
+--- /dev/null
++++ b/dist/post_presets/Clear.fxp
+@@ -0,0 +1,3 @@
++name=清晰
++description=恢复细节。
++chain=Sharpen.fx|Sharpen|Amount=1.5/0/0/0
 diff --git a/src/common/settings.cpp b/src/common/settings.cpp
 index bc46b61bb4..56b0f648fa 100644
 --- a/src/common/settings.cpp
@@ -215,7 +224,7 @@ index bc46b61bb4..56b0f648fa 100644
  
  bool IsOpenGL() {
 diff --git a/src/common/settings.h b/src/common/settings.h
-index c1c2d4f0df..ff6f6b568b 100644
+index c1c2d4f0df..8fced7f2c3 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -77,7 +77,6 @@ SWITCHABLE(NvdecEmulation, false);
@@ -469,7 +478,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      // Renderer
      SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-@@ -337,11 +340,38 @@ struct Values {
+@@ -337,11 +340,31 @@ struct Values {
  #endif
          "backend", Category::Renderer};
      SwitchableSetting<u32> vulkan_device{linkage, 0, "vulkan_device", Category::Renderer, Specialization::RuntimeList};
@@ -487,13 +496,6 @@ index c1c2d4f0df..ff6f6b568b 100644
 +                                                      true,
 +                                                      true};
 +
-+    SwitchableSetting<AntiAliasing> anti_aliasing{linkage,
-+                                                  AntiAliasing::None,
-+                                                  "anti_aliasing",
-+                                                  Category::Renderer,
-+                                                  Specialization::Default,
-+                                                  true,
-+                                                  true};
 +    // *nix platforms may have issues with the borderless windowed fullscreen mode.
 +    // Default to exclusive fullscreen on these platforms for now.
 +    SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
@@ -510,7 +512,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
                                                    VSyncMode::Fifo,
-@@ -351,19 +381,24 @@ struct Values {
+@@ -351,19 +374,24 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -525,7 +527,7 @@ index c1c2d4f0df..ff6f6b568b 100644
 +
      SwitchableSetting<ScalingFilter> scaling_filter{linkage,
 -                                                    ScalingFilter::NearestNeighbor,
-+                                                    ScalingFilter::Bicubic,
++                                                    ScalingFilter::BSpline,
                                                      "scaling_filter",
                                                      Category::Renderer,
                                                      Specialization::Default,
@@ -540,7 +542,7 @@ index c1c2d4f0df..ff6f6b568b 100644
                                                         0,
                                                         200,
                                                         "fsr_sharpening_slider",
-@@ -372,49 +407,9 @@ struct Values {
+@@ -372,13 +400,6 @@ struct Values {
                                                             Specialization::Percentage,
                                                         true,
                                                         true};
@@ -551,14 +553,13 @@ index c1c2d4f0df..ff6f6b568b 100644
 -                                                      Specialization::Default,
 -                                                      true,
 -                                                      true};
--
--    SwitchableSetting<AntiAliasing> anti_aliasing{linkage,
--                                                  AntiAliasing::None,
--                                                  "anti_aliasing",
--                                                  Category::Renderer,
--                                                  Specialization::Default,
--                                                  true,
--                                                  true};
+ 
+     SwitchableSetting<AntiAliasing> anti_aliasing{linkage,
+                                                   AntiAliasing::None,
+@@ -387,34 +408,9 @@ struct Values {
+                                                   Specialization::Default,
+                                                   true,
+                                                   true};
 -
 -    SwitchableSetting<std::string> post_shader_chain{linkage,
 -                                                     std::string(),
@@ -591,7 +592,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
                                                        2,
                                                        2,
-@@ -425,7 +420,6 @@ struct Values {
+@@ -425,7 +421,6 @@ struct Values {
                                                        true,
                                                        false,
                                                        &frame_gen};
@@ -599,7 +600,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<u32, true> frame_gen_target_rate{linkage,
                                                         0,
                                                         0,
-@@ -436,7 +430,6 @@ struct Values {
+@@ -436,7 +431,6 @@ struct Values {
                                                         true,
                                                         true,
                                                         &frame_gen};
@@ -607,7 +608,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<bool> frame_gen_flow_scale_auto{linkage,
                                                        true,
                                                        "frame_gen_flow_scale_auto",
-@@ -445,7 +438,6 @@ struct Values {
+@@ -445,7 +439,6 @@ struct Values {
                                                        true,
                                                        false,
                                                        &frame_gen};
@@ -615,7 +616,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<u32, true> frame_gen_flow_scale{linkage,
                                                        75,
                                                        25,
-@@ -457,7 +449,6 @@ struct Values {
+@@ -457,7 +450,6 @@ struct Values {
                                                        true,
                                                        true,
                                                        &frame_gen};
@@ -623,7 +624,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<u32, true> frame_gen_queue_target{linkage,
                                                          0,
                                                          0,
-@@ -468,38 +459,37 @@ struct Values {
+@@ -468,38 +460,37 @@ struct Values {
                                                          true,
                                                          false,
                                                          &frame_gen};
@@ -633,14 +634,14 @@ index c1c2d4f0df..ff6f6b568b 100644
 +    // ) Frame generation
 +    // post-processing shaders (
 +    SwitchableSetting<std::string> post_shader_chain{linkage,
-+                                                     std::string(),
++                                                     "Sharpen.fx|Sharpen|Amount=1.5/0/0/0",
 +                                                     "post_shader_chain",
 +                                                     Category::Renderer,
 +                                                     Specialization::Default,
 +                                                     true,
 +                                                     true};
 +    SwitchableSetting<std::string> post_shader_preset{linkage,
-+                                                      std::string(),
++                                                      "清晰",
 +                                                      "post_shader_preset",
 +                                                      Category::Renderer,
 +                                                      Specialization::Default,
@@ -690,7 +691,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
  #ifdef __ANDROID__
                                                        GpuAccuracy::Low,
-@@ -515,46 +505,37 @@ struct Values {
+@@ -515,46 +506,37 @@ struct Values {
      GpuAccuracy current_gpu_accuracy{GpuAccuracy::High};
  
      SwitchableSetting<DmaAccuracy, true> dma_accuracy{linkage,
@@ -748,7 +749,7 @@ index c1c2d4f0df..ff6f6b568b 100644
                                                                 FramePacingMode::Target_Auto,
                                                                 FramePacingMode::Target_120,
                                                                 "frame_pacing_mode",
-@@ -563,36 +544,30 @@ struct Values {
+@@ -563,36 +545,30 @@ struct Values {
                                                                 true,
                                                                 true};
  
@@ -765,10 +766,10 @@ index c1c2d4f0df..ff6f6b568b 100644
 +                                                    Specialization::Scalar,
 +                                                    true,
 +                                                    true};
-+
+ 
 +    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
 +                                                     Category::RendererAdvanced};
- 
++
 +    SwitchableSetting<bool> barrier_feedback_loops{linkage, true, "barrier_feedback_loops",
 +                                                   Category::RendererAdvanced};
  
@@ -800,7 +801,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      SwitchableSetting<bool> use_reactive_flushing{linkage,
  #ifdef __ANDROID__
                                                    false,
-@@ -602,8 +577,8 @@ struct Values {
+@@ -602,8 +578,8 @@ struct Values {
                                                    "use_reactive_flushing",
                                                    Category::RendererAdvanced};
  
@@ -811,7 +812,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      SwitchableSetting<bool> enable_buffer_history{linkage,
                                                    false,
-@@ -613,6 +588,16 @@ struct Values {
+@@ -613,6 +589,16 @@ struct Values {
                                                    true,
                                                    true};
  
@@ -828,7 +829,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  #ifdef __ANDROID__
      SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
                                                   false,
-@@ -623,14 +608,9 @@ struct Values {
+@@ -623,14 +609,9 @@ struct Values {
                                                   true};
  #endif
  
@@ -846,7 +847,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      SwitchableSetting<bool> skip_cpu_inner_invalidation{linkage,
                                                          false,
-@@ -639,58 +619,65 @@ struct Values {
+@@ -639,58 +620,65 @@ struct Values {
                                                          Specialization::Default,
                                                          true,
                                                          true};
@@ -880,13 +881,13 @@ index c1c2d4f0df..ff6f6b568b 100644
 +    SwitchableSetting<bool> rescale_hack{linkage, false, "rescale_hack",
                                                       Category::RendererHacks};
  
-+    SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage, false, "use_asynchronous_gpu_emulation", Category::RendererHacks};
++    SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage, true, "use_asynchronous_gpu_emulation", Category::RendererHacks};
 +
 +    SwitchableSetting<bool> async_presentation{linkage,
 +#ifdef __ANDROID__
 +                                               false,
 +#else
-+                                               false,
++                                               true,
 +#endif
 +                                               "async_presentation", Category::RendererHacks};
 +
@@ -935,7 +936,7 @@ index c1c2d4f0df..ff6f6b568b 100644
                                             ExtendedDynamicState::Disabled,
  #else
                                             ExtendedDynamicState::EDS2,
-@@ -698,21 +685,14 @@ struct Values {
+@@ -698,21 +686,14 @@ struct Values {
                                             "dyna_state",
                                             Category::RendererExtensions};
  
@@ -959,7 +960,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
      Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
-@@ -734,51 +714,6 @@ struct Values {
+@@ -734,51 +715,6 @@ struct Values {
                                                           true,
                                                           true};
  
@@ -1011,7 +1012,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      // Controls
      InputSetting<std::array<PlayerInput, 10>> players;
      Setting<bool> disable_wgi_xinput{
-@@ -908,6 +843,17 @@ struct Values {
+@@ -908,6 +844,17 @@ struct Values {
                                           Category::Debugging};
      Setting<bool> perform_vulkan_check{linkage, true, "perform_vulkan_check", Category::Debugging};
      Setting<bool> disable_web_applet{linkage, true, "disable_web_applet", Category::Debugging};
@@ -1029,7 +1030,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
      // GPU Logging
      Setting<GpuLogLevel> gpu_log_level{linkage, GpuLogLevel::Off, "gpu_log_level",
-@@ -920,16 +866,6 @@ struct Values {
+@@ -920,16 +867,6 @@ struct Values {
      Setting<s32> gpu_log_ring_buffer_size{linkage, 512, "gpu_log_ring_buffer_size",
                                             Category::Debugging};
  
@@ -1046,7 +1047,7 @@ index c1c2d4f0df..ff6f6b568b 100644
      // Miscellaneous
      Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
      Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
-@@ -973,13 +909,10 @@ bool GetDebugKnobAt(u8 i);
+@@ -973,13 +910,10 @@ bool GetDebugKnobAt(u8 i);
  void UpdateGPUAccuracy();
  bool IsGPULevelHigh();
  
@@ -1062,7 +1063,7 @@ index c1c2d4f0df..ff6f6b568b 100644
  
  bool IsFastmemEnabled();
  void SetNceEnabled(bool is_64bit);
-@@ -992,14 +925,18 @@ bool IsOpenGL();
+@@ -992,14 +926,18 @@ bool IsOpenGL();
  
  bool IsDockedMode();
  
@@ -1098,10 +1099,10 @@ index bbc16f52ec..ad77c87193 100644
      Renderer,
      RendererAdvanced,
 diff --git a/src/common/settings_enums.h b/src/common/settings_enums.h
-index 4b406f4c35..1514075584 100644
+index 4b406f4c35..3969990bae 100644
 --- a/src/common/settings_enums.h
 +++ b/src/common/settings_enums.h
-@@ -130,17 +130,17 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
+@@ -130,35 +130,33 @@ ENUM(TimeZone, Auto, Default, Cet, Cst6Cdt, Cuba, Eet, Egypt, Eire, Est, Est5Edt
      Roc, Rok, Singapore, Turkey, Uct, Universal, Utc, WSu, Wet, Zulu);
  ENUM(AnisotropyMode, Automatic, Default, X2, X4, X8, X16);
  ENUM(AstcDecodeMode, Cpu, Gpu, CpuAsynchronous);
@@ -1125,7 +1126,11 @@ index 4b406f4c35..1514075584 100644
  ENUM(MemoryLayout, Memory_4Gb, Memory_6Gb, Memory_8Gb, Memory_10Gb, Memory_12Gb);
  ENUM(ConfirmStop, Ask_Always, Ask_Based_On_Game, Ask_Never);
  ENUM(FullscreenMode, Borderless, Exclusive);
-@@ -151,14 +151,12 @@ ENUM(AntiAliasing, None, Fxaa, Smaa);
+ ENUM(NvdecEmulation, Off, Cpu, Gpu);
+ ENUM(ResolutionSetup, Res1_4X, Res1_2X, Res3_4X, Res1X, Res5_4X, Res3_2X, Res2X, Res3X, Res4X, Res5X, Res6X, Res7X, Res8X);
+-ENUM(ScalingFilter, NearestNeighbor, Bilinear, Bicubic, Gaussian, Lanczos, ScaleForce, Fsr, Area, ZeroTangent, BSpline, Mitchell, Spline1, Mmpx, Sgsr, SgsrEdge);
++ENUM(ScalingFilter, NearestNeighbor, Mmpx, Bilinear, Spline1, Bicubic, Mitchell, ZeroTangent, BSpline, Lanczos, Gaussian, Fsr, Sgsr, SgsrEdge, ScaleForce);
+ ENUM(AntiAliasing, None, Fxaa, Smaa);
  ENUM(AspectRatio, R16_9, R4_3, R21_9, R16_10, Stretch);
  ENUM(ConsoleMode, Handheld, Docked);
  ENUM(AppletMode, HLE, LLE);
@@ -2096,6 +2101,20 @@ index 5404dec943..052eb9b7c1 100644
      std::function<void()> operation([this, is_synced, streamer, query_base = query, query_location,
                                       pointer, pointer_timestamp] {
          if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
+diff --git a/src/video_core/renderer_opengl/gl_blit_screen.cpp b/src/video_core/renderer_opengl/gl_blit_screen.cpp
+index 23e5eb7481..2cd0dbe2a6 100644
+--- a/src/video_core/renderer_opengl/gl_blit_screen.cpp
++++ b/src/video_core/renderer_opengl/gl_blit_screen.cpp
+@@ -108,9 +108,6 @@ void BlitScreen::CreateWindowAdapt() {
+     case Settings::ScalingFilter::ScaleForce:
+         window_adapt = MakeScaleForce(device);
+         break;
+-    case Settings::ScalingFilter::Area:
+-        window_adapt = MakeArea(device);
+-        break;
+     case Settings::ScalingFilter::Mmpx:
+         window_adapt = MakeMmpx(device);
+         break;
 diff --git a/src/video_core/renderer_opengl/gl_texture_cache.cpp b/src/video_core/renderer_opengl/gl_texture_cache.cpp
 index 680cb2179f..6c1c2db4d2 100644
 --- a/src/video_core/renderer_opengl/gl_texture_cache.cpp
@@ -2124,6 +2143,20 @@ index 6c18ade926..3e33780e71 100644
          }
      }
      if (!device.IsOptimalBcnSupported() && VideoCore::Surface::IsPixelFormatBCn(pixel_format)) {
+diff --git a/src/video_core/renderer_vulkan/vk_blit_screen.cpp b/src/video_core/renderer_vulkan/vk_blit_screen.cpp
+index 205382f81a..3795ced2cf 100644
+--- a/src/video_core/renderer_vulkan/vk_blit_screen.cpp
++++ b/src/video_core/renderer_vulkan/vk_blit_screen.cpp
+@@ -70,9 +70,6 @@ void BlitScreen::SetWindowAdaptPass(const Device& device) {
+     case Settings::ScalingFilter::ScaleForce:
+         window_adapt = MakeScaleForce(device, swapchain_view_format);
+         break;
+-    case Settings::ScalingFilter::Area:
+-        window_adapt = MakeArea(device, swapchain_view_format);
+-        break;
+     case Settings::ScalingFilter::Mmpx:
+         window_adapt = MakeMmpx(device, swapchain_view_format);
+         break;
 diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
 index 8b5b0bc9c5..33220a394a 100644
 --- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
@@ -6396,10 +6429,10 @@ index e34f8f8d94..208965698e 100644
  #elif defined(__unix__) || defined(__APPLE__)
      // Set the max open file limit to 8192, or the hard limit.
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 95b91a4f38..fcf5d46d3e 100644
+index 1d579239a1..13deefc572 100644
 --- a/src/yuzu/main_window.cpp
 +++ b/src/yuzu/main_window.cpp
-@@ -95,7 +95,6 @@
+@@ -96,7 +96,6 @@
  #include "qt_common/util/content.h"
  #include "qt_common/util/fs.h"
  #include "qt_common/util/meta.h"
@@ -6407,7 +6440,7 @@ index 95b91a4f38..fcf5d46d3e 100644
  #include "qt_common/util/path.h"
  
  #include "qt_common/render/emu_thread.h"
-@@ -1295,23 +1294,22 @@ void MainWindow::InitializeHotkeys() {
+@@ -1331,23 +1330,22 @@ void MainWindow::InitializeHotkeys() {
      LinkActionShortcut(ui->action_Load_File, QStringLiteral("Load File"));
      LinkActionShortcut(ui->action_Load_Amiibo, QStringLiteral("Load/Remove Amiibo"));
      LinkActionShortcut(ui->action_Exit, QStringLiteral("Exit Eden"));
@@ -6446,7 +6479,7 @@ index 95b91a4f38..fcf5d46d3e 100644
      LinkActionShortcut(ui->action_Configure, QStringLiteral("Configure"));
      LinkActionShortcut(ui->action_Configure_Current_Game, QStringLiteral("Configure Current Game"));
  
-@@ -1328,7 +1326,7 @@ void MainWindow::InitializeHotkeys() {
+@@ -1364,7 +1362,7 @@ void MainWindow::InitializeHotkeys() {
                  Qt::QueuedConnection);
      };
  
@@ -6455,7 +6488,7 @@ index 95b91a4f38..fcf5d46d3e 100644
          if (emulation_running && ui->action_Fullscreen->isChecked()) {
              ui->action_Fullscreen->setChecked(false);
              ToggleFullscreen();
-@@ -1337,31 +1335,29 @@ void MainWindow::InitializeHotkeys() {
+@@ -1373,31 +1371,29 @@ void MainWindow::InitializeHotkeys() {
      connect_shortcut(QStringLiteral("Change Adapting Filter"), &MainWindow::OnToggleAdaptingFilter);
      connect_shortcut(QStringLiteral("Change Docked Mode"), &MainWindow::OnToggleDockedMode);
      connect_shortcut(QStringLiteral("Change GPU Mode"), &MainWindow::OnToggleGpuAccuracy);
@@ -6501,7 +6534,7 @@ index 95b91a4f38..fcf5d46d3e 100644
          Settings::values.mouse_panning = !Settings::values.mouse_panning;
          if (Settings::values.mouse_panning) {
              render_window->installEventFilter(render_window);
-@@ -2017,7 +2013,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
+@@ -2053,7 +2049,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
      status_bar_update_timer.start(500);
      renderer_status_button->setDisabled(true);
      refresh_button->setDisabled(true);
@@ -6510,7 +6543,7 @@ index 95b91a4f38..fcf5d46d3e 100644
  
      if (UISettings::values.hide_mouse || Settings::values.mouse_panning) {
          render_window->installEventFilter(render_window);
-@@ -2083,8 +2079,8 @@ bool MainWindow::OnShutdownBegin() {
+@@ -2119,8 +2115,8 @@ bool MainWindow::OnShutdownBegin() {
      AllowOSSleep();
  
      // Disable unlimited frame rate and turbo/slow modes
@@ -6520,24 +6553,7 @@ index 95b91a4f38..fcf5d46d3e 100644
  
      if (QtCommon::system->IsShuttingDown()) {
          return false;
-@@ -3710,7 +3706,6 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
-     Settings::SetConfiguringGlobal(false);
-     ConfigurePerGame dialog(this, title_id, file_name, vk_device_records, *QtCommon::system);
-     dialog.LoadFromFile(v_file);
--
-     const auto result = dialog.exec();
- 
-     if (result != QDialog::Accepted && !UISettings::values.configuration_applied) {
-@@ -3722,7 +3717,7 @@ void MainWindow::OpenPerGameConfiguration(u64 title_id, const std::string& file_
- 
-     const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
-     if (reload) {
--        OnGameListRefresh();
-+        game_list->PopulateAsync(UISettings::values.game_dirs);
-     }
- 
-     // Do not cause the global config to write local settings into the config file
-@@ -4200,27 +4195,23 @@ void MainWindow::UpdateStatusBar() {
+@@ -4237,27 +4233,23 @@ void MainWindow::UpdateStatusBar() {
  
      const auto res_info = Settings::values.resolution_info;
      const auto res_scale = res_info.up_factor;
@@ -6574,18 +6590,69 @@ index 95b91a4f38..fcf5d46d3e 100644
      game_fps_label->setVisible(true);
      emu_frametime_label->setVisible(true);
      firmware_label->setVisible(false);
-@@ -4257,9 +4248,7 @@ void MainWindow::UpdateFilterText() {
+@@ -4288,34 +4280,38 @@ void MainWindow::UpdateAPIText() {
+ void MainWindow::UpdateFilterText() {
+     const auto filter = Settings::values.scaling_filter.GetValue();
+     const auto filter_text = ConfigurationShared::scaling_filter_texts_map.find(filter)->second;
+-    filter_status_button->setText(filter_text.toUpper());
++    QString filterText = tr("SF: ");
++    m_filterSuffix = filter_text.toUpper();
++    filterText = filterText % QStringLiteral("%1").arg(m_filterSuffix);
++    filter_status_button->setText(filterText);
+ }
+ 
  void MainWindow::UpdateAAText() {
      const auto aa_mode = Settings::values.anti_aliasing.GetValue();
      const auto aa_text = ConfigurationShared::anti_aliasing_texts_map.find(aa_mode)->second;
 -    aa_status_button->setText(aa_mode == Settings::AntiAliasing::None
 -                                  ? QStringLiteral(QT_TRANSLATE_NOOP("MainWindow", "NO AA"))
 -                                  : aa_text.toUpper());
-+    aa_status_button->setText(aa_text.toUpper());
++    QString aaText = tr("AA: ");
++    m_aaSuffix = aa_text.toUpper();
++    aaText = aaText % QStringLiteral("%1").arg(m_aaSuffix);
++    aa_status_button->setText(aaText);
  }
  
- void MainWindow::UpdateVolumeUI() {
-@@ -4425,18 +4414,15 @@ void MainWindow::SetFirmwareVersion() {
+ #ifdef HAS_RESHADE
+ void MainWindow::UpdatePostShaderText() {
+     const bool enabled = Settings::values.post_shader_enabled.GetValue();
++    const std::string preset = VideoCore::GetActiveFxPreset();
+     post_shader_status_button->setChecked(enabled);
+ 
+     if (!enabled) {
+-        post_shader_status_button->setText(tr("NO FX"));
+-        return;
+-    }
+-
+-    const std::string preset = VideoCore::GetActiveFxPreset();
+-    if (preset.empty()) {
+-        post_shader_status_button->setText(tr("FX"));
+-        return;
++        m_postSuffix = tr("NO");
++    } else if (preset.empty()) {
++        m_postSuffix = tr("ON");
++    } else {
++        m_postSuffix = QString::fromStdString(preset).toUpper();
+     }
+ 
+-    post_shader_status_button->setText(QString::fromStdString(preset).toUpper());
++    QString postText = tr("FX: ");
++    postText = postText % QStringLiteral("%1").arg(m_postSuffix);
++    post_shader_status_button->setText(postText);
+ }
+ #endif
+ 
+@@ -4337,8 +4333,8 @@ void MainWindow::UpdateStatusButtons() {
+     UpdateAPIText();
+     UpdateGPUAccuracyButton();
+     UpdateDockedButton();
+-    UpdateFilterText();
+     UpdateAAText();
++    UpdateFilterText();
+     UpdateVolumeUI();
+ }
+ 
+@@ -4482,18 +4478,15 @@ void MainWindow::SetFirmwareVersion() {
      firmware_label->setToolTip(QString::fromStdString(display_title));
  }
  
@@ -6613,10 +6680,10 @@ index 95b91a4f38..fcf5d46d3e 100644
  }
  
 diff --git a/src/yuzu/main_window.h b/src/yuzu/main_window.h
-index 2e92df135d..5f8a5d7c09 100644
+index 8aedeec721..8f59b6a090 100644
 --- a/src/yuzu/main_window.h
 +++ b/src/yuzu/main_window.h
-@@ -461,7 +461,7 @@ private:
+@@ -462,7 +462,7 @@ private:
      void OpenPerGameConfiguration(u64 title_id, const std::string& file_name);
      bool CheckFirmwarePresence();
      void SetFirmwareVersion();
@@ -6625,7 +6692,7 @@ index 2e92df135d..5f8a5d7c09 100644
      /**
       * Open (or not) the right confirm dialog based on current setting and game exit lock
       * @returns true if the player confirmed or the settings do no require it
-@@ -529,8 +529,8 @@ private:
+@@ -531,8 +531,14 @@ private:
      QSlider* volume_slider = nullptr;
      QTimer status_bar_update_timer;
  
@@ -6633,6 +6700,12 @@ index 2e92df135d..5f8a5d7c09 100644
 -    QString m_fpsSuffix{};
 +    // Stores what suffix to add to the Speed counter, e.g. Unlocked.
 +    QString m_speedSuffix{};
++
++    QString m_filterSuffix{};
++    QString m_aaSuffix{};
++#ifdef HAS_RESHADE
++    QString m_postSuffix{};
++#endif
  
      UserDataMigrator user_data_migrator;
      std::unique_ptr<QtConfig> config;
