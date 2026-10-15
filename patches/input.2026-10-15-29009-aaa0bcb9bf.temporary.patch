@@ -1,0 +1,132 @@
+diff --git a/src/input_common/drivers/joycon.cpp b/src/input_common/drivers/joycon.cpp
+index 047e7eb6d8..fb2d75e384 100644
+--- a/src/input_common/drivers/joycon.cpp
++++ b/src/input_common/drivers/joycon.cpp
+@@ -83,21 +83,20 @@ void Joycons::ScanThread(std::stop_token stop_token) {
+     constexpr u16 nintendo_vendor_id = 0x057e;
+     Common::SetCurrentThreadName("JoyconScanThread");
+ 
+-    auto last_ret = 0u;
+     do {
+-        auto ret = SDL_hid_device_change_count();
+-        if (last_ret == 0u || last_ret != ret) {
+-            last_ret = ret;
+-            SDL_hid_device_info* devs = SDL_hid_enumerate(nintendo_vendor_id, 0x0);
+-            for (auto* cur_dev = devs; cur_dev; cur_dev = cur_dev->next) {
+-                if (IsDeviceNew(cur_dev)) {
+-                    LOG_DEBUG(Input, "Device Found,type : {:04X} {:04X}", cur_dev->vendor_id, cur_dev->product_id);
+-                    RegisterNewDevice(cur_dev);
+-                }
+-                cur_dev = cur_dev->next;
++        SDL_hid_device_info* devs = SDL_hid_enumerate(nintendo_vendor_id, 0x0);
++        SDL_hid_device_info* cur_dev = devs;
++
++        while (cur_dev) {
++            if (IsDeviceNew(cur_dev)) {
++                LOG_DEBUG(Input, "Device Found,type : {:04X} {:04X}", cur_dev->vendor_id,
++                          cur_dev->product_id);
++                RegisterNewDevice(cur_dev);
+             }
+-            SDL_hid_free_enumeration(devs);
++            cur_dev = cur_dev->next;
+         }
++
++        SDL_hid_free_enumeration(devs);
+     } while (Common::StoppableTimedWait(stop_token, std::chrono::seconds{5}));
+ }
+ 
+diff --git a/src/input_common/drivers/sdl_driver.cpp b/src/input_common/drivers/sdl_driver.cpp
+index c3e9a066b3..91589063b5 100644
+--- a/src/input_common/drivers/sdl_driver.cpp
++++ b/src/input_common/drivers/sdl_driver.cpp
+@@ -697,6 +697,16 @@ SDLDriver::SDLDriver(std::string input_engine_) : InputEngine(std::move(input_en
+     SDL_AddEventWatch(&SDLEventWatcher, this);
+ 
+     initialized = true;
++    if (start_thread) {
++        vibration_thread = std::thread([this] {
++            Common::SetCurrentThreadName("SDL_Vibration");
++            using namespace std::chrono_literals;
++            while (initialized) {
++                SendVibrations();
++                std::this_thread::sleep_for(250ms); // 4 TPS
++            }
++        });
++    }
+     // Because the events for joystick connection happens before we have our event watcher added, we
+     // can just open all the joysticks right here
+     int joystick_count = 0;
+@@ -715,6 +725,7 @@ SDLDriver::~SDLDriver() {
+ 
+     initialized = false;
+     if (start_thread) {
++        vibration_thread.join();
+         SDL_QuitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD);
+     }
+ }
+@@ -794,7 +805,10 @@ Common::Input::DriverResult SDLDriver::SetVibration(
+         .type = Common::Input::VibrationAmplificationType::Exponential,
+     };
+ 
+-    joystick->RumblePlay(new_vibration);
++    vibration_queue.Push(VibrationRequest{
++        .identifier = identifier,
++        .vibration = new_vibration,
++    });
+ 
+     return Common::Input::DriverResult::Success;
+ }
+@@ -838,6 +852,31 @@ bool SDLDriver::IsVibrationEnabled(const PadIdentifier& identifier) {
+     return true;
+ }
+ 
++void SDLDriver::SendVibrations() {
++    std::vector<VibrationRequest> filtered_vibrations{};
++    while (!vibration_queue.Empty()) {
++        VibrationRequest request;
++        vibration_queue.Pop(request);
++        const auto joystick = GetSDLJoystickByGUID(request.identifier.guid.RawString(),
++                                                   static_cast<int>(request.identifier.port));
++        const auto it = std::find_if(filtered_vibrations.begin(), filtered_vibrations.end(),
++                                     [request](VibrationRequest vibration) {
++                                         return vibration.identifier == request.identifier;
++                                     });
++        if (it == filtered_vibrations.end()) {
++            filtered_vibrations.push_back(std::move(request));
++            continue;
++        }
++        *it = request;
++    }
++
++    for (const auto& vibration : filtered_vibrations) {
++        const auto joystick = GetSDLJoystickByGUID(vibration.identifier.guid.RawString(),
++                                                   static_cast<int>(vibration.identifier.port));
++        joystick->RumblePlay(vibration.vibration);
++    }
++}
++
+ Common::ParamPackage SDLDriver::BuildAnalogParamPackageForButton(int port, const Common::UUID& guid,
+                                                                  s32 axis, float value) const {
+     Common::ParamPackage params{};
+diff --git a/src/input_common/drivers/sdl_driver.h b/src/input_common/drivers/sdl_driver.h
+index e6751b6688..9a279e926f 100644
+--- a/src/input_common/drivers/sdl_driver.h
++++ b/src/input_common/drivers/sdl_driver.h
+@@ -113,11 +113,16 @@ private:
+     /// Returns true if the button is on the left joycon
+     bool IsButtonOnLeftSide(Settings::NativeButton::Values button) const;
+ 
++    /// Queue of vibration request to controllers
++    Common::SPSCQueue<VibrationRequest> vibration_queue;
++
+     /// Map of GUID of a list of corresponding virtual Joysticks
+     ::Common::unordered_map<Common::UUID, std::vector<std::shared_ptr<SDLJoystick>>> joystick_map;
+     std::mutex joystick_map_mutex;
+ 
++    bool start_thread = false;
+     std::atomic<bool> initialized = false;
+-    bool start_thread;
++
++    std::thread vibration_thread;
+ };
+ } // namespace InputCommon
